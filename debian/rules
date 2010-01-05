@@ -54,20 +54,18 @@ clean::
 instroot=$(CURDIR)/debian/tmp
 bindir=$(instroot)/usr/bin
 libdir=$(instroot)/usr/lib
-confdir=$(instroot)/etc
 datadir=$(instroot)/usr/share/elegant
 docdir=$(instroot)/usr/share/doc/elegant
 
 epicsroot=$(instroot)/usr/epics/base
 epicslibs=$(epicsroot)/lib/$(EPICS_HOST_ARCH)
 epicsbins=$(epicsroot)/bin/$(EPICS_HOST_ARCH)
-epicsincl=$(epicsroot)/include
 
 install/liboagphy22.1::
-	install -d $(bindir)
-	install -d $(libdir)/elegant
 	install -d $(datadir)
-	install -d $(confdir)/elegant
+	install -d $(libdir)
+	install -d $(docdir)
+	install -d $(epicslibs)
 
 	# Basic libraries go in /usr/epics/base/lib
 	for ff in $(epicslibs)/*.so;do \
@@ -78,9 +76,8 @@ install/liboagphy22.1::
 
 install/elegant-util::
 	install -d $(bindir)
-	install -d $(libdir)/elegant
 	install -d $(datadir)
-	install -d $(confdir)/elegant
+	install -d $(docdir)
 	install -d $(epicsbins)
 
 	# Basic commands go in /usr/bin
