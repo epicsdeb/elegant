@@ -55,8 +55,8 @@ instroot=$(CURDIR)/debian/tmp
 bindir=$(instroot)/usr/bin
 libdir=$(instroot)/usr/lib
 confdir=$(instroot)/etc
-datadir=$(instroot)/usr/share/sdds
-docdir=$(instroot)/usr/share/doc/sdds
+datadir=$(instroot)/usr/share/elegant
+docdir=$(instroot)/usr/share/doc/elegant
 
 epicsroot=$(instroot)/usr/epics/base
 epicslibs=$(epicsroot)/lib/$(EPICS_HOST_ARCH)

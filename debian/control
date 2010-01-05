@@ -1,18 +1,42 @@
 Source: elegant
-Section: unknown
+Section: admin
 Priority: extra
-Maintainer: guobao shen <shengb@bnl.gov>
-Build-Depends: debhelper (>= 7)
-Standards-Version: 3.7.3
-Homepage: <insert the upstream URL, if relevant>
+Maintainer: Guobao Shen <shengb@bnl.gov>
+Build-Depends: debhelper (>= 7), cdbs,
+               sdds-util (>=2.7), sdds-dev (>=2.7),
+Standards-Version: 3.8.0
+Homepage: http://www.aps.anl.gov/Accelerator_Systems_Division/Operations_Analysis/software.shtml
 
-Package: elegant
+Package: elegant-util
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: <insert up to 60 chars description>
- <insert long description, indented with spaces>
+         sdds-util (>=2.7), liboagphy22.1, 
+Description: ELEctron Generation ANd Tracking package
+ Elegant stands for "ELEctron Generation ANd Tracking", a somewhat out-of-date description
+ of a fully 6D accelerator program that now does much more than generate particle distributions
+ and track them. elegant, written entirely in the C programming language, uses a variant of the
+ MAD input format to describe accelerators, which may be either transport lines, circular
+ machines, or a combination thereof. Program execution is driven by commands in a namelist format.
+
+Package: liboagphy22.1
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: ELEctron Generation ANd Tracking package
+ Elegant stands for "ELEctron Generation ANd Tracking", a somewhat out-of-date description
+ of a fully 6D accelerator program that now does much more than generate particle distributions
+ and track them. elegant, written entirely in the C programming language, uses a variant of the
+ MAD input format to describe accelerators, which may be either transport lines, circular
+ machines, or a combination thereof. Program execution is driven by commands in a namelist format.
+ .
+ OAG runtime libraries
 
 Package: elegant-doc
 Architecture: all
 Description: Documentation for elegant
- <insert long description, indented with spaces>
+ Elegant stands for "ELEctron Generation ANd Tracking", a somewhat out-of-date description
+ of a fully 6D accelerator program that now does much more than generate particle distributions
+ and track them. elegant, written entirely in the C programming language, uses a variant of the
+ MAD input format to describe accelerators, which may be either transport lines, circular
+ machines, or a combination thereof. Program execution is driven by commands in a namelist format.
+ .
+ Documentation package
