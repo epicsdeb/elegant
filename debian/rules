@@ -27,7 +27,7 @@ DEB_BUILDDIR=oag/apps/src/
 post-patches:: ./oag/apps/configure
 
 ./oag/apps/configure:
-	ln -s /usr/epics/oag/apps/configure ./oag/apps/
+	ln -s /usr/epics/extensions/configure ./oag/apps/
 
 move-src: move-src-stamp
 
