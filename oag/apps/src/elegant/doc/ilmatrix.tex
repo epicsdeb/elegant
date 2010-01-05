@@ -1,0 +1,16 @@
+This element allows fast, symplectic tracking of transport through a
+periodic cell with chromatic and amplitude-dependent tunes, beta
+functions, and dispersion.  This is done by computing a linear matrix
+for every particle.  The linear matrix is composed from Twiss
+parameters, tunes, dispersion, etc., supplied by the user.  The user
+can also supply selected chromatic and amplitude derivatives of these
+quantities, which are used to compute the individual particle's beta
+functions, tune, dispersion, etc., which in turn allows computing the
+individual particle's linear matrix.
+
+Using this element is very similar to using linear chromatic matrix
+tracking via the \verb|setup_linear_chromatic_tracking| command.
+The advantage is that using ILMATRIX, one can split a ring into segments
+and place, for example, impedance elements between the segments.
+
+This element was inspired by requests from Y. Chae (APS).

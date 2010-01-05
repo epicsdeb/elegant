@@ -1,0 +1,7 @@
+The default value of the \verb|PASS| parameter (-1) means that the misalignment is
+imposed on the beam {\em every} pass.  This is appropriate for static misalignments.
+When using the \verb|MALIGN| element to kick the beam for beam dynamics studies in rings, \verb|PASS>=0| is
+required.  If \verb|PASS=0|, closed orbit computation and correction will include the effect of
+the kick; however, matrix-based computations by default will not (set \verb|FORCE_MODIFY_MATRIX=1| to
+change this).  If \verb|PASS>0|, then closed orbit computation and correction do not include
+the kick, which is probably what is desired in beam dynamics studies in rings.

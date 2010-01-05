@@ -1,0 +1,84 @@
+#!/bin/sh  
+# \
+exec oagtclsh "$0" "$@"
+
+set auto_path [linsert $auto_path 0  /usr/local/oag/apps/lib/$env(HOST_ARCH)]
+set auto_path [linsert $auto_path 0 /usr/local/oag/lib_patch/$env(HOST_ARCH)]
+APSStandardSetup
+
+set usage "usage: fracAnalysis -input <particleFilename> -output <filename> -fractions <listOfPercentiles> -plane {x|y} \[-plot 1\]\nAnalyzes beam distribution from elegant using sddsanalyze beam for specified fractions of the distribution as determined by the particle amplitudes in the specified plane."
+set input ""
+set output ""
+set fractions 50,60,70,80,90,100
+set plane x
+set plot 0
+set args $argv
+if {[APSStrictParseArguments {plot input output fractions plane}] || ![string length $input] || ![string length $output] || [llength [split $fractions " ,"]]<2 || \
+      [lsearch -exact [list x y] $plane]==-1} {
+    puts stderr "$usage"
+    exit 1
+}
+
+if ![file exists $input] {
+    return -code error "not found: $input"
+}
+if [file exists $output] {
+    return -code error "in use: $output"
+}
+
+
+set tmpRoot [APSTmpString] 
+
+set fractionList [lsort -real [split $fractions " ,"]]
+
+puts stdout "Analyzing beam"
+flush stdout
+exec sddsanalyzebeam $input -pipe=out -correctedOnly \
+  | sddsexpand -pipe=in $tmpRoot.ana
+
+puts stdout "Sorting by J$plane"
+flush stdout
+exec sddsxref $input $tmpRoot.ana -pipe=out -leave=* -transfer=parameter,* \
+  | sddsprocess -pipe \
+  "-define=parameter,gamma${plane},1 alpha${plane} sqr + beta${plane} /,units=1/m" \
+  "-define=col,J${plane},$plane sqr gamma$plane * 2 alpha$plane * $plane * ${plane}p * + ${plane}p sqr beta$plane * + ,units=m,symbol=J\$b$plane\$n"  \
+  "-define=col,sqrtJ${plane},J${plane} abs sqrt,units=m\$a1/2\$n,symbol=J\$b$plane\$n\$a1/2\$n"  \
+  "-process=sqrtJ${plane},spread,sqrtJ${plane}spread" \
+  | sddssort -pipe=in [file rootname $input].J${plane}Sort -col=J${plane},incr 
+
+
+if $plot {
+    #Need to manually calculate the split width because 
+    #the update to sddsplot has not hit the website yet.
+    #The update to sddsplot will split this into 100 equal parts automatically
+    set spread [exec sdds2stream [file rootname $input].J${plane}Sort -parameter=sqrtJ${plane}spread]
+    set width [expr $spread / 100.0]
+    exec sddsplot -column=$plane,${plane}p -graph=dot,vary -order=spect -split=column=sqrtJ$plane,width=$width [file rootname $input].J${plane}Sort &
+}
+
+
+set index 0
+foreach fraction $fractionList {
+    if [expr $fraction>100] {
+        set fraction 100
+    }
+    if [expr $fraction<=0] {
+        set fraction 1
+    }
+    puts stdout "Working on $fraction %"
+    flush stdout
+    exec sddsprocess [file rootname $input].J${plane}Sort -pipe=out -fclip=0,[expr (100-$fraction)/100.0] \
+      | sddsconvert -pipe -delete=parameter,* \
+      | sddsanalyzebeam -pipe -correctedOnly \
+      | sddsprocess -pipe=in $tmpRoot.$index \
+      "-define=column,Fraction,$fraction,units=%" 
+    lappend fileList $tmpRoot.$index
+    incr index
+}
+
+eval exec sddscombine $fileList -merge $output -overwrite
+eval file delete -force $fileList $tmpRoot.ana 
+
+if $plot {
+    exec sddsplot -layout=2,2 -separate $output -graph=symbol,scale=2,connect -column=Fraction,(e$plane,en$plane,beta$plane,alpha$plane) &
+}

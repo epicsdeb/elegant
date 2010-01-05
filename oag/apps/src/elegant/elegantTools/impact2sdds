@@ -1,0 +1,144 @@
+#!/bin/sh  
+# \
+exec oagtclsh "$0" "$@"
+
+set auto_path [linsert $auto_path 0  /usr/local/oag/apps/lib/$env(HOST_ARCH)]
+set auto_path [linsert $auto_path 0 /usr/local/oag/lib_patch/$env(HOST_ARCH)]
+APSStandardSetup
+
+set usage {usage: impact2sdds <rootname>}
+
+if [llength $argv]!=1 {
+    puts stderr "$usage"
+    exit 1
+}
+
+set rootname [lindex $argv 0]
+set tmpRoot /tmp/[APSTmpString]
+
+# fort.18 --- basic parameters
+if [file exists fort.18] {
+    exec plaindata2sdds fort.18 $rootname.basic -inputMode=ascii -noRowCount \
+	-column=time,double,units=s -column=distance,double,units=m \
+	-column=gamma,double -column=kineticEnergy,double -colum=beta,double -column=Rmax,double,units=m \
+	-column=rmsEnergyDeviation,double,units=mc\$a2\$n
+    
+    # fort.24 -- x rms size
+    exec plaindata2sdds fort.24 $rootname.xsig -inputMode=ascii -noRowCount \
+	-column=time,double,units=s -column=distance,double,units=m \
+	-column=Cx,double,units=m -column=Sx,double,units=m \
+	-column=Cpx,double,units=mc\$a2\$n -column=Spx,double,units=mc\$a2\$n \
+	-column=betax,double,units=m -column=enx,double,units=m 
+    
+    # fort.25 -- y rms size
+    exec plaindata2sdds fort.25 $rootname.ysig -inputMode=ascii -noRowCount \
+	-column=time,double,units=s -column=distance,double,units=m \
+	-column=Cy,double,units=m -column=Sy,double,units=m \
+	-column=Cpy,double,units=mc\$a2\$n -column=Spy,double,units=mc\$a2\$n \
+	-column=betay,double,units=m -column=eny,double,units=m 
+    
+    # fort.26 -- z rms size
+    exec plaindata2sdds fort.26 $rootname.zsig -inputMode=ascii -noRowCount \
+	-column=time,double,units=s \
+	-column=Cz,double,units=m -column=Sz,double,units=m \
+	-column=Cpz,double,units=mc\$a2\$n -column=Spz,double,units=mc\$a2\$n \
+	-column=betaz,double,units=m -column=enz,double,units=m 
+    
+    # fort.27 --- maximum amplitudes
+    exec plaindata2sdds fort.27 $rootname.max -inputMode=ascii -noRowCount \
+	-column=time,double,units=s -column=distance,double,units=m \
+	-column=xMax,double,units=m -column=pxMax,double,units=mc \
+	-column=yMax,double,units=m -column=pyMax,double,units=mc \
+	-column=zMax,double,units=m -column=pzMax,double,units=mc \
+	
+    # fort.28 --- loss information
+    exec plaindata2sdds fort.28 $rootname.loss -inputMode=ascii -noRowCount \
+	-column=time,double,units=s -column=distance,double,units=m \
+	-column=minParticles,long \
+	-column=maxParticles,long \
+	-column=totalParticles,long 
+
+    exec sddsxref $rootname.xsig $rootname.ysig $rootname.zsig $rootname.max $rootname.loss $rootname.mom
+    
+}
+
+# fort.34 --- x dipole informatin
+if [file exists fort.34] {
+    exec plaindata2sdds fort.34 fort.34.sdds -inputMode=ascii -noRowCount \
+	-column=time,double,units=s -column=distance,double,units=m \
+	-column=Cx,double,units=m -colum=Sx,double,units=m \
+	-column=Cpx,double,units=mc -column=Spx,double,units=mc \
+	-column=xCorrelation,double -column=enx,double,units=m 
+    
+    # fort.35 --- y dipole informatin
+    exec plaindata2sdds fort.35 fort.35.sdds -inputMode=ascii -noRowCount \
+	-column=time,double,units=s -column=distance,double,units=m \
+	-column=Cy,double,units=m -colum=Sy,double,units=m \
+	-column=Cpy,double,units=mc -column=Spy,double,units=mc \
+	-column=yCorrelation,double -column=eny,double,units=m 
+    
+    # fort.36 --- y dipole informatin
+    exec plaindata2sdds fort.36 fort.36.sdds -inputMode=ascii -noRowCount \
+	-column=time,double,units=s \
+	-column=Cz,double,units=m -colum=Sz,double,units=m \
+	-column=Cpz,double,units=mc -column=Spz,double,units=mc \
+	-column=zCorrelation,double -column=enz,double,units=m 
+    
+    # fort.37 --- maximum amplitudes
+    exec plaindata2sdds fort.37 fort.37.sdds -inputMode=ascii -noRowCount \
+	-column=time,double,units=s -column=distance,double,units=m \
+	-column=xMax,double,units=m -column=pxMax,double,units=mc \
+	-column=yMax,double,units=m -column=pyMax,double,units=mc \
+	-column=zMax,double,units=m -column=pzMax,double,units=mc 
+
+    # fort.38 --- reference particle in dipole
+    exec plaindata2sdds fort.38 fort.38.sdds -inputMode=ascii -noRowCount \
+	-column=time,double,units=s \
+	-column=xRef,double,units=m -column=pxRef,double,units=mc \
+	-column=yRef,double,units=m -column=pyRef,double,units=mc \
+	-column=zRef,double,units=m -column=pzRef,double,units=mc 
+    
+    exec sddsxref fort.34.sdds fort.35.sdds fort.36.sdds fort.37.sdds fort.38.sdds $rootname.dip
+
+    # merger RMS sizes and maximum amplitude information 
+    exec sddsxref $rootname.xsig $rootname.ysig $rootname.zsig $rootname.max $tmpRoot.mom
+
+    exec sddsbreak $rootname.xsig -pipe=out -gapIn=distance,amount=0.01 \
+	| sddsprocess -pipe=in $tmpRoot.24 -process=distance,last,%sLast 
+
+    exec sddsxref -pipe=out \
+	fort.34.sdds fort.35.sdds fort.36.sdds fort.37.sdds \
+	| sddsbreak -pipe -decrease=distance \
+	| sddsxref -pipe $tmpRoot.24 \
+	-leave=* -transfer=parameter,distanceLast \
+	| sddsprocess -pipe=in $tmpRoot.dip \
+	"-redefine=col,distance,distance distanceLast +,units=m" 
+
+    exec sddscombine -merge $tmpRoot.dip $tmpRoot.mom -pipe=out \
+	| sddssort -pipe=in -col=time $rootname.all
+
+    # clean up
+    file delete $tmpRoot.24 $tmpRoot.dip $tmpRoot.mom 
+
+    file delete fort.34.sdds fort.35.sdds fort.36.sdds fort.37.sdds fort.38.sdds
+}
+
+file delete $rootname.xsig $rootname.ysig $rootname.zsig $rootname.max $rootname.loss
+
+
+# fort.40 --- initial distribution
+if [file exists fort.40] {
+    exec plaindata2sdds fort.40 $rootname.inp -inputMode=ascii -noRowCount \
+	-column=xd,double -column=pxd,double \
+	-column=yd,double -column=pyd,double \
+	-column=zd,double -column=pzd,double 
+}
+
+# fort.50 --- final distribution
+if [file exists fort.50] {
+    exec plaindata2sdds fort.50 $rootname.out -inputMode=ascii -noRowCount \
+	-column=xd,double -column=pxd,double \
+	-column=yd,double -column=pyd,double \
+	-column=zd,double -column=pzd,double 
+}
+

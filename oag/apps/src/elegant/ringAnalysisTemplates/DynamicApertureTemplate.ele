@@ -1,0 +1,69 @@
+&transmute_elements
+        name = *, type = WATCH, 
+        new_type = DRIF
+&end
+
+&transmute_elements
+        name = *, type = MAXAMP,
+        new_type = DRIF,
+	disable = <includeApertures>
+&end
+&transmute_elements
+        name = *, type = ?COL,
+        new_type = DRIF,
+	disable = <includeApertures>
+&end
+&transmute_elements
+        name = *, type = SCRAPER,
+        new_type = DRIF,
+	disable = <includeApertures>
+&end
+
+&run_setup
+	lattice = <kickLatticeFile>,
+	use_beamline = <kickBeamline>
+	p_central = "{rpnl <momentum> mev /}",
+        magnets = %s.mag,
+        rootname = <mainDirectory>/<mainPrefix>DynamicAperture,
+        final = %s.fin,
+        semaphore_file = %s.done,
+        tracking_updates = 0,
+	default_order = 1,
+	concat_order = 1
+&end
+
+&load_parameters
+        filename_list = " <parameterFileList>",
+	force_occurence_data = <forceOccurence>,
+        change_defined_values = 1,
+        allow_missing_elements = 1,
+        allow_missing_parameters = 1,
+        allow_missing_files = 1,
+&end
+
+&alter_elements name=*, type=*SBEN*, item=ORDER, value=1, allow_missing_parameters=1,
+	allow_missing_elements=1 &end
+&alter_elements name=*, type=*SBEN*, item=EDGE_ORDER, value=1, allow_missing_elements=1 &end
+
+! May be needed if SREFFECTS elements are present
+&twiss_output
+        radiation_integrals = 1
+        matched = 1
+        output_at_each_step = 0
+&end
+
+&run_control
+        n_passes = <turns>,
+&end
+
+&find_aperture
+        output = %s.aper,
+        boundary = %s.abnd,
+        xmin = <xMinimum>, xmax=<xMaximum>,
+        ymax = <yMaximum>,
+        mode = many-particle,
+        nx = <xPoints>,
+        ny = <yPoints>,
+        verbosity = 1,
+&end
+

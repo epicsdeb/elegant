@@ -1,0 +1,19 @@
+\begin{raggedright}
+This element simulates a multipole element using a 4th-order sympletic
+integration.  
+Specification of the multipole strength is through an SDDS file.
+The file is expected to contain a single page of
+data with the following elements:
+\end{raggedright}
+\begin{enumerate}
+\item An integer column named {\tt order} giving the order of the multipole.
+The order is defined as $(N_{poles}-2)/2$, so a quadrupole has order 1, a
+sextupole has order 2, and so on.
+\item A floating point column named {\tt KnL} giving the integrated strength of
+the multipole, $K_n L$, where $n$ is the order.  The units are $1/m^n$.
+\item A floating point column named {\tt JnL} giving the integrated strength of
+the skew multipole, $J_n L$, where $n$ is the order.  The units are $1/m^n$.
+\end{enumerate}
+
+The {\tt MULT} element is also available, which allows the same
+functionality without an external file.

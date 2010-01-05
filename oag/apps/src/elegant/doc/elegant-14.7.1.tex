@@ -1,0 +1,3110 @@
+% How to create this document on UNIX systems:
+%   latex elegant
+%   dvi2ps elegant | lpr [-P<postscript-printer-name>]
+%
+\documentclass[11pt]{article}
+\usepackage{html}
+\pagestyle{plain}
+%\voffset=-0.75in
+\newenvironment{req}{\begin{equation} \rm}{\end{equation}}
+\setlength{\topmargin}{0.15 in}
+\setlength{\oddsidemargin}{0 in}
+\setlength{\evensidemargin}{0 in} % not applicable anyway
+\setlength{\textwidth}{6.5 in}
+\setlength{\headheight}{-0.5 in} % for 11pt font size
+%\setlength{\footheight}{0 in}
+\setlength{\textheight}{9 in}
+\begin{document}
+
+\title{User's Manual for {\tt elegant}}
+\author{Program Version 14.7.1\\Advanced Photon Source\\Michael Borland\\ \date{\today}}
+\maketitle
+
+\section{Highlights of What's New in Version 14.7.1}
+
+There have been substantial changes since version 14.5, including the
+addition of several new commands.  Here is a summary of what's changed
+since version 14.5.  For details and references, see the specific
+entries in the manual.  Note that version 14.6 was not released.
+
+\subsection{New Commands}
+
+\begin{itemize}
+\item New \verb|slice_analysis| command permits performing slice analysis
+	along the beamlne.  
+\item New \verb|divide_elements| command refines control of which elements
+	are subdivided and to what degree.  N.B.: element subdivision may
+	produce unexpected results when used with \verb|load_parameters|,
+	\verb|save_lattice|, and parameters saved via the \verb|parameter|
+	entry of the \verb|run_setup| command.
+\item New \verb|transmute_elements| command allows transmuting certain elements
+	into elements of other types.  For example, one might transmute 
+	\verb|MONI| and \verb|WATCH| elements into zero-length drift elements
+	in order to speed up tracking with the concatenated matrix.
+\item New \verb|tune_shift_with_amplitude| command allows computing tune shifts
+	with amplitude.  Must be accompanied by the \verb|twiss_output| command.
+\item New \verb|twiss_analysis| command permits specifying one or more regions for
+	analysis of Twiss parameters.  The analysis results can be used in
+	optimization.  Must be accompanied by the \verb|twiss_output| command.
+\end{itemize}
+
+\subsection{Modified Commands}
+\begin{itemize}
+\item Changes to \verb|bunched_beam| command
+	\begin{itemize}
+	\item Added optional input of momentum chirp.
+	\item Added \verb|first_is_fiducial| field.  This allows tracking a
+	single-particle fiducializing beam prior to tracking a distribution.
+	\end{itemize}
+\item Changes to \verb|correct| command (orbit correction)
+	\begin{itemize}
+	\item Added option to use correction matrix computed just prior to 
+	correction, which is useful if the lattice is changed significantly.
+	\end{itemize}
+\item \verb|load_parameters|
+	\begin{itemize}
+	\item Added include/exclude parameters for names and items.  E.g.,
+	one could easily load just the K1 values for all QUAD elements.
+	\item Added \verb|force_occurence_data| option to allow forcing
+	the use of occurence data when \verb|change_defined_values=1|.
+	\item Added support for \verb|%s| substitution in the input filename.
+	\end{itemize}
+\item Optimization
+	\begin{itemize}
+	\item Computes closed orbit prior to twiss computation if closed
+	orbit is requested with the \verb|closed_orbit| command. Previously,
+	computed closed orbit only once at the beginning of the optimization.
+	\item On UNIX systems, one may now use Control-C to signal \verb|elegant|
+	to stop optimization and proceed as if optimization had converged.
+	\item Allows optional optimization of 
+	$T_{ijk}$ and $U_{ijkl}$ matrix elements
+	at the end point, and $T_{ijk}$ at interior points.
+	This feature was requested by M. Hughes (JLab).
+	\end{itemize}
+\item Changes to \verb|run_control| command 
+	\begin{itemize}
+	\item Added \verb|restrict_fiducialization| to allow restricting the
+	fiducialization to elements that are known to change the beam energy.
+	\end{itemize}
+\item \verb|subprocess| now recognizes the sequence \verb|%%| as a literal
+	(``escaped'') percent-sign.  
+\end{itemize}
+
+\subsection{Improvements and Bug Fixes for Elements}
+\begin{itemize}
+\item CSR computations:
+	\begin{itemize}
+	\item The singularity in the integral used to determine the 
+		CSR wake is now integrated analytically assuming linear
+		behavior of the derivative of the linear density.
+		In previous versions, this contribution was ignored.
+	\item Optional use of trapazoid rule for integrations in CSRCSBEND 
+		and CSRDRIFT.
+	\item Optional particle coordinate output inside CSRCSBEND element.
+	\end{itemize}
+\item The MARK element with FITPOINT=1 now results in computation of transverse and
+	longitudinal emittances for use in optimization.
+\item Added code for including pole-face curvature terms for bending magnets
+ 	(CSBEND, CSRCSBEND, and SBEND).  This was tested against 
+	TRANSPORT, MAD, and DIMAD with the assistence of M. Hughes (JLab)
+	who requested the feature.
+\item Added \verb|FORCE_MODIFY_MATRIX| parameter to \verb|MALIGN| element.
+	Allows forcing \verb|elegant| to modify the matrix of the element
+	(from the default of a unit matrix) even if \verb|ON_PASS| control
+	is used.
+\item Added \verb|DETUNE_UNTIL_PASS| parameter to \verb|RFMODE| element,
+	which permits bringing a cavity on-resonance (instantaneously!) at
+	specified turn.  Prior to this, the cavity is treated like a drift.
+\item Fixed bug in \verb|RFCA| element if ``SRS'' body focusing is selected
+	with a nonzero value for \verb|N_KICKS|.  This bug was found by 
+	I. Bazarov (BNL).
+\end{itemize}
+
+\subsection{Other New Features and Bug Fixes}
+\begin{itemize}
+\item Changes to Twiss parameter computations include several new quantities
+	that are available in the output file and also for optimization:
+	\begin{itemize}
+	\item The number of waists in x and y planes.
+	\item Second- and third-order dispersion.
+	\item Second- and third-order chromaticity.
+	\end{itemize}
+\item The lattice parser now ignores tabs in lattice input. 
+\item When saving a lattice file, {\tt elegant} now indents continuation lines 
+	for greater readability.
+\item Computation of bunch lengths and beam sizes from percentile methods is
+	now done using histograms instead of sorting.  This is much faster
+	and fixes a bug that resulted in reordering of particles relative to
+	their particle ID.  This may slightly change some values generated for
+	the \verb|final| output file.
+\item Output of P. Emma's (SLAC) MATLAB lattice format from {\tt madto} program.
+\item The program {\tt sddsbrightness} was added to the set of specialized
+	programs for use with {\tt elegant}.  It computes brightness curves
+	for undulators from {\tt elegant} Twiss parameter files.
+\item Fixed bug in {\tt sddsmatchtwiss} that prevented changing the emittance
+	and the beta functions in the same run.  This bug was found by
+	R. Agustsson (UCLA)
+\end{itemize}
+
+\subsection{Known Bugs and Problems}
+\begin{itemize}
+\item Use of the perturbed matrix for chromaticity correction does not work.
+\item Twiss output contains entries for the higher-order dispersion and
+	chromaticity as well as the tune shifts with amplitude, 
+	{\em even when these are not calculated}, which is potentially
+	misleading. 
+\item Loading parameters when using element division doesn't work unless 
+	element lengths, bending angles, and edge angles are excluded from
+	the load.
+\item The \verb|slice_analysis| command will cause \verb|elegant| to crash
+	if the \verb|s_start| parameter is different from 0.
+\end{itemize}
+
+\section{Introduction}
+
+{\tt elegant} stands for ``ELEctron Generation ANd Tracking,'' a
+somewhat out-of-date description of a fully 6D accelerator program
+that now does much more than generate particle distributions and track
+them.  {\tt elegant}, written entirely in the C programming
+language\cite{Kernighan}, uses a variant of the MAD\cite{MAD} input
+format to describe accelerators, which may be either transport lines,
+circular machines, or a combination thereof.  Program execution is
+driven by commands in a namelist format.
+
+This document describes the features available in {\tt elegant},
+listing the commands and their arguments.  The differences between
+{\tt elegant} and MAD formats for describing accelerators are listed.
+A series of examples of {\tt elegant} input and output are given.
+Finally, appendices are included describing the post-processing
+programs.
+
+\subsection{Program Philosophy}
+
+For all its complexity, {\tt elegant} is not a stand-alone program.
+For example, most of the output is not human-readable, and {\tt
+elegant} itself has no graphics capabilities.  These tasks are handled
+by a suite of post-processing programs that serve both {\tt elegant}
+and other physics programs.  These programs, collectively known as the
+SDDS Toolkit\cite{SDDS1,SDDS2}, provide sophisticated data analysis
+and display capabilities.  They also serve to prepare input for {\tt
+elegant}, supporting multi-stage simulation.
+
+Setting up for an {\tt elegant} run thus involves more than creating
+input files for {\tt elegant} per se.  A complicated run will
+typically involve creation of a post-processing command file that
+processes {\tt elegant} output and puts it in the most useful form,
+typically a series of graphs.  Users thus have the full power of the
+SDDS Toolkit, the resident command interpreter (e.g., the UNIX shell),
+and their favorite scripting language (e.g., Tcl/Tk) at their
+disposal. The idea is that instead of continually rewriting the
+physics code to, for example, make another type of graph or squeeze
+another item into a crowded table, one should allow the user to tailor
+the output to his specific needs using a set of generic
+post-processing programs.  This approach has been quite successful,
+and is believed particularly suited to the constantly changing needs
+of research.
+
+Unlike many other programs, {\tt elegant} allows one to make a single
+run simulating an arbitrary number of randomizations or variations of
+an accelerator.  By using the SDDS toolkit to postprocess the data,
+the user's postprocessing time and effort do not depend on how many
+random seeds or situations are chosen.  Hence, instead of doing a few
+simulations with a few seed numbers or values, the user can simulate
+hundreds or even thousands of instances of one accelerator to get an
+accurate representation of the statistics or dependence on parameters,
+with no more work invested than in doing a few simulations.
+
+In addition, complex simulations such as start-to-end jitter
+simulations\cite{S2EJitter} and top-up tracking\cite{TopUpTracking}
+can be performed involving hundreds or thousands of runs, with input
+created by scripts depending on the SDDS toolkit.  These simulations
+make use of concurrent computing on about 20 workstation using the
+Distributed Queueing System\cite{DQS}.  Clearly, use of automated
+postprocessing tools greatly increases the scale and sophistication of
+simulations possible.  This stands in stark contrast to the current
+trend toward graphical user interfaces, which virtually force an
+inefficient one-job, one-computer, manual postprocessing way of
+working.
+
+\subsection{Capabilities of {\tt elegant}}
+
+{\tt elegant} started as a tracking code, and it is still well-suited
+to this task.  {\tt elegant} tracks in the 6-dimensional phase space
+${\rm (x, x^\prime, y, y^\prime, s, \delta)}$, where x (y) is the
+horizontal (vertical) transverse coordinate, primed quantities are
+slopes, s is the {\em total} distance traveled, and $\delta$ is the
+fractional momentum deviation\cite{KLBrown}.  Note that these
+quantities are commonly referred to as (x, xp, y, yp, s, dp) in the
+namelists, accelerator element parameters, and output files.  (``dp''
+is admittedly confusing---it is supposed to remind the user of ${\rm
+\Delta P/P_o}$.  Sometimes this quantity is referred to as ``delta.'')
+
+Tracking may be performed using matrices (of selectable order),
+canonical kick elements, numerically integrated elements, or any
+combination thereof.  For most elements, second-order matrices are
+available; matrix concatenation can be done to any order up to third.
+Canonical kick elements are available for bending magnets,
+quadrupoles, sextupoles, and higher-order multipoles; all of these
+elements also support optional classical synchrotron radiation losses.
+Among the numerically integrated elements available are
+extended-fringe-field bending magnets and traveling-wave accelerators.
+A number of hybrid elements exist that have first-order transport with
+exact time dependence, e.g., RF cavities.  Several elements support
+simulation of collective effects, such as wakefields and intra-beam
+scattering.  Some of the more unusual elements available are
+third-order alpha-magnets\cite{Borland_thesis,Enge}, time-dependent
+kicker magnets, voltage-ramped RF cavities, beam scrapers, and
+beam-analysis ``screens.''
+
+A wide variety of output is available from tracking, including
+centroid and sigma-matrix output along the accelerator.  In addition
+to tracking internally generated particle distributions, {\tt elegant}
+can track distributions stored in external files, which can either be
+generated by other programs or by previous {\tt elegant} runs.
+Because {\tt elegant} uses SDDS format for reading in and writing out
+particle coordinates, it is relatively easy to interface {\tt elegant}
+to other programs using files that can also be used with SDDS to do
+post-processing for the programs.
+
+{\tt elegant} allows the addition of random errors to virtually any
+parameter of any accelerator element.  One can correct the orbit (or
+trajectory), tunes, and chromaticity after adding errors, then compute
+Twiss parameters, track, or perform a number of other operations.
+
+In addition to randomly perturbing accelerator elements, {\tt elegant}
+allows one to systematically vary any number of elements in a
+multi-dimensional grid.  As before, one can track or do other
+computations for each point on the grid.  This is a very useful
+feature for the simulation of experiments, e.g., emittance
+measurements involving beam-size measurements during variation of one
+or more quadrupoles\cite{Borland_PC}.
+
+Like many accelerator codes, {\tt elegant} does accelerator
+optimization.  While {\tt elegant} is not designed to replace matching
+codes like MAD, it will fit the first-order matrix and beta functions.
+Of more interest is the ability to optimize results of tracking using
+a user-supplied function of the final beam and transport parameters.
+This permits solution of a wide variety of problems, from matching a
+kicker bump in the presence of nonlinearities to optimizing dynamic
+aperture by adjusting sextupoles.
+
+{\tt elegant} provides several methods for determining accelerator
+aperture, whether dynamic or physical.  One may do straightforward
+tracking of an ensemble of particles that occupies at uniform grid in
+(x, y) space.  A more efficient variant of this procedure involves
+tracking a series of constant-x lines of particles with fixed y
+values, with elimination of any given y value whenever a stable
+particle is found.  Finally, one may use a single-particle search
+method that can locate the aperture for a series of y values, to a
+predefined resolution in x.
+
+In addition to using analytical expressions for the transport
+matrices, {\tt elegant} supports computation of the first-order matrix
+and linear optics properties of a circular machine based on tracking.
+A common application of this is to compute the tune and beta-function
+variation with momentum offset by single-turn tracking of a series of
+particles.  This is much more efficient than, for example, tracking
+and performing FFTs (though {\tt elegant} will do this also).  This
+both tests analytical expressions for the chromaticity and allows
+computations using accelerator elements for which such expressions do
+not exist (e.g., a numerically integrated bending magnet with extended
+fringe fields).
+
+A common application of random error simulations is to set tolerances
+on magnet strength and alignment relative to the correctability of the
+closed orbit.  A more efficient way to do these calculations is to use
+correct-orbit amplification factors\cite{Borland_PC}.  {\tt elegant}
+the computes amplification factors and functions for corrected and
+uncorrected orbits and trajectories pertaining to any element that
+produces an orbit or trajectory distortion.  It simultaneously
+computes the amplification functions for the steering magnets, in
+order to determine how strong the steering magnets will need to be.
+
+\section{Fiducialization in {\tt elegant}}
+
+In some tracking codes, there is a ``fiducial particle'' that is
+assumed to travel along the ideal trajectory or orbit, with the ideal
+momentum, and at the ideal phase.  There is no fiducial particle in {\tt
+elegant}.  Instead, {\em elements} are fiducialized in {\tt elegant}.
+Fiducializing an element means determining the momentum and arrival time
+(or phase) of the reference particle.  This is particularly important
+in simulations of linacs.
+
+If the reference momentum does not change and no time-dependent elements
+are involved, then fiducialization is irrelevant.  All elements are
+fiducialized at the central momentum defined in \verb|run_setup|.
+
+A number of commands have parameters for controlling fiducialization:
+\begin{itemize}
+\item The \verb|always_change_p0| parameter of \verb|run_setup| causes
+	\verb|elegant| to re-establish the central momentum after each
+	element when fiducializing.  This may be more convenient than
+	setting the \verb|CHANGE_P0| parameter on the elements themselves.
+	However, it can have unexpected consequences, such as changing the
+	central momentum to match changes in beam momentum due to synchrotron
+	radiation.
+\item \verb|run_control| has three parameters that affect fiducialization,
+	which come into play when multi-step runs are made.  Typically, these
+	are runs that involve variation of elements, addition of errors,
+	or loading of multiple sets of parameters.
+	\begin{itemize}
+	\item \verb|reset_rf_for_each_step| --- If nonzero, the rf phases are 
+	re-established
+	for each beam tracked.  If this is 1 (the default), 
+	the time reference is discarded after each bunch is tracked.
+	This means that bunch-to-bunch phasing errors due to time-of-flight 
+	differences would be lost.  
+	\item \verb|first_is_fiducial| --- The first bunch seen is taken to
+	establish the fiducial phases and momentum profile.  If one is simulating,
+	for example, successive beams in a fixed accelerator, this should be set
+	to 1.  Otherwise, the momentum reference is discarded after each bunch
+	is tracked.
+	\item \verb|restrict_fiducialization| --- If nonzero, then momentum profile
+	fiducialization occurs only after elements that are known to possibily
+	change the momentum. It would not occur, for example, after a scraper that
+	changes the average beam momentum by removing a low-momentum tail.
+	\end{itemize}
+\item The \verb|bunched_beam| command has a \verb|first_is_fiducial| parameter
+	that is convenient for use with the \verb|first_is_fiducial| mode
+	established by \verb|run_control|.  If nonzero, this parameter causes
+	\verb|elegant| to generate a first bunch with only one particle.
+	This is very useful if one wants to track with many particles but doesn't
+	want to waste time fidicializing with a many-particle bunch.
+\end{itemize}
+
+
+\section{Namelist Command Dictionary}
+
+The main input file for an {\tt elegant} run consists of a series of
+namelists, which function as commands.  Most of the namelists direct
+{\tt elegant} to set up to run in a certain way.  A few are ``action''
+commands that begin the actual simulation.  FORTRAN programmers should
+note that, unlike FORTRAN namelists, these namelists need not come in
+a predefined order; {\tt elegant} is able to detect which namelist is
+next in the file and react appropriately.
+
+Each namelist has a number of variables associated with it, which are
+used to control details of the run.  These variables come in three
+data types: (1) {\tt long}, for the C long integer type.  (2) {\tt
+double}, for the C double-precision floating point type. (3) {\tt
+STRING}, for a character string enclosed in double quotation marks.
+All variables have default values, which are listed on the following
+pages.  {\tt STRING} variables often have a default value listed as
+{\tt NULL}, which means no data; this is quite different from the
+value ``'', which is a zero-length character string.  {\tt long}
+variables are often used as logical flags, with a zero value
+indicating false and a non-zero value indicating true.
+
+On the following pages the reader will find individual descriptions of each of the namelist commands and their 
+variables.  Each description contains a sequence of the form
+\begin{verbatim}
+&<namelist-name>
+    <variable-type> <variable-name> = <default-value>;
+    .
+    .
+    .
+&end
+\end{verbatim}
+This summarizes the parameters of the namelist.  Note, however, that the namelists are invoked in the form
+\begin{verbatim}
+&<namelist-name>
+    [<variable-name> = <value> ,]
+    [<array-name>[<index>] = <value> [,<value> ...] ,]
+        .
+        .
+        .
+&end
+\end{verbatim}  The square-brackets enclose an optional component.  Not all namelists require variables to 
+be given--the defaults may be sufficient.  However, if a variable name
+is given, it must have a value.  Values for \verb|STRING| variables
+must be enclosed in double quotation marks.  Values for \verb|double|
+variables may be in floating-point, exponential, or integer format
+(exponential format uses the `e' character to introduce the exponent).
+
+Array variables take a list of values, with the first value being
+placed in the slot indicated by the subscript.  As in C, the first
+slot of the array has subscript 0, {\em not} 1.  The namelist
+processor does not check to ensure that one does not put elements into
+nonexistent slots beyond the end of the array; doing so may cause the
+processor to hang up or crash.
+
+Wildcards are allowed in a number of places in {\tt elegant} and the SDDS Toolkit.  The wildcard format is
+very similar to that used in UNIX:
+\begin{itemize}
+\item \verb|*| --- stands for any number of characters, including none.
+\item \verb|?| --- stands for any single character.
+\item \verb|[<list-of-characters>]| --- stands for any single character from the list.  The list may include
+ranges, such as \verb|a-z|, which includes all characters between and including `a' and `z' in the ASCII
+character table.
+\end{itemize}
+The special characters \verb|*|, \verb|?|, \verb|[|, and \verb|]| are entered literally by preceeding the character by a
+backslash (e.g., \verb|\*|).
+
+In many places where a filename is required in an {\tt elegant}
+namelist, the user may supply a so-called ``incomplete'' filename.  An
+incomplete filename has the sequence ``\%s'' imbedded in it, for which
+is substituted the ``rootname.''  The rootname is by default the
+filename (less the extension) of the lattice file.  The most common
+use of this feature is to cause {\tt elegant} to create names for all
+output files that share a common filename but differ in their
+extensions.  Post-processing can be greatly simplified by adopting
+this naming convention, particularly if one consistently uses the same
+extension for the same type of output.  Recommended filename
+extensions are given in the lists below.
+
+When {\tt elegant} reads a namelist command, one of its first actions
+is to print the namelist back to the standard output.  This printout
+includes all the variables in the namelist and their values.
+Occasionally, the user may see a variable listed in the printout that
+is not in this manual.  These are often obsolete and are retained only
+for backward compatibility, or else associated with a feature that is
+not fully supported.  Use of such ``undocumented features'' is
+discouraged.
+
+{\tt elegant} supports substitution of fields in namelists using the
+commandline {\tt macro} option.  This permits making runs with altered
+parameters without editing the input file.  Macros inside the input
+file have one of two forms: \verb|<tag>| or \verb|$tag|.  To perform
+substitution, use the syntax
+\begin{flushleft}{\tt
+elegant {\em inputfile} -macro={\em tag1}={\em value1}[,{\em
+tag2}={\em value2}...]  }\end{flushleft} When using this feature, it
+is important to substitute the value of {\tt rootname} (in run\_setup)
+so that one can get a new set of output files (assuming use of the
+suggested ``\%s'' field in all the output file names).
+One may give the {\tt macro} option any number of times, or combine
+all substitutions in one option.
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|alter_elements|}\end{center}
+\end{latexonly}
+\subsection{alter\_elements}
+
+\begin{itemize}
+\item type: action command.
+\item function: modify the value of a parameter for one or more elements
+\end{itemize}
+
+\begin{verbatim}
+&alter_elements
+        STRING name = NULL;
+        STRING item = NULL;
+        STRING type = NULL;
+        STRING exclude = NULL;
+        double value = 0;
+        STRING string_value = NULL;
+        long differential = 0;
+        long multiplicative = 0;
+        long verbose = 0;
+        long allow_missing_parameters = 0;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|name| --- A possibly-wildcard-containing string giving the names of the
+        elements to alter.  If not specified, then one must specify \verb|type|.
+\item \verb|item| --- The name of the parameter to alter.
+\item \verb|type| --- A possibly-wildcard-containing string giving the names of element
+        {\em types} to alter.  May be specified with \verb|name| or by itself.
+\item \verb|exclude| --- A possibly-wildcard-containing string giving the names of elements
+        to excluded from alteration.
+\item \verb|value|, \verb|string_value| --- The new value for the parameter.  Use
+      \verb|string_value| only if the parameter takes a character string as its value.
+\item \verb|differential| --- If nonzero, the new value is 
+        the predefined value of the parameter plus the quantity given with \verb|value|.
+\item \verb|multiplicative| --- If nonozero, the new given value is the predefined
+        value of the parameter times the quantity given with \verb|value|.
+\item \verb|verbose| --- If nonzero, information is printed to the standard output describing
+        what elements are changed.
+\item \verb|allow_missing_parameters| --- If nonzero, then it is not an error if an
+        element does not have the parameter named with \verb|item|.  Normally, such
+        an occurence is an error and terminates the program.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|amplification_factors|}\end{center}
+\end{latexonly}
+\subsection{amplification\_factors}
+
+\begin{itemize}
+\item type: action command.
+\item function: compute corrected and uncorrected orbit amplification factors and functions.
+\end{itemize}
+
+\begin{verbatim}
+&amplification_factors
+    STRING output = NULL;
+    STRING uncorrected_orbit_function = NULL;
+    STRING corrected_orbit_function = NULL;
+    STRING kick_function = NULL;
+    STRING name = NULL;
+    STRING type = NULL;
+    STRING item = NULL;
+    STRING plane = NULL;
+    double change = 1e-3;
+    long number_to_do = -1;
+    double maximum_z = 0;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|output| ---  The (incomplete) name of a file for text output.   Recommended value: ``\%s.af''.
+\item \verb|uncorrected_orbit_function| --- The (incomplete) name of a file for an SDDS-format output of the
+    uncorrected-orbit amplification function.  Recommended value: ``\%s.uof''.
+\item \verb|corrected_orbit_function| --- The (incomplete) name of a file for an SDDS-format output of the
+    corrected-orbit amplification function.  Recommended value: ``\%s.cof''.
+\item \verb|kick_function| --- The (incomplete) name of a file for an SDDS-format output of the kick amplification function.
+Recommended value: ``\%s.kaf''.
+\item \verb|name| --- The optionally wildcarded name of the orbit-perturbing elements.  
+\item \verb|type| --- The optional type name of the the orbit-perturbing elements.
+\item \verb|item| --- The parameter of the elements producing the orbit.
+\item \verb|plane| --- The plane (``h'' or ``v'') to examine.
+\item \verb|change| --- The parameter change to use in computing the amplification.  
+\item \verb|number_to_do| --- The number of elements to perturb.
+\item \verb|maximum_z| --- The maximum z coordinate of the elements to perturb.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large \verb|analyze_map|}\end{center}
+\end{latexonly}
+\subsection{analyze\_map}
+
+\begin{itemize}
+\item type: action command.
+\item function: find the approximate first-order matrix and related quantities for an accelerator by tracking.
+\end{itemize}
+
+\begin{verbatim}
+&analyze_map
+    STRING output = NULL;
+    double delta_x = 1e-6;
+    double delta_xp = 1e-6;
+    double delta_y = 1e-6;
+    double delta_yp = 1e-6;
+    double delta_s  = 1e-6;
+    double delta_dp = 1e-6;
+    long center_on_orbit = 0;
+    long verbosity = 0;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|output| --- The (incomplete) name of a file for SDDS output.
+    \begin{itemize}
+    \item Recommended value: ``\%s.ana''.
+    \item File contents:  A series of dumps, each consisting of a single data point containing
+        the centroid offsets for a single turn, the single-turn R matrix, the matched Twiss parameters, tunes, and 
+        dispersion functions.
+    \end{itemize}
+\item \verb|delta_X| --- The amount by which to change the quantity X in computing the derivatives that give the matrix elements.
+\item \verb|center_on_orbit| --- A flag directing the expansion to be made about the closed orbit instead of the design orbit.
+\item \verb|verbosity| --- The larger this value, the more output is printed during computations.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|bunched_beam|}\end{center}
+\end{latexonly}
+\subsection{bunched\_beam}
+
+\begin{itemize}
+\item type: setup command.
+\item function: set up for tracking of particle coordinates with various distributions.
+\end{itemize}
+
+\begin{verbatim}
+&bunched_beam
+    STRING bunch = NULL;
+    long n_particles_per_bunch = 1;
+    double time_start = 0;
+    STRING matched_to_cell = NULL;
+    double emit_x  = 0;
+    double emit_nx  = 0;
+    double beta_x  = 1.0;
+    double alpha_x = 0.0;
+    double eta_x   = 0.0;
+    double etap_x  = 0.0;
+    double emit_y  = 0;
+    double emit_ny  = 0;
+    double beta_y  = 1.0;
+    double alpha_y = 0.0;
+    double eta_y   = 0.0;
+    double etap_y  = 0.0;
+    long use_twiss_command_values = 0;
+    double Po = 0.0;
+    double sigma_dp = 0.0;
+    double sigma_s = 0.0;
+    double dp_s_coupling = 0;
+    double emit_z = 0;
+    double beta_z = 0;
+    double alpha_z = 0;
+    double momentum_chirp = 0;
+    long one_random_bunch = 1;
+    long symmetrize = 0;
+    long halton_sequence[3] = {0, 0, 0};
+    long halton_radix[6] = {0, 0, 0, 0, 0, 0};
+    long randomize_order[3] = {0, 0, 0};
+    long limit_invariants = 0;
+    long limit_in_4d = 0;
+    long enforce_rms_values[3] = {0, 0, 0};
+    double distribution_cutoff[3] = {2, 2, 2};
+    STRING distribution_type[3] = {"gaussian","gaussian","gaussian"};
+    double centroid[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    long first_is_fiducial = 0;
+    long save_initial_coordinates = 1;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|bunch| --- The (incomplete) name of an SDDS file to which the phase-space coordinates
+of the bunches are to be written.  Recommended value: ``\%s.bun''.  
+\item \verb|n_particles_per_bunch| --- Number of particles in each bunch.
+\item \verb|time_start| --- The central value of the time coordinate for the bunch.
+\item \verb|matched_to_cell| --- The name of a beamline from which the Twiss parameters of the bunch
+are to be computed.
+\item \verb|emit_X| --- RMS emittance for the X plane.
+\item \verb|emit_nX| --- RMS normalized emittance for the X plane.  Ignored if \verb|emit_X| is nonzero.
+\item \verb|beta_X|, \verb|alpha_X|, \verb|eta_X|, \verb|etap_X| --- Twiss parameters for the X plane.
+\item \verb|use_twiss_command_values| --- If nonzero, then the values for $\beta$, $\alpha$, 
+        $\eta$, and $\eta^\prime$ are taken from the \verb|twiss_output| command.  It is an error if
+        no \verb|twiss_output| command has been given.
+\item \verb|Po| --- Central momentum of the bunch.
+\item \verb|sigma_dp|, \verb|sigma_s| --- Fractional momentum spread, ${\rm \delta}$, and bunch length.
+Note that \verb|sigma_s| is actually the length in $\beta_z*c*t$, so that for $\beta_z<<1$ the length of
+the bunch in time will be greater than one might expect.
+\item \verb|dp_s_coupling| ---  Specifies the coupling between s and ${\rm \delta}$, defined as 
+${\rm \langle s \delta \rangle/(\sigma_s\sigma_\delta)}$.
+\item \verb|emit_z|, \verb|beta_z|, \verb|alpha_z| --- Provide another way to specify the
+ longitudinal phase space, either separately from or in combination with 
+ \verb|sigma_dp|, \verb|sigma_s|, and \verb|dp_s_coupling|.  
+
+Basically, which values {\tt elegant} uses depends on what one sets to
+nonzero values.  If one sets emit\_z, then sigma\_dp, sigma\_s, and
+dp\_s\_coupling are ignored.  If one doesn't set emit\_z, then {\tt
+elegant} uses sigma\_dp and sigma\_s; it additionally uses alpha\_z if
+it is nonzero, otherwise it uses dp\_s\_coupling.  For reference, the
+relationship between them is $ C =
+\frac{\Sigma_{56}}{\sqrt{\Sigma_{55}\Sigma_{66}}} =
+-\frac{\alpha}{\sqrt{1+\alpha^2}}$.  Note that to impart a chirp that
+results in compression for $R_{56}<0$ (e.g., a normal four-dipole
+chicane), one must have $\alpha_z<0$ or $C>0$.
+
+\item \verb|momentum_chirp| --- Permits imparting an additional
+momentum chirp to the beam, in units of 1/m.  E.g., a value of 1
+indicates that a 1mm long bunch has a linear variation in momentum of
+0.1\% from end-to-end.  A positive chirp is needed to provide
+compression of a bunch with an ordinary $R_{56}<0$ four-dipole
+chicane.
+
+\item \verb|one_random_bunch| --- If non-zero, then only one random particle distribution is generated.  Otherwise,
+a new distribution will be generated for every simulation step.
+\item \verb|enforce_rms_values[3]| --- Flags, one for each plane, indicating whether to force the distribution to have the 
+specified RMS properties.
+
+\item \verb|distribution_cutoff[3]| --- Distribution cutoff parameters
+for each plane.  For gaussian distributions, this is the number of
+sigmas to use.  For other distributions, this number simply multiplies
+the sizes.  This is potentially confusing and hence it is suggested
+that the distribution cutoff be set to 1 for nongaussian beams.
+
+\item \verb|distribution_type[3]| --- Distribution type for each
+plane.  May be ``gaussian'', ``hard-edge'', ``uniform-ellipse'',
+``shell'', ``dynamic-aperture'', ``line''.
+
+For the transverse plane, the interpretation of the emittance is
+different for the different beam types.  For gaussian beams, the
+emittances are rms values.  For all other types, $\sqrt{\epsilon*\beta}$
+times the distribution cutoff defines the edge of the beam in position
+space, while $\sqrt{\epsilon*(1+\alpha^2)/\beta}$ times the distribution
+cutoff defines the edge of the beam in slope space.  
+
+A hard-edge beam is a uniformly-filled parallelogram in phase space.
+A uniform-ellipse beam is a uniformly-filled ellipse in phase space.
+A shell beam is a hollow ellipse in phase space.  A dynamic aperture
+beam has zero slope and uniform spacing in position coordinates.  A
+line beam is a line in phase space.
+
+\item \verb|limit_invariants| --- If non-zero, the distribution
+cutoffs are applied to the invariants, rather than to the coordinates.
+This is useful for gaussian beams when the distribution cutoff is
+small.
+
+\item \verb|limit_in_4d| --- If non-zero, then the transverse
+distribution is taken to be a 4-d gaussian or uniform distribution.
+One of these must be chosen using the \verb|distribution_type|
+control.  It must be the same for x and y.  This is useful, for
+example, if you want to make a cylindrically symmetric beam.
+
+\item \verb|symmetrize| --- If non-zero, the distribution is symmetric
+under changes of sign in the coordinates.  Automatically results in a
+zero centroid for all coordinates.
+
+\item \verb|halton_sequence[3]| and \verb|halton_radix[6]| --- This
+provides a ``quiet-start'' feature by choosing Halton sequences in
+place of random number generation.  There are three new variables that
+control this feature.  \verb|halton_sequence| is an array of three
+flags that permit turning on Halton sequence generation for the
+horizontal, vertical, or longitudinal planes.  For example,
+\verb|halton_sequence[0] = 3*1| will turn on Halton sequences for all
+three planes, while \verb|halton_sequence[2] = 1|, will turn it on for
+the longitudinal plane only.
+
+\verb|halton_radix| is an array of six integers that permit giving the
+radix for each sequence (i.e., x, x', y, y', t, p).  Each radix must
+be a prime number.  One should never use the same prime for two
+sequences, unless one randomizes the order of the sequences relative to
+each other (see the next item).  If these are left at zero, then
+elegant chooses values that eliminate phase-space banding to some
+extent.  The user is cautioned to plot all coordinate combinations for
+the initial phase space to ensure that no unacceptable banding is
+present.
+
+A suggested way to use Halton sequences is to set
+\verb|halton_radix[0] = 2, 3, 2, 3, 2, 3| and
+to set 
+\verb|randomize_order[0] = 2, 2, 2,|.  This avoids banding that may
+result from choosing larger radix values.
+
+\item \verb|randomize_order[3]| --- Allows randomizing the order of
+assigned coordinates for the pairs (x, x'), (y, y'), and (t,p).  0
+means no randomization; 1 means randomize (x, x', y, y', t, p) values
+independently, which destroys any x-x', y-y', and t-p correlations; 2
+means randomize (x, x'), (y, y'), and (t, p) in pair-wise fashion.
+This is used with Halton sequences to remove banding.  It is suggested
+that that the user employ \verb|sddsanalyzebeam| to verify that the
+beam properties when randomization is used.
+
+\item \verb|centroid[6]| --- Centroid offsets for each of the six coordinates.
+
+\item \verb|first_is_fiducial| --- Specifies that the first beam
+generated shall be a single particle beam, which is suitable for
+fiducialization.  See the section on ``Fiducialization in
+\verb|elegant|'' for more discussion.
+
+\item \verb|save_initial_coordinates| --- A flag that, if set, results
+in saving initial coordinates of tracked particles in memory.  This is
+the default behavior.  If unset, the initial coordinates are not
+saved, but are regenerated each time they are needed.  This is more
+memory efficient and is useful for tracking very large numbers of
+particles.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|chromaticity|}\end{center}
+\end{latexonly}
+\subsection{chromaticity}
+
+\begin{itemize}
+\item type: setup command.
+\item function: set up for chromaticity correction.
+\end{itemize}
+
+\begin{verbatim}
+&chromaticity
+    STRING sextupoles = NULL;
+    double dnux_dp = 0;
+    double dnuy_dp = 0;
+    double sextupole_tweek = 1e-3;
+    double correction_fraction = 0.9;
+    long n_iterations = 5;
+    double tolerance = 0;
+    STRING strength_log = NULL;
+    long change_defined_values = 0;
+    double strength_limit = 0;
+    long use_perturbed_matrix = 0;    
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|sextupoles| --- List of names of elements to use to correct the chromaticities.
+\item \verb|dnux_dp|, \verb|dnuy_dp| --- Desired chromaticity values.
+\item \verb|sextupole_tweek| --- Amount by which to tweak the sextupoles to compute derivatives of
+chromaticities with respect to sextupole strength.  [The word ``tweak'' is misspelled ``tweek'' in the code.]
+\item \verb|correction_fraction| --- Fraction of the correction to apply at each iteration.  In some
+cases, correction is unstable at this number should be reduced.
+\item \verb|n_iterations| --- Number of iterations of the correction to perform.
+\item \verb|tolerance| --- Stop iterating when chromaticities are within this value of the
+desired values.
+\item \verb|strength_log| --- The (incomplete) name of an SDDS file to which the sextupole strengths will
+be written.  Recommended value: ``\%s.ssl''.
+\item \verb|change_defined_values| --- Changes the defined values of the sextupole strengths.
+This means that when the lattice is saved (using \verb|save_lattice|), the sextupoles will
+have the corrected values.  This would be used for correcting the chromaticity of a design
+lattice, for example, but not for correcting chromaticity of a perturbed lattice.
+\item \verb|strength_limit| --- Limit on the absolute value of sextupole strength ($K_2$).
+`\item \verb|use_perturbed_matrix| --- If nonzero, requests use of the perturbed correction matrix in
+performing correction.  For difficult lattices with large errors, this may be necessary
+to obtain correction.  In general, it is not necessary and only slows the simulation.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|closed_orbit|}\end{center}
+\end{latexonly}
+\subsection{closed\_orbit}
+
+\begin{itemize}
+\item type: setup command.
+\item function: set up for computation of the closed orbit.
+\end{itemize}
+
+\begin{verbatim}
+&closed_orbit
+    STRING output = NULL;
+    long output_monitors_only = 0;
+    long start_from_centroid = 1;
+    double closed_orbit_accuracy = 1e-12;
+    long closed_orbit_iterations = 10;
+    double iteration_fraction = 1;
+    long fixed_length = 0;
+    long start_from_recirc = 0;
+    long verbosity = 0;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|output| --- The (incomplete) name of an SDDS file to which
+the closed orbits will be written.  Recommended value: ``\%s.clo''.
+\item \verb|output_monitors_only| --- If non-zero, indicates that the
+closed orbit output should include only the data at the locations of
+the beam-position monitors.
+\item \verb|start_from_centroid| --- A flag indicating whether to
+force the computation to start from the centroids of the beam
+distribution.
+\item \verb|closed_orbit_accuracy| --- The desired accuracy of the
+closed orbit, in terms of the difference between the start and end
+coordinates, in meters.
+\item \verb|closed_orbit_iterations| --- The number of iterations to
+take in finding the closed orbit.
+\item \verb|iteration_fraction| --- Fraction of computed change that
+is used each iteration.  For lattices that are very nonlinear or close
+to unstable, a number less than 1 can be helpful.  Otherwise, it only
+slows the simulation.
+\item \verb|fixed_length| --- A flag indicating whether to find a
+closed orbit with the same length as the design orbit by changing the
+momentum offset.
+\item \verb|start_from_recirc| --- A flag indicating whether to
+compute the closed orbit from the recirculation (\verb|recirc|)
+element in the beamline.  In general, if one has a recirculation
+element, one should give this flag.
+\item \verb|verbosity| --- A larger value results in more printouts
+during the computations.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|correct|}\end{center}
+\end{latexonly}
+\subsection{correct}
+
+\begin{itemize}
+\item type: setup command.
+\item function: set up for correction of the trajectory or closed orbit.
+\end{itemize}
+
+\begin{verbatim}
+&correct
+    STRING mode = "trajectory";
+    STRING method = "global";
+    STRING trajectory_output = NULL;
+    STRING corrector_output = NULL;
+    STRING statistics = NULL;
+    double corrector_tweek[2] = {1e-3, 1e-3};
+    double corrector_limit[2] = {0, 0};
+    double correction_fraction[2] = {1, 1};
+    double correction_accuracy[2] = {1e-6, 1e-6};
+    double bpm_noise[2] = {0, 0};
+    double bpm_noise_cutoff[2] = {1.0, 1.0};
+    STRING bpm_noise_distribution[2] = {"uniform", "uniform"};
+    long verbose = 1;
+    long fixed_length = 0;
+    long fixed_length_matrix = 0;
+    long n_xy_cycles = 1;
+    long n_iterations = 1;
+    long prezero_correctors = 1;
+    long track_before_and_after = 0;
+    long start_from_centroid = 1;
+    long use_actual_beam = 0;
+    double closed_orbit_accuracy = 1e-12;
+    long closed_orbit_iterations = 10;
+    double closed_orbit_iteration_fraction = 1;
+    long use_perturbed_matrix = 0;
+&end
+\end{verbatim}
+
+\begin{itemize}
+
+\item \verb|mode| --- Either ``trajectory'' or ``orbit'', indicating
+correction of a trajectory or a closed orbit.
+\item \verb|method| --- For trajectories, may be ``one-to-one'' or
+``global''.  For closed orbit, must be ``global''.
+\item \verb|trajectory_output| --- The (incomplete) name of an SDDS file to which the trajectories or orbits will be written.  Recommended value: ``\%s.traj'' or ``\%s.orb''.  
+\item \verb|corrector_output| --- The (incomplete) name of an SDDS file to which information about the final corrector strengths will be written. Recommended value: ``\%s.cor''.  
+\item \verb|statistics| --- The (incomplete) name of an SDDS file to which statistical information about the
+trajectories (or orbits) and corrector strengths will be written.  Recommended value: ``\%s.scor''.
+\item \verb|corrector_tweek[2]| --- The amount by which to change the correctors in order to compute correction coefficients.
+[The word ``tweak'' is misspelled ``tweek'' in the code.]
+\item \verb|corrector_limit[2]| --- The maximum strength allowed for a corrector.
+\item \verb|correction_fraction[2]| --- The fraction of the computed correction strength to actually use for any one iteration.
+\item \verb|correction_accuracy[2]| --- The desired accuracy of the correction in terms of the RMS BPM values.
+\item \verb|bpm_noise[2]| --- The BPM noise level. 
+\item \verb|bpm_noise_cutoff[2]| --- Cutoff values for the random distributions of BPM noise.
+\item \verb|bpm_noise_distribution[2]| --- May be either ``gaussian'', ``uniform'', or ``plus\_or\_minus''.
+\item \verb|verbose| --- If non-zero, information about the correction is printed during computations.
+\item \verb|fixed_length| --- Indicates that the closed orbit length should be kept the same as the design orbit
+length by changing the momentum offset of the beam.
+\item \verb|fixed_length_matrix| --- Indicates that for fixed-length orbit correction, the fixed-length
+matrix should be computed and used.  This will improve convergence but isn't always needed.
+\item \verb|n_xy_cycles| --- Number of times to alternate between correcting the x and y planes.
+\item \verb|n_iterations| --- Number of iterations of the correction for each x/y cycle.
+\item \verb|prezero_correctors| --- Flag indicating whether to set the correctors to zero before starting.
+\item \verb|track_before_and_after| --- Flag indicating whether tracking should be done both before and after
+correction.
+\item \verb|start_from_centroid| --- Flag indicating that correction
+should start from the beam centroid.  For orbit correction, only the
+beam momentum centroid is relevant.
+\item \verb|use_actual_beam| --- Flag indicating that correction
+should employ tracking of the beam distribution rather than a single
+particle.
+\item \verb|closed_orbit_accuracy| --- Accuracy of closed orbit computation.
+\item \verb|closed_orbit_iterations| --- Number of iterations of closed orbit computation.
+\item \verb|closed_orbit_iteration_fraction| --- Fraction of change in closed orbit to
+use at each iteration.
+\item \verb|use_perturbed_matrix| --- If nonzero, specifies that prior to each 
+	correction \verb|elegant| shall recompute the response matrix.  This
+	is useful if the lattice is changing significantly between corrections.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|correction_matrix_output|}\end{center}
+\end{latexonly}
+\subsection{correction\_matrix\_output}
+
+\begin{itemize}
+\item type: setup/action command.
+\item function: provide output of the orbit/trajectory correction matrix.
+\end{itemize}
+
+\begin{verbatim}
+&correction_matrix_output
+    STRING response[2] = NULL, NULL;
+    STRING inverse[2] = NULL, NULL;
+    long KnL_units = 0;
+    long BnL_units = 0;
+    long output_at_each_step = 0;
+    long output_before_tune_correction = 0;
+    long fixed_length = 0;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|response| --- Array of (incomplete) filenames for SDDS output of the x and y response
+matrices.  Recommnended values: ``%s.hrm'' and ``%s.vrm''.
+\item \verb|inverse| --- Array of (incomplete) filenames for SDDS output of the x and y 
+inverse response matrices. Recommnended values: ``%s.hirm'' and ``%s.virm''.
+\item \verb|KnL_units| --- Flag that, if set, indicates use of ``units'' of m/K0L rather than
+m/rad.  This results in a sign change for the horizontal data.
+\item \verb|BnL_units| --- Flag that, if set, indicates use of ``units'' of m/(T*m) rather than
+m/rad.  This is useful for linac work in that the responses are automatically scaled with 
+beam momentum.
+\item \verb|output_at_each_step| --- Flag that, if set, specifies output of the data at
+each simulation step.  By default, the data is output immediately for the defined lattice.
+\item \verb|output_before_tune_correction| --- Flag that, if set, specifies that when 
+\verb|output_at_each_step| is set, that output shall occur prior to correcting the tunes.
+\item \verb|fixed_length| --- Flag that, if set, specifies output of the fixed-path-length
+matrix.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|correct_tunes|}\end{center}
+\end{latexonly}
+\subsection{correct\_tunes}
+
+\begin{itemize}
+\item type: setup command.
+\item function: set up for correction of the tunes.
+\end{itemize}
+
+\begin{verbatim}
+
+&correct_tunes
+    STRING quadrupoles = NULL;
+    double tune_x = 0;
+    double tune_y = 0;
+    long n_iterations = 5;
+    double correction_fraction = 0.9;
+    double tolerance = 0;
+    long step_up_interval = 0;
+    double max_correction_fraction = 0.9;
+    double delta_correction_fraction = 0.1;
+    STRING strength_log = NULL;
+    long change_defined_values = 0;
+    long use_perturbed_matrix = 0;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|quadrupoles| --- List of names of quadrupoles to be used.  Only two may be given.
+\item \verb|tune_x|, \verb|tune_y| --- Desired x and y tune values.  If not given, the desired values are
+assumed to be the unperturbed tunes.
+\item \verb|n_iterations| --- The number of iterations of the correction to perform.
+\item \verb|correction_fraction| --- The fraction of the correction to apply at each iteration.
+\item \verb|tolerance| --- When both tunes are within this value of the desired tunes, the
+iteration is stopped.
+\item \verb|step_up_interval| --- Interval between increases in the correction fraction.
+\item \verb|max_correction_fraction| --- Maximum correction fraction to allow.
+\item \verb|delta_correction_fraction| --- Change in correction fraction after 
+each \verb|step_up_interval| steps.
+\item \verb|strength_log| --- The (incomplete) name of a SDDS file to which the quadrupole 
+strengths will be written as correction proceeds.  Recommended value: ``\%s.qst''.
+\item \verb|change_defined_values| --- Changes the defined values of the quadrupole strengths.
+This means that when the lattice is saved (using \verb|save_lattice|), the quadrupoles will
+have the corrected values.  This would be used for correcting the tunes of a design
+lattice, for example, but not for correcting tunes of a perturbed lattice.
+\item \verb|use_perturbed_matrix| --- If nonzero, requests use of the perturbed correction matrix in
+performing correction.  For difficult lattices with large errors, this may be necessary
+to obtain correction.  In general, it is not necessary and only slows the simulation.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|divide_elements|}\end{center}
+\end{latexonly}
+\subsection{divide\_elements}
+
+\begin{itemize}
+\item type: setup command.
+\item function: define how to subdivide certain beamline elements.
+\item notes: 
+	\begin{itemize}
+	\item Any number of these commands may be given.  
+	\item Not effective unless given prior to \verb|run_setup|.
+	\item The \verb|element_divisions|
+ field in \verb|run_setup| provides a simpler, but less flexible, method of performing
+ element division.  At present, these element types may be divided: 
+ \verb|QUAD|, \verb|SBEN|, \verb|RBEN|, \verb|DRIF|,  \verb|SEXT|.
+	\item Only effective if given prior to the \verb|run_setup| command.
+	\end{itemize}
+\item warnings:	
+	\begin{itemize}
+	\item Using \verb|save_lattice| and element divisions together will
+	produce an incorrect lattice file.
+	\item Element subdivision may
+	produce unexpected results when used with \verb|load_parameters|
+	or parameters saved via the \verb|parameter|
+	entry of the \verb|run_setup| command.
+	If you wish to load parameters while doing element divisions or if
+	you wish to load parameters from a run that had element divisions
+	in effect, you should not load length data for any elements that
+	are (or were) split.  The name and item pattern features of 
+	\verb|load_parameters| are helpful in restricting what is loaded.
+	\end{itemize}
+\end{itemize}
+
+\begin{verbatim}
+&divide_elements
+    STRING name = NULL;
+    STRING type = NULL;
+    STRING exclude = NULL;
+    long divisions = 0;
+    double maximum_length = 0;
+    long clear = 0;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|name| --- A possibly wildcard-containing string specifying
+	the elements to which this specification applies.
+\item \verb|type| --- A possibly wildcard-containing string specifying
+ 	the element types to which this specification applies.
+\item \verb|exclude| --- A possibily wildcard-containing string specifying
+ 	elements to be excluded from the specification.
+\item \verb|divisions| --- The number of times to subdivide the specified
+	elements.  If zero, then \verb|maximum_length| should be nonzero.
+\item \verb|maximum_length| --- The maximum length of a slice.  This is
+	usually preferrable to specifying the number of divisions, particularly
+	when the elements divided may be of different lengths.  If zero, then
+	\verb|divisions| should be nonzero.
+\item \verb|clear| --- If nonzero, all prior division specifications are
+	deleted.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|error_element|}\end{center}
+\end{latexonly}
+\subsection{error\_element}
+
+\begin{itemize}
+\item type: setup command.
+\item function: assert a random error defintion for the accelerator.
+\end{itemize}
+
+\begin{verbatim}
+&error_element
+    STRING name = NULL;
+    STRING element_type = NULL;
+    STRING item = NULL;
+    STRING type = "gaussian";
+    double amplitude = 0.0;
+    double cutoff = 3.0;
+    long bind = 1;
+    long bind_number = 0;
+    long post_correction = 0;
+    long fractional = 0;
+    long additive = 1;
+    STRING after = NULL;
+    STRING before = NULL;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|name| --- The possibly wildcarded name of the elements for which errors are being specified.
+\item \verb|element_type| --- An optional, possibly wildcarded string giving the type of elements to
+ which the errors should be applied.  E.g., \verb|element_type=*MON*| would match all beam position monitors.
+ If this item is given, then \verb|name| may be left blank.
+\item \verb|item| --- The parameter of the elements to which the error pertains.
+\item \verb|type| --- The type of random distribution to use.  May be one of ``uniform'', ``gaussian'', or ``plus\_or\_minus''.
+A ``plus\_or\_minus'' error is equal in magnitude to the amplitude given, with the sign randomly chosen.
+\item \verb|amplitude| --- The amplitude of the errors.
+\item \verb|cutoff| --- The cutoff for the random distribution.
+\item \verb|bind|, \verb|bind_number| --- If \verb|bind_number| is positive, then a positive value of \verb|bind|
+indicates that \verb|bind_number| successive elements having the same name will have the same error value.  If
+\verb|bind| is negative, then the sign of the error is alternated between successive elements.
+\item \verb|post_correction| --- A flag indicating whether the errors should be added after orbit, tune, and chromaticity correction.
+\item \verb|fractional| --- A flag indicating whether the errors are fractional, in which case the amplitude refers to
+the amplitude of the fractional error.
+\item \verb|additive| --- A flag indicating that the errors should be added to the prior value of the
+parameter.  If zero, then the errors replace the prior value of the parameter.
+\item \verb|after| --- The name of an element.  If given, the error is applied only to elements
+ that follow the named element in the beamline.
+\item \verb|before| --- The name of an element.  If given, the error is applied only to elements
+ that precede the named element in the beamline.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|error_control|}\end{center}
+\end{latexonly}
+\subsection{error\_control}
+
+\begin{itemize}
+\item type: setup command
+\item function: overall control of random errors.
+\end{itemize}
+
+\begin{verbatim}
+&error_control
+    long clear_error_settings = 1;
+    long summarize_error_settings = 0;
+    STRING error_log = NULL;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|clear_error_settings| --- Clear all previous error settings.
+\item \verb|summarize_error_settings| --- Summarize current error settings.
+\item \verb|error_log| --- The (incomplete) name of a SDDS file to which error values will be written.  Recommended value: ``\%s.erl''.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|find_aperture|}\end{center}
+\end{latexonly}
+\subsection{find\_aperture}
+
+\begin{itemize}
+\item type: action command.
+\item function: find the aperture in (x, y) space for an accelerator.
+\end{itemize}
+
+\begin{verbatim}
+&find_aperture
+    STRING output = NULL;
+    STRING boundary = NULL;
+    STRING mode = "many-particle";
+    double xmin = -0.1;
+    double xmax =  0.1;
+    double ymin =  0.0;
+    double ymax =  0.1;
+    long nx  = 21;
+    long ny  = 11;
+    long n_splits = 0;
+    double split_fraction = 0.5;
+    double desired_resolution = 0.01;
+    long verbosity = 0;    
+    long assume_nonincreasing = 0;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|output| --- The (incomplete) name of an SDDS file to send output to.  
+ Recommended value: ``\%s.aper''.
+\item \verb|boundary| --- The (incomplete) name of an SDDS 
+file for the boundary points of the aperture search.  Recommended value: ``\%s.bnd''.
+\item \verb|xmin|, \verb|xmax|, \verb|ymin|, \verb|ymax| --- Region of the aperture search.
+\item \verb|mode| --- May be ``many-particle'' or ``single-particle''.  Many-particle searching is
+much faster, but does not allow interval splitting to search for the aperture boundary. 
+\item \verb|nx| --- Number of x values to take in initial search.
+\item \verb|ny| --- Number of y values to take in search.
+\item \verb|n_splits| --- If positive, the number of times to do interval splitting.  Interval splitting
+refers to searching between the original grid points in order to refine the results.
+\item \verb|split_fraction| --- If interval splitting is done, how the interval is split.
+\item \verb|desired_resolution| --- If interval splitting is done, fraction of \verb|xmax-xmin| to which to resolve the aperture.
+\item \verb|assume_nonincreasing| --- If this variable is non-zero, the search assumes that the aperture
+at ${\rm y+sign(y)*\Delta y}$ is no larger than that at ${\rm y}$.  This results in tracking of
+fewer particles but may give a pessimistic result.
+\item \verb|verbosity| --- A larger value results in more printouts during computations.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|floor_coordinates|}\end{center}
+\end{latexonly}
+\subsection{floor\_coordinates}
+
+\begin{itemize}
+\item type: action command.
+\item function: compute floor coordinates for an accelerator.
+\end{itemize}
+
+\begin{verbatim}
+&floor_coordinates
+    STRING filename = NULL;
+    double X0 = 0.0;
+    double Z0 = 0.0;
+    double theta0 = 0.0;
+    long include_vertices = 0;
+    long vertices_only = 0;
+    long magnet_centers = 0;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|filename| --- The (incomplete) name of an SDDS file to send output to.  
+ Recommended value: ``\%s.flr''.
+\item \verb|X0|, \verb|Z0|, \verb|theta0| --- Initial X, Z, and angle coordinate of the
+\item \verb|include_vertices| --- Flag that, if set, specifies including  in the output
+the coordinates of the vertices of bending magnets.
+\item \verb|vertices_only| --- Flag that, if set, specifies that output will contain only
+the coordinates of the vertices of bending magnets.
+\item \verb|magnet_centers| --- Flag that, if set, specifies that output will contain 
+the coordinates of the centers of all magnets.  By default, the coordinates of the downstream
+end are given.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|link_control|}\end{center}
+\end{latexonly}
+\subsection{link\_control}
+
+\begin{itemize}
+\item type: setup command.
+\item function: overall control of element parameter links.
+\end{itemize}
+
+\begin{verbatim}
+&link_control
+    long clear_links = 1;
+    long summarize_links = 0;
+    long verbosity = 0;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|clear_links| --- Clear all previously set links.
+\item \verb|summarize_links| --- Summarize all current set links.
+\item \verb|verbosity| --- A larger value results in more output
+during computations.
+
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|link_elements|}\end{center}
+\end{latexonly}
+\subsection{link\_elements}
+
+\begin{itemize}
+\item type: setup command.
+\item function: assert a link between parameters of accelerator elements.
+\end{itemize}
+
+\begin{verbatim}
+&link_elements
+    STRING target = NULL;
+    STRING exclude = NULL;
+    STRING item = NULL;
+    STRING source = NULL;
+    STRING source_position = "before";
+    STRING mode = "dynamic";
+    STRING equation = NULL;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|target| --- The name of the elements to be modified by the link.  May contain
+ wild-cards.
+\item \verb|exclude| --- Wildcard sequence to match to element names.  If a match is found,
+ the element is excluded from the link.
+\item \verb|item| --- The parameter that will be modified.
+\item \verb|source| --- The name of the elements to be linked to.
+\item \verb|source_position| --- May be one of ``before'', ``after'', 
+``adjacent'', ``nearest'', or ``same-occurrence''.
+\item \verb|mode| --- May be either ``dynamic'' or ``static''.  A dynamic link
+is asserted whenever the source is changed (during correction, for example).  
+A static link is asserted only when an error or variation is imparted to
+the source, and at the end of correction.
+\item \verb|equation| --- An {\tt rpn} equation for the new item value in
+terms of the item values for the source.  The prior value of the item is 
+on the top of the stack. To refer to the source
+parameter values, use the name of the parameters. These names must appear
+in capital letters.  
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|load_parameters|}\end{center}
+\end{latexonly}
+\subsection{load\_parameters}
+
+\begin{itemize}
+\item type: setup command.
+\item function: load parameters for elements from an SDDS file.
+\end{itemize}
+
+\begin{verbatim}
+&load_parameters
+        STRING filename = NULL;
+        STRING include_name_pattern = NULL;
+        STRING exclude_name_pattern = NULL;
+        STRING include_item_pattern = NULL;
+        STRING exclude_item_pattern = NULL;
+        long change_defined_values = 0;
+        long clear_settings = 0;
+        long allow_missing_elements = 0;
+	long force_occurence_data = 0;
+        long verbose = 0;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|filename| --- Name (possibly containing the ``%s'' field) 
+of SDDS file from which to take data.  The file
+must contain some of the following columns:
+\begin{itemize}
+\item ElementName --- Required string column.  The name of the element to change.
+\item ElementParameter --- Required string column.  The name of the parameter of the element to change.
+\item ParameterValue --- Optional double column.  If given, gives value of the parameter named
+ in ElementParameter for element named in ElementName.
+\item ParameterValueString --- Optional string column.  If ParameterValue is not present, then
+this column must be present.  The string data will be scanned, if necessary,
+to obtain a value for the parameter.
+\item ParameterMode --- Optional string column.  If given, for each row the value must be
+one of ``absolute'', ``differential'', ``ignore'', or ``fractional''.  The meaning of these
+modes is as follows: absolute mode means the given value is used as the new value for
+the parameter; differential mode means the given value is added to the existing value
+for the parameter; ignore mode means the value is ignored; fractional mode means the
+existing value is increased by the product of the given value and the existing value 
+(i.e., the given value is a fractional change).
+\end{itemize}
+
+Unless \verb|change_defined_values| is set, successive pages of the
+file are used for successive steps of the simulation.  Several {\tt
+elegant} commands generate output that may be used (on a subsequent
+run) with \verb|load_parameters|; among these are the tune and
+chromaticity correction commands and the \verb|run_setup| command
+(parameters output).
+
+\item \verb|include_name_pattern|, \verb|exclude_name_pattern| ---
+Wildcard patterns to be used in selecting, respectively, which
+elements to include and which to exclude from loading.
+
+\item \verb|include_item_pattern|, \verb|exclude_item_pattern| ---
+Wildcard patterns to be used in selecting, respectively, which items
+(i.e., which element parameters) to include and which to exclude from
+loading.
+
+\item \verb|change_defined_values| --- Changes the defined values of
+the parameters.  This means that when the lattice is saved (using
+\verb|save_lattice|), the parameters will have the altered values.
+Also, if one wants to alter the values for all steps of the simulation,
+one must set this flag. 
+
+Note that the \verb|ElementOccurence| data is normally ignored if
+\verb|change_defined_values| is nonzero.  This is because there is
+only one definition of each element, even if it is used multiple times.
+This behavior can be altered with the next control.
+
+\item \verb|force_occurence_data| --- If set, then occurence data is
+used even in \verb|change_defined_values| mode.
+
+\item \verb|clear_settings| --- If set, clear all settings and files
+being used for loading parameters.
+
+\item \verb|allow_missing_elements| --- If set, allow elements in the
+file that are not in the lattice.  In this case, the nonapplicable
+data is simply ignored.
+
+\item \verb|verbose| --- If set, provide informational printouts about
+changes to parameters.
+
+\end{itemize}
+
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|matrix_output|}\end{center}
+\end{latexonly}
+\subsection{matrix\_output}
+
+\begin{itemize}
+\item type: setup/action command.
+\item function: generate matrix output, or set up to do so later.
+\end{itemize}
+
+\begin{verbatim}
+&matrix_output
+    STRING printout = NULL;
+    long printout_order = 1;
+    long full_matrix_only = 0;
+    STRING SDDS_output = NULL;
+    long SDDS_output_order = 1;
+    STRING SDDS_output_match = NULL;
+    long output_at_each_step = 0;
+    STRING start_from = NULL;
+    long start_from_occurrence = 1;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|printout| --- The (incomplete) name of a file to which the 
+matrix output will be printed (as text).  Recommended value: ``\%s.mpr''.
+\item \verb|printout_order| --- The order to which the matrix is printed.
+\item \verb|full_matrix_only| --- A flag indicating that only the matrix of
+the entire accelerator is to be output.
+\item \verb|SDDS_output| --- The (incomplete) name of an SDDS 
+file to which the matrix will be written.  Recommended value: ``\%s.mat''.
+\item \verb|SDDS_output_order| --- The order to which the matrix is output in SDDS format.
+\item \verb|SDDS_output_match| --- A wildcard string which element names must match in
+order for data to appear in the SDDS output file.
+\item \verb|output_at_each_step| --- A flag indicating whether matrix output
+is desired at every simulation step.
+\item \verb|start_from| --- The optional name of the accelerator element
+from which to begin concatenation and output.
+\item \verb|start_from_occurrence| --- If \verb|start_from| is not NULL, the
+number of the occurrence of the named element from which to start.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|optimize|}\end{center}
+\end{latexonly}
+\subsection{optimize}
+
+\begin{itemize}
+\item type: action command.
+\item function: perform optimization.
+\item note: on UNIX systems, the user may press Control-C to force
+\verb|elegant| to terminate optimization and proceed as if
+optimization had converged.  (To genuinely terminate the run during
+optimization press Control-C twice.) This is very useful if one wants
+to get a look at the partially optimized result.  If one uses parameter
+saving (\verb|run_setup|) or \verb|save_lattice| one can make a new
+run that starts from the optimized result.
+
+\end{itemize}
+
+\begin{verbatim}
+&optimize
+     long summarize_setup = 0;
+&end
+\end{verbatim}
+
+\begin{itemize}
+
+\item \verb|summarize_setup| --- A flag indicating, if set, that a
+summary of the optimization parameters should be printed.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|optimization_constraint|}\end{center}
+\end{latexonly}
+\subsection{optimization\_constraint}
+
+\begin{itemize}
+\item type: setup command.
+\item function: define a constraint for optimization.
+\item note: This command is not recommended.  It is better to put constraints
+	into the optimization equation (via the \verb|equation| parameter of
+	\verb|optimization_setup| or via \verb|optimization_term|).  The reason
+	is that the hard constraints imposed by \verb|optimization_constraint|
+	may make it more difficult for the optimizer to converge.
+\end{itemize}
+
+\begin{verbatim}
+&optimization_constraint
+    STRING quantity = NULL;
+    double lower = 0;
+    double upper = 0;
+&end
+\end{verbatim}
+
+\begin{itemize}
+
+\item \verb|quantity| --- The quantity to be constrained, given as an
+{\tt rpn} expression in terms of the optimization variables, the
+optimization covariables, and and the ``final'' parameters (see the
+entry for \verb|run_setup| for the last of these).  The optimization
+(co)variables are referred to as
+\verb|<element-name>.<parameter-name>|, in all capital letters.
+
+\item \verb|lower|, \verb|upper| --- The lower and upper limits
+allowed for the expression.
+
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|optimization_covariable|}\end{center}
+\end{latexonly}
+\subsection{optimization\_covariable}
+
+\begin{itemize}
+\item type: setup command.
+\item function: define an element parameter to be varied as a function of optimization parameters.
+\end{itemize}
+
+\begin{verbatim}
+&optimization_covariable
+    STRING name = NULL;
+    STRING item = NULL;
+    STRING equation = NULL;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|name| --- The name of the element.
+\item \verb|item| --- The parameter of the element to be changed.
+\item \verb|equation| --- An {\tt rpn} equation for the value of the parameter in terms of the
+values of any parameters of any optimization variable.  These latter appear in the equation in the
+form \verb|<element-name>.<parameter-name>|, in all capital letters.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|optimization_setup|}\end{center}
+\end{latexonly}
+\subsection{optimization\_setup}
+
+\begin{itemize}
+\item type: setup command.
+\item function: define overall optimization parameters and methods.
+\end{itemize}
+
+\begin{verbatim}
+&optimization_setup
+    STRING equation = NULL;
+    STRING mode = "minimize";
+    STRING method = "simplex";
+    double tolerance = -0.01;
+    double target = 0;
+    long soft_failure = 1;
+    long n_passes = 2;
+    long n_evaluations = 500; 
+    long matrix_order = 1;
+    STRING log_file = NULL;
+    long output_sparsing_factor = 0;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|equation| --- An {\tt rpn} equation for the optimization
+function, expressed in terms of any parameters of any optimization
+variables and the ``final'' parameters of the beam (as recorded in the
+\verb|final| output file available in the \verb|run_setup| namelist).
+The optimization variables or covariables may appear in the equation
+in the form \verb|<element-name>.<parameter-name>|, all in capital
+letters.  Data from MARK elements with FITPOINT=1 may be used via
+symbols of the form
+\verb|<element-name>#<occurrence-number>.<parameter-name>|, where
+\verb|<parameter-name>| can be a Twiss parameter name (if the twiss
+command was given), a floor coordinate name (if the floor command was
+given, or a beam-size or centroid name.  The parameter names are the
+same as those used in the corresponding output files.  Beam sizes
+and centroids are from tracking the particle distribution.
+
+If the twiss command was given, one may also refer to statistics of
+Twiss parameters in the form \verb|<statistic>.<parameter-name>|,
+where \verb|<statistic>| is either \verb|min| or \verb|max|.  One may
+also use the symbols \verb|nux|, \verb|dnux/dp|, (and corresponding
+symbols for y), \verb|alphac|, and \verb|alphac2|.  These are the
+tune, chromaticity, and first- and second- order momentum compaction
+factors.  The final values of the Twiss parameters are referred to
+simply as \verb|betax|, \verb|etax|, etc.
+
+If the twiss command was given and radiation integral computation
+was requested, one may use \verb|ex0| and \verb|Sdelta0| for
+the equilibrium emittance and momentum spread, plus \verb|J<plane>|
+and \verb|tau<plane>| for the damping partition and damping time,
+where \verb|<plane>| is \verb|x|, \verb|y|, or \verb|delta|.
+
+If the \verb|floor_coordinates| command was given, one may use
+\verb|X|, \verb|Z|, and \verb|theta| to refer to the final values of
+the floor coordinates.
+
+If the \verb|sasefel| command was given, one may use variables of
+the form \verb|SASE.<property>|, where \verb|<property>| is one
+of \verb|gainLength|, \verb|saturationLength|, 
+\verb|saturationPower|, or \verb|lightWavelength|.
+
+Finally, one may use any of the names from the ``final'' output file
+(see \verb|run_setup|), e.g., \verb|Sx| (x beamsize) or \verb|eny| (y
+normalized emittance).  These refer to tracked properties of the beam.
+
+The equation may be left blank, in which case the user must give one
+or more \verb|optimization_term| commands.  These use the same
+symbols, of course.
+
+\item \verb|mode| --- May be either ``minimize'' or ``maximize''.
+\item \verb|method| --- May be one of ``simplex'', ``grid'', and ``sample''.
+\item \verb|tolerance| --- The convergence criterion for the optimization, with a negative value indicating
+a fractional criterion.
+\item \verb|target| --- The value which, if reached, results in immediate termination of the optimization,
+whether it has converged or not.
+\item \verb|soft_failure| --- A flag indicating, if set, that failure of an optimization pass should not
+result in termination of the optimization.
+\item \verb|n_passes| --- The number of optimization passes made to achieve convergence (``simplex'' only).
+\item \verb|n_evaluations| --- The number of allowed evaluations of the optimization function.  If simplex
+optimization is used, this is the number of allowed evaluations per pass.
+\item \verb|matrix_order| --- Specifies the highest order of matrix elements that
+should be available for fitting.  Elements up to third order are available for
+the terminal point of the beamline, and up to secod order for interior fit points.
+Names for first-, second-, and third-order elements are of the form
+{\tt R}{\em ij}, {\tt T}{\em ijk}, and {\tt U}{\em ijkl}.
+\item \verb|log_file| --- A file to which progress reports will be written as optimization proceeds.
+For SDDS data, use the \verb|final| output file from the \verb|run_setup| namelist.
+\item \verb|output_sparsing_factor| --- If set to a value larger than 0, results in
+sparsing of output to the ``final'' file (see \verb|run_setup|). This can make
+a significant difference in the optimization speed.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|optimization_term|}\end{center}
+\end{latexonly}
+\subsection{optimization\_term}
+
+\begin{itemize}
+\item type: setup command.
+
+\item function: define optimization equation via individual terms
+
+\end{itemize}
+
+\begin{verbatim}
+&optimization_
+    STRING term = NULL;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|term| --- An {\tt rpn} expression giving one term to be optimized.
+If more than one \verb|optimization_term| command is given, then the terms are
+added.   The advantage of using this command over giving an equation via
+\verb|optimization_setup| is that {\tt elegant} will report the value of
+each term as it performs the optimization (if a \verb|log_file| is given to
+\verb|optimization_setup|).  This permits determination of
+which terms are causing problems for the optimization.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|optimization_variable|}\end{center}
+\end{latexonly}
+\subsection{optimization\_variable}
+
+\begin{itemize}
+\item type: setup command.
+\item function: defines a parameter of an element to be used in optimization.
+\end{itemize}
+
+\begin{verbatim}
+&optimization_variable
+    STRING name = NULL;
+    STRING item = NULL;
+    double lower_limit = 0;
+    double upper_limit = 0;
+    double step_size = 1;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|name| --- The name of the element.
+\item \verb|item| --- The parameter of the element to be varied.
+\item \verb|lower_limit|, \verb|upper_limit| --- The lower and upper limits allowed for the parameter.  If these are
+equal, the range of the parameter is unlimited.
+\item \verb|step_size| --- The initial step size (``simplex'' optimization ) or the grid size in this dimension (``grid'' or ``sample'' optimization).
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|print_dictionary|}\end{center}
+\end{latexonly}
+\subsection{print\_dictionary}
+
+\begin{itemize}
+\item type: action command.
+\item function: print dictionary of supported accelerator elements.
+\end{itemize}
+
+\begin{verbatim}
+&print_dictionary
+    STRING filename = NULL;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|filename| --- The name of a text file to which the dictionary will be printed.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|rpn_expression|}\end{center}
+\end{latexonly}
+\subsection{rpn\_expression}
+
+\begin{itemize}
+\item type: action/setup command.
+\item function: pass an expression directly to the rpn submodule for execution.
+\end{itemize}
+
+\begin{verbatim}
+&rpn_expression
+    STRING expression = NULL;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|expression| --- An {\tt rpn} expression.  This expression is executed immediately and can be
+used, for example, to read in {\tt rpn} commands from a file or store values in {\tt rpn} memories.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|run_control|}\end{center}
+\end{latexonly}
+\subsection{run\_control}
+
+\begin{itemize}
+\item type: setup command.
+\item function: set up the number of simulation steps and passes.
+\end{itemize}
+
+\begin{verbatim}
+&run_control
+    long n_steps = 1;
+    double bunch_frequency = 0;
+    long n_indices = 0;
+    long n_passes = 1;
+    long reset_rf_for_each_step = 1;
+    long first_is_fiducial = 0;
+    long restrict_fiducialization = 0;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|n_steps| --- The number of separate repetitions of the action implied by the next action command.
+If random errors are defined, this is also the number of separate error ensembles.
+\item \verb|bunch_frequency| --- The frequency to use in calculating the time delay between repetitions.
+\item \verb|n_indices| --- The number of looping indices for which to expect definitions in subsequent \verb|vary_element| commands.  If nonzero, then \verb|n_steps| is ignored.
+\item \verb|n_passes| --- The number of passes to make through the beamline per repetition.
+\item \verb|reset_rf_for_each_step| --- If nonzero, the rf phases are 
+established anew for each bunch tracked.  Should be zero to simulate
+phase and timing jitter. 
+\item \verb|first_is_fiducial| --- If nonzero, the first bunch seen is taken
+to establish the reference phases and momentum profile.  If zero, each bunch
+is treated as a new fiducializing bunch.
+\item \verb|restrict_fiducialization| --- If nonzero, then  momentum profile
+fiducialization occurs only after elements that are intended
+change the momentum, such as rf cavities.  If zero, then each element is
+fiducialized to the average momentum of the beam.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|run_setup|}\end{center}
+\end{latexonly}
+\subsection{run\_setup}
+
+\begin{itemize}
+\item type: setup command.
+\item function: set global parameters of the simulation and define primary input and output files.
+\end{itemize}
+
+\begin{verbatim}
+&run_setup
+    STRING lattice = NULL;
+    STRING use_beamline = NULL;
+    STRING rootname = NULL;
+    STRING output = NULL;
+    STRING centroid = NULL;
+    STRING sigma = NULL;
+    STRING final = NULL;
+    STRING acceptance = NULL;
+    STRING losses = NULL;
+    STRING magnets = NULL;
+    STRING semaphore_file = NULL;
+    STRING parameters = NULL;
+    long combine_bunch_statistics = 0;
+    long wrap_around = 1;
+    long default_order = 2;
+    long concat_order = 0;
+    long print_statistics = 0;
+    long random_number_seed = 987654321;
+    long correction_iterations = 1;
+    double p_central = 0.0;
+    STRING expand_for = NULL; 
+    long tracking_updates = 1;
+    long echo_lattice = 0;
+    STRING search_path = NULL;
+    long element_divisions = 0;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|lattice| --- Name of the lattice definition file.
+\item \verb|echo_lattice| --- If nonzero, the lattice input is echoed to the
+        standard output as the lattice is parsed.  This can help detect certain
+        problems with the lattice that cause \verb|elegant| to crash.
+\item \verb|use_beamline| --- Name of the beamline to use.
+\item \verb|rootname| --- Filename fragment used in forming complete names from incomplete filenames.  By default, 
+the filename minus extension of the input file is used.
+\item \verb|output| --- The (incomplete) name of an SDDS file into which final phase-space coordinates
+will be written.  Recommended value: ``\%s.out''.
+\item \verb|centroid| --- The (incomplete) name of an SDDS file into which beam centroids as a function
+of s will be written.   Recommended value: ``\%s.cen''.
+\item \verb|sigma| --- The (incomplete) name of an SDDS file into
+which the beam sigma matrix as a function of z will be written.
+Recommended value: ``\%s.sig''.
+\item \verb|final| --- The (incomplete) name of an SDDS file into
+which final beam and transport parameters will be written. Recommended
+value: ``\%s.fin''.
+\item \verb|acceptance| --- The (incomplete) name of an SDDS file into
+which the initial coordinates of transmitted particles will be
+written.  Recommended value: ``\%s.acc''.
+\item \verb|losses| --- The (incomplete) name of an SDDS file into
+which information on lost particles will be written. Recommended
+value: ``\%s.lost''.
+\item \verb|magnets| --- The (incomplete) name of an SDDS file into
+which a magnet layout representation will be written.  Recommended
+value: ``\%s.mag''.
+\item \verb|semaphore_file| --- The (incomplete) name of file that
+will be created just before exit from the program, but only if no
+errors occured.  If the file exists, it is deleted.  This file can be
+used to record the fact that the run completed without error.
+\item \verb|parameters| --- The (incomplete) name of an SDDS file into
+which parameters of accelerator elements are written.
+\item \verb|combine_bunch_statistics| --- A flag indicating whether to
+combine statistical information for all simulation steps.  If
+non-zero, then the \verb|sigma| and \verb|centroid| data will be
+combined over all simulation steps.
+\item \verb|wrap_around| --- A flag indicating whether the z
+coordinate should wrap-around or increase monotonically in multipass
+simulations.
+\item \verb|default_order| --- The default order of transfer matrices
+used for elements having matrices.
+\item \verb|concat_order| --- If non-zero, the order of matrix
+concatenation used.
+\item \verb|print_statistics| --- A flag indicating whether to print
+information as each element is tracked.
+\item \verb|random_number_seed| --- A seed for the random number generators.  If zero, a seed will be generated from the system clock.
+\item \verb|correction_iterations| --- Number of iterations of tune and chromaticity correction.
+\item \verb|p_central| --- Central momentum of the beamline, about which expansions are done.
+\item \verb|expand_for| --- Name of an SDDS file containing particle information, from which the central
+momentum will be set.  The file contents are the same as required for {\tt elegant} input with the \verb|sdds_beam| namelist.
+\item \verb|tracking_updates| --- A flag indicating whether to print summary information about
+tracking.
+\item \verb|search_path| --- Specify a list of pathnames in which to look for input files,
+ including lattice files, wakefield input, particle input, etc.  This allows storing common
+ input files in a convenient location without having to put the location into every filename.
+\item \verb|element_divisions| --- Specify how many pieces to split elements into.  Only 
+ certain elements (basically, those with a matrix) are split.  Results in creation of 
+ \verb|element_divisions| new elements having the same name as each split element.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|sasefel|}\end{center}
+\end{latexonly}
+\subsection{sasefel}
+
+\begin{itemize}
+\item type: setup/action command.
+\item function: set parameters for computation of SASE FEL gain and other properties.
+\end{itemize}
+
+\begin{verbatim}
+&sasefel
+    STRING output = NULL;
+    STRING model = "Ming Xie";
+    double beta = 0;
+    double undulator_K = 3.1;
+    double undulator_period = 0.033;
+    double slice_fraction = 0.0;
+    long n_slices = 0;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|output| --- The (incomplete) filename of an SDDS file to which output will be
+written.
+\item \verb|model| --- The name of the FEL model used.  At present, only one model is
+supported; the ``Ming-Xie'' model is based on the simple parametrization M. Xie\cite{MingXie}.
+\item \verb|beta| --- The value of the beta function, in meters.
+\item \verb|undulator_K| --- The K parameter of the undulator.
+\item \verb|undulator_period| --- The undulator period, in meters.
+\item \verb|slice_fraction|, \verb|n_slices| --- The fraction of beam beam contained by each analysis slice
+        and the number of such slices.
+        By default, no slice analysis is done.  Instead, the beam is analyzed only as a whole.
+        If \verb|slice_fraction|*\verb|n_slices| is less than 1, then the slice analysis
+        is centered on the median of the time distribution.  E.g., if \verb|n_slices|=1 and
+        \verb|slice_fraction|=0.1, then the central 10\% of the beam would be analyzed.
+        More typically, one gives values such that \verb|slice_fraction|*\verb|n_slices| is
+        equal to 1, so that every part of the beam is analyzed.  There are separate values in
+        the output file for each slice, plus the whole-beam and slice-averaged results.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|save_lattice|}\end{center}
+\end{latexonly}
+\subsection{save\_lattice}
+
+\begin{itemize}
+\item type: action command.
+\item function: save the current accelerator element and beamline definitions.
+\end{itemize}
+
+\begin{verbatim}
+&save_lattice
+    STRING filename = NULL;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|filename| --- The (incomplete) name of a file to which the element and beamline definitions
+will be written.  Recommended value: ``\%s.new''.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|sdds_beam|}\end{center}
+\end{latexonly}
+\subsection{sdds\_beam}
+
+\begin{itemize}
+\item type: setup command.
+\item function: set up for tracking of particle coordinates stored in an SDDS file.
+\end{itemize}
+
+\begin{verbatim}
+&sdds_beam
+    STRING input = NULL;
+    STRING iput_list = NULL;
+    STRING input_type = "elegant";
+    long n_particles_per_ring = 0;
+    STRING selection_parameter = NULL;
+    STRING selection_string = NULL;
+    long one_random_bunch = 0;
+    long reuse_bunch = 0;
+    long prebunched = 0;
+    long sample_interval = 1;
+    long n_tables_to_skip = 0;
+    long center_transversely = 0;
+    long center_arrival_time = 0;
+    double sample_fraction = 1;
+    double p_lower = 0.0;
+    double p_upper = 0.0;
+    long save_initial_coordinates = 1;
+    long reverse_t_sign = 0;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|input| --- Name of an  SDDS file containing coordinates of input particles.
+\item \verb|input_type| --- May be ``elegant'' or ``spiffe'', indicating the name of the
+program that wrote the input file.  The expected data quantities for the different types are:
+    \begin{itemize}
+    \item {\tt elegant}:  ${\rm (x, xp, y, yp, t, p)}$, where x and y are in meters, ${\rm xp=x^\prime}$
+and ${\rm xp=y^\prime}$ are dimensionless, t is in seconds, and ${\rm p=\beta\gamma}$ is the dimensionless
+momentum.
+\item {\tt spiffe}: ${\rm (r, z, pr, pz, t)}$, where r and z are in meters, ${\rm pr=\beta_r \gamma}$,
+  ${\rm pz = \beta_z \gamma}$, and t is in seconds.
+\end{itemize}
+\item \verb|n_particles_per_ring| --- For {\tt spiffe} data, gives the number of particles to
+generate for each ring of charge.
+\item \verb|selection_parameter| --- The name of a parameter in the SDDS file to be used for selection
+of pages of data.
+\item \verb|selection_string| --- The value of the
+\verb|selection_parameter| selection parameter required for a page to
+be used.  E.g., if one has a file from the {\tt shower} program
+containing positrons, electrons, and photons, one might want to select
+only the positrons.
+\item \verb|one_random_bunch| --- A flag indicating whether, for {\tt spiffe} data, a new random
+distribution should be calculated for each step of the simulation.
+\item \verb|prebunched| --- A flag indicating, if zero, that the entire file is one ``bunch,'' and otherwise that each page in the file is a different bunch.
+\item \verb|sample_interval| --- If non-zero, only every \verb|sample_interval|$^{\rm th}$ particle is used.
+\item \verb|n_tables_to_skip| --- Number of SDDS pages to skip at the beginning of the file.
+\item \verb|center_transversely| --- If non-zero, the transverse centroids of the distribution are made to be zero.
+\item \verb|center_arrival_time| --- If non-zero, the mean arrival time of particles at the start of the
+accelerator is set to zero.
+\item \verb|sample_fraction| --- If non-unity, the randomly selected fraction of the distribution to use.
+\item \verb|p_lower|, \verb|p_upper| --- If different, the lower and upper limit on ${\rm \beta\gamma}$ of particles to use.
+\item \verb|save_initial_coordinates| --- A flag that, if set, results in saving initial coordinates
+of tracked particles in memory.  This is the default behavior.  If unset, the initial coordinates
+are not saved, but are reread from disk each time they are needed.  This is more memory efficient
+and is useful for tracking very large numbers of particles.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|slice_analysis|}\end{center}
+\end{latexonly}
+\subsection{slice\_analysis}
+
+\begin{itemize}
+\item type: setup command.
+\item function: set parameters for slice analysis of the beam along a
+	beamline.
+\end{itemize}
+
+\begin{verbatim}
+&slice_analysis
+	STRING output = NULL;
+	long n_slices = 0;
+	double s_start = 0;
+	double s_end = 1e300;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|output| --- The (incomplete) filename of the output file.
+	Recommended value is ``%s.slan''.
+
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|subprocess|}\end{center}
+\end{latexonly}
+\subsection{subprocess}
+
+\begin{itemize}
+\item type: action command.
+\item function: execute a system command in a shell.
+\end{itemize}
+
+\begin{verbatim}
+&subprocess 
+    STRING command = NULL;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|command| --- The text of the command to execute.  The command may
+use the sequence ``%s'' for substitution of the rootname as set by \verb|run_setup|.
+A literal ``%s'' must be entered as ``%%s''.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|steering_element|}\end{center}
+\end{latexonly}
+\subsection{steering\_element}
+
+\begin{itemize}
+\item type: setup command.
+\item function: setup for use of a given parameter of a given element as a steering corrector.
+\item N.B.: any use of this command disables the built-in definition of HKICK, VKICK, and HVKICK elements
+as steering elements.  For trajectory correction, this facility works without any effort by the user.
+It will not work for orbit correction unless the user does two things: First, all correction elements
+for each plane must be the same.  Second, the gain must be less than the ratio of the angle kick to
+unit parameter change for the element.
+\end{itemize}
+
+\begin{verbatim}
+&steering_element
+    STRING name = NULL;
+    STRING element_type = NULL;
+    STRING item = NULL;
+    STRING plane = "h";
+    double tweek = 1e-3;
+    double limit = 0;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|name| --- Optional: the (possibly wild-carded) name of the element to add to the steering list.
+        If not given, then \verb|element_type| must be given.
+\item \verb|element_type| --- Optional: the (possibly wild-carded) name of the element type to add to the
+        steering list.  If not given, then \verb|name| must be given.
+\item \verb|item| --- The parameter of the element to be varied.
+\item \verb|plane| --- May be either ``h'' or ``v'', for horizontal or vertical correction.
+\item \verb|tweek| --- The amount by which to change the item to compute the steering strength.
+\item \verb|limit| --- The maximum allowed absolute value of the item.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|transmute_elements|}\end{center}
+\end{latexonly}
+\subsection{transmute\_elements}
+
+\begin{itemize}
+\item type: setup command.
+\item function: Changes the type of selected elements, which may be used to
+	turn off unneeded diagnostics and speed up tracking when concatenation
+	is being used.
+\item notes: 
+	\begin{itemize}
+	\item Any number of these commands may be given.
+	\item Not effective unless given prior to \verb|run_setup|.
+	\item The only property of the original element that is preserved is
+	the length.  For example, transmuting a SBEN into a CSBEN will not
+	have the expected result.
+	\end{itemize}
+\end{itemize}
+
+\begin{verbatim}
+&transmute_elements
+	STRING name = NULL,
+	STRING type = NULL,
+	STRING exclude = NULL,
+        STRING new_type = "DRIF",
+        long clear = 0;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|name| --- Possibily wild-card containing string specifying the
+	elements to which the transmutation specification is to be applied.
+\item \verb|type| --- Possibily wild-card containing string specifying the
+	element types to which the transmutation specification is to be applied.
+\item \verb|exclude| --- Possibily wild-card containing string specifying 
+	elements to be excluded from the specified transmutation.  Does not
+	affect elements transmuted due to other specifications.
+\item \verb|new_type| --- Type into which specified elements will be transmuted.
+\item \verb|clear| --- If nonzero, all prior transmutation specifications are deleted.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|twiss_analysis|}\end{center}
+\end{latexonly}
+\subsection{twiss\_analysis}
+
+\begin{itemize}
+\item type: setup command.
+\item function: analyze Twiss parameters within a user-defined region for purposes of
+        optimization.
+\end{itemize}
+
+\begin{verbatim}
+&twiss_analysis
+        STRING start_name = NULL;
+        STRING end_name = NULL;
+        double s_start = -1;
+        double s_end = -1;
+        STRING tag = NULL;
+        long clear = 0;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|start_name| --- Name of the element at which to start analysis.  If the
+        element occurs more than once, the first occurrence is used.
+\item \verb|end_name| --- Name of the element at which to end analysis.  If the
+        element occurs more than once, the first occurrence is used.
+\item \verb|s_start| --- Position (in meters) at which to start analysis.
+\item \verb|s_end| --- Position (in meters) at which to end analysis.
+\item \verb|tag| --- Name prefix for quantities computed by the analysis.  The quantity
+        names will have the form {\em tag}.{\em statistic}.{\em quantity}, where {\em statistic}
+        is one of \verb|min|, \verb|max|, and \verb|ave|, and {\em quantity} is one of
+        \verb|betax|, \verb|betay|, \verb|etax|, and \verb|etay|.  E.g., if {\em tag} is \verb|region1|,
+        then one could use expressions like \verb|region1.max.betax| in optimization.
+\item \verb|clear| --- If nonzero, all previously defined analysis regions are deleted.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|twiss_output|}\end{center}
+\end{latexonly}
+\subsection{twiss\_output}
+
+\begin{itemize}
+\item type: action/setup command.
+\item function: compute and output Twiss parameters, or set up to do so.
+\end{itemize}
+
+\begin{verbatim}
+&twiss_output
+    STRING filename = NULL;
+    long matched = 1;
+    long output_at_each_step = 0;
+    long output_before_tune_correction = 0;
+    long final_values_only = 0;
+    long statistics = 0;
+    long radiation_integrals = 0;
+    long concat_order = 3;
+    double beta_x = 1;
+    double alpha_x = 0;
+    double eta_x = 0;
+    double etap_x = 0;
+    double beta_y = 1;
+    double alpha_y = 0;
+    double eta_y = 0;
+    double etap_y = 0;
+    STRING reference_file = NULL;
+    STRING reference_element = NULL;
+    long reference_element_occurrence = 0;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|filename| --- The (incomplete) name of an SDDS file to which the Twiss parameters will be written.
+ Recommended value: ``\%s.twi''.
+\item \verb|matched| --- A flag indicating, if set, that the periodic or matched Twiss parameters should be found.
+\item \verb|output_at_each_step| --- A flag indicating, if set, that output is desired at each step of the simulation.
+\item \verb|output_before_tune_correction| --- A flag indicating, if set, that output is desired both before and after
+tune correction.
+\item \verb|final_values_only| --- A flag indicating, if set, that only the final values of the Twiss parameters should
+be output, and not the parameters as a function of s.
+\item \verb|statistics| --- A flag indicating, if set, that minimum, maximum, and average values of
+Twiss parameters should be computed and included in output.
+\item \verb|radiation_integrals| --- A flag indicating, if set, that radiation integrals should be computed
+and included in output.
+\item \verb|beta_X|, \verb|alpha_X|, \verb|eta_X|, \verb|etap_X| --- If \verb|matched| is zero, the initial values for
+the X plane.
+\item \verb|concat_order| --- Order of matrix concatenation to use for determining matrix for
+computation of Twiss parameters.  Using a lower order will result in inaccuracy for nonlinear
+lattices with orbits.  However, if the orbit is zero, it is much faster to use 
+\verb|concat_order=1|.
+\item \verb|reference_file| --- If given, the name of a file from which twiss parameter data will
+        be taken to give the starting values.  Ignored if \verb|matched| is nonzero.  The file
+        should have the beta and alpha functions with the same names as the file created by
+        this command.
+\item \verb|reference_element| --- Element in \verb|reference_file| at which to take the
+        twiss parameter values.  If not given, the values at the last element in \verb|reference_file|
+        are used.
+\item \verb|reference_element_occurrence| --- Ignored if \verb|reference_element| is not given.
+        Otherwise, the occurence number of \verb|reference_element| to use.  If 0, the last
+        occurence is used.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|track|}\end{center}
+\end{latexonly}
+\subsection{track}
+
+\begin{itemize}
+\item type: action command.
+\item function: track particles.
+\end{itemize}
+
+\begin{verbatim}
+&track
+    long center_on_orbit = 0;
+    long center_momentum_also = 1;
+    long soft_failure = 1;
+    long use_linear_chromatic_matrix = 0;
+    long longitudinal_ring_only = 0;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|center_on_orbit| --- A flag indicating whether to center
+the beam transverse coordinates on the closed orbit before tracking.
+\item \verb|center_momentum_also| --- A flag indicating whether to
+center the momentum coordinate also.
+\item \verb|soft_failure| --- If there is an error during tracking (e.g.,
+a failure of orbit correction), continue to produce file output.  This
+creates essentially empty slots in the files corresponding to the failed
+steps.
+\item \verb|use_linear_chromatic_matrix| --- For each particle, a first-order
+matrix is computed for the particular momentum offset 
+of the particle using the linear chromaticity and linear dependence of 
+the beta functions on momentum.
+\item \verb|longitudinal_ring_only| --- Tracks longitudinal coordinates only
+for a ring.  
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|tune_shift_with_amplitude|}\end{center}
+\end{latexonly}
+\subsection{tune\_shift\_with\_amplitude}
+
+\begin{itemize}
+\item type: setup command.
+\item function: prepare for computation of tune shifts with amplitude.
+\item note: must be given prior to the \verb|twiss_output| command.
+\item method: tune shifts with amplitude are computed via tracking a series of
+        particles at different amplitudes.  NAFF is used to determine the tunes
+        from the tracking data.  It is the user's responsbility to optimize the
+        parameters to ensure that results are reasonable.  Using tracking to determine
+        tune shifts is more accurate than analytical methods as it includes multi-turn
+        effects that are important in some rings (e.g., the APS).
+\end{itemize}
+
+\begin{verbatim}
+&tune_shift_with_amplitude
+    long turns = 1000;
+    double x0 = 1e-10;
+    double y0 = 1e-10;
+    double x1 = 1e-6;
+    double y1 = 1e-6;
+    long use_concatenation = 1;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|turns| --- The number of turns to track.  If zero, then the concatenated matrix
+        is used instead of tracking.  This doesn't work well with all lattices.  The order
+        of the concatenated matrix is given by the \verb|concat_order| control in 
+        \verb|twiss_output|.
+\item \verb|x0|, \verb|y0| --- The initial x and y amplitudes to use for determining the
+        small-amplitude tunes.
+\item \verb|x1|, \verb|y1| --- The initial x and y amplitudes to user for determining the
+        tune shifts.  These values should be small enough to ensure linearity in the tune
+        shift.  If the difference in tune is greater than 0.01, \verb|elegant| will automatically
+        reduce these initial values and iterate.
+\item \verb|use_concatenation| --- If nonzero, then tracks with the concatenated matrix instead
+        of element-by-element.  The order
+        of the concatenated matrix is given by the \verb|concat_order| control in
+        \verb|twiss_output|. The user should experiment with this option to see if the
+        results are reliable for a particular lattice.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|vary_element|}\end{center}
+\end{latexonly}
+\subsection{vary\_element}
+
+\begin{itemize}
+\item type: setup command.
+\item function: define an index and/or tie a parameter of an element to it.
+\end{itemize}
+
+\begin{verbatim}
+&vary_element
+    long index_number = 0;
+    long index_limit = 0;
+    STRING name = NULL;
+    STRING item = NULL;
+    double initial = 0;
+    double final = 0;
+    long differential = 0;
+    long multiplicative = 0;
+    long geometric = 0;
+    STRING enumeration_file = NULL;
+    STRING enumeration_column = NULL;
+&end
+\end{verbatim}
+
+\begin{itemize}
+\item \verb|index_number| --- A non-negative integer giving the number of the index.
+\item \verb|index_limit| --- A positive integer giving the number of values the index will take.
+ Must be given if this \verb|index_number| has not been listed in a previous \verb|vary_element|
+command, unless \verb|enumeration_file| is given.
+\item \verb|name| --- The name of an element.
+\item \verb|item| --- The parameter of the element to vary.
+\item \verb|initial|, \verb|final| --- The initial and final values of the parameter.
+\item \verb|enumeration_file| --- Name of an SDDS file giving values for the item.
+\item \verb|enumeration_column| --- Column of the SDDS file giving the values.
+\item \verb|differential| --- If nonzero, the initial and final values are taken as
+offsets from the predefined value of the parameter.
+\item \verb|multiplicative| --- If nonzero, the initial and final values are taken as 
+multipliers to be applied to the predefined value of the parameter in order to obtain
+the actual initial and final values.
+\item \verb|geometric| --- If nonzero, then variation is geometric rather than 
+arithmetic.
+\end{itemize}
+
+\newpage
+\section{Specialized Tools for Use with {\tt elegant}}
+
+A number of specialized programs are available that work with {\tt
+elegant}. Most are SDDS-compliant, so they will also work with any
+program that reads or writes appropriate SDDS data.  These programs
+will be made available in Version 14.3Beta.  The following is a
+brief description of each program.  Full descriptions are available
+on subsequent pages.
+\begin{itemize}
+\item {\tt elegant2genesis} --- This program performs
+        slice analysis of particle output files, which are suitable for use with
+        the SDDS-compliant APS version of GENESIS\cite{GENESIS}.  This program is
+        part of the SDDS toolkit.  See the SDDS toolkit
+        manual for documentation.
+\item {\tt haissinski} --- Computes the steady-state longitudinal distribution in
+        an electron storage ring.  Requires as input a file containing the Twiss
+        parameters around the ring, such as that provided by the \verb|twiss_output| command.
+        (Program by L. Emery)
+\item {\tt ibsEmittance} --- Computes the transverse and longitudinal emittances of a beam in
+        an electron storage ring, resulting from the combination of quantum excitation,
+        damping, and intra-beam scattering.  Requires as input a file containing the
+        Twiss parameters, such as that provided by the \verb|twiss_output| command.
+        (Program by L. Emery)
+\item {\tt madto} --- Translates an {\tt elegant}-style lattice file (or a MAD file, with
+        some restrictions) into formats accepted by other programs, such as PARMELA, 
+        PATPET, PATRICIA, TRANSPORT, and XORBIT.  Will also generate an SDDS file containing lattice
+        data.
+\item {\tt sddsanalyzebeam} --- Analyzes a beam of macro-particles and produces an SDDS file
+        containing beam moments, emittances, equivalent beta functions, etc.  The beam file
+        is of the type written by {\tt elegant} using the {\tt output} field of the {\tt run\_setup}
+        command, or the WATCH element.
+\item {\tt sddsemitmeas} --- Analyzes quadrupole scan emittance measurement data.  Accepts a
+        file containing the transport matrix for each point and measured beam sizes.  
+        The file may, for example, be the file produced
+        by the {\tt final} field of the {\tt run\_setup} command.  The quadrupole scan can be
+        executed inside of {\tt elegant} using {\tt vary\_elements}.
+\item {\tt sddsmatchtwiss} --- Transforms a beam of macro-particles to match to given beta
+        functions and dispersion.    The beam file
+        is of the type written by {\tt elegant} using the {\tt output} field of the {\tt run\_setup}
+        command, or the WATCH element.
+\item {\tt sddssampledist} --- This program allows creating particle
+        distributions from user-designed distribution functions.  It is thus a more flexible alternative
+        to \verb|bunched_beam|.  This program is part of the SDDS toolkit.  See the SDDS toolkit
+        manual for documentation.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|haissinski|}\end{center}
+\end{latexonly}
+\subsection{haissinski}
+
+\begin{itemize}
+\item {\bf description:}
+
+\item {\bf examples:}
+
+\item {\bf synopsis:}
+
+\item {\bf files:}
+
+\item {\bf switches:}
+
+\item {\bf author:} L. Emery, ANL/APS.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|ibsEmittance|}\end{center}
+\end{latexonly}
+\subsection{ibsEmittance}
+
+\begin{itemize}
+\item {\bf description:} 
+
+\item {\bf examples:}
+
+\item {\bf synopsis:}
+
+\item {\bf files:}
+
+\item {\bf switches:}
+
+\item {\bf author:} L. Emery, ANL/APS.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|madto|}\end{center}
+\end{latexonly}
+\subsection{madto}
+\label{madto}
+
+\begin{itemize}
+\item {\bf description:} 
+\verb|madto| translates an {\tt elegant}-style (or a MAD file, with
+some restrictions) into formats accepted by other programs, such as
+PARMELA, PATPET, PATRICIA, TRANSPORT, and XORBIT.  Will also generate
+an SDDS file containing lattice data.
+
+\item {\bf examples:}
+The following command would translate the {\tt elegant} lattice file 
+\verb|lattice.lte| into a TRANSPORT lattice file with 10mm quadrupole
+aperture and 5mm sextupole aperture, at an energy of 1.5 GeV.
+\begin{flushleft}{\tt
+madto lattice.lte lattice.trin -transport=10,5,1.5
+}\end{flushleft}
+
+\item {\bf synopsis:}
+\begin{flushleft}{\tt
+madto {\em inputfile} {\em outputfile}
+ \{-patricia | -patpet | -transport[={\em quadAper(mm)},{\em sextAper(mm)},{\em p(GeV/c)}]
+            | -parmela[={\em quadAper(mm)},{\em sextAper(mm)},{\em p(GeV/c)}]
+            | -sdds[={\em p(GeV/c)}] | -xorbit\}
+ [-angle\_tolerance={\em value}] [-flip\_k\_signs] [-magnets={\em filename}]
+ [-header={\em filename}] [-ender={\em filename}]
+}\end{flushleft}
+
+\item {\bf files:}
+\begin{itemize}
+\item {\em inputfile} --- An {\tt elegant}-style lattice file.
+\item {\em outputfile} --- A file containing lattice data in the chosen format.
+\end{itemize}
+
+\item {\bf switches:}
+\begin{itemize}
+\item {\bf -patricia} --- Provide data for the program PATRICIA.
+\item {\bf -patpet} --- Provide data for the program PATPET, a merging of the programs
+        PATRICIA and PETROS.
+\item {\bf -transport[={\em quadAper(mm)},{\em sextAper(mm)},{\em p(GeV/c)}]} --- 
+        Provide data for the program TRANSPORT (original style). 
+	One may give apertures for
+        the quadrupoles and sextupoles, as well as the beam momentum in GeV/c.
+\item {\bf -parmela[={\em quadAper(mm)},{\em sextAper(mm)},{\em p(GeV/c)}]} --- 
+        Provide data for the program PARMELA. One may give apertures for
+        the quadrupoles and sextupoles, as well as the beam momentum in GeV/c.
+\item {\bf -sdds[={\em p(GeV/c)}]} --- Provide data in SDDS form.  One may give the beam momentum in GeV/c.
+\item {\bf -angle\_tolerance={\em value}}  --- PATPET and PATRICIA only allow sector and rectangular bends.
+        This tolerance, in radians, determines how far from sector or rectangular a bend 
+        definition may be and still get processed.
+\item {\bf -flip\_k\_signs} --- Changes the signs of all quadrupoles.
+\item {\bf -magnets={\em filename}} --- Results in output of an additional SDDS file with the magnet layout.
+        This is the same file that would be generated by the {\tt magnets} field of the 
+        {\tt run\_setup} command in {\tt elegant}.
+\item {\bf -header={\em filename}}, {\bf -ender={\em filename}} --- 
+        Allow specification of files to be prepended and appended to
+        the lattice output.  For example, if additional commands are required prior to the
+        lattice definition to set up the run, they would be put in the {\bf header} file.
+        If additional commands are needed after the lattice definition to initiate processing, they 
+        would be put in the {\tt ender} file.
+\end{itemize}
+
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|sddsanalyzebeam|}\end{center}
+\end{latexonly}
+\subsection{sddsanalyzebeam}
+\label{sddsanalyzebeam}
+
+\begin{itemize}
+\item {\bf description:} 
+{\tt sddsanalyzebeam} analyzes a beam of macro-particles and produces an SDDS file
+containing beam moments, emittances, equivalent beta functions, etc.  The beam file
+is of the type written by {\tt elegant} using the {\tt output} field of the {\tt run\_setup}
+command, or the WATCH element.
+
+\item {\bf examples:}
+\begin{flushleft}{\tt
+sddsanalyzebeam run.out run.analysis 
+}\end{flushleft}
+
+\item {\bf synopsis:}
+\begin{flushleft}{\tt
+sddsanalyzebeam [-pipe=[input][,output]] [{\em inputfile}] [{\em outputfile}]
+[-nowarnings]
+}\end{flushleft}
+
+\item {\bf files:}
+\begin{itemize}
+\item {\em inputfile} --- An SDDS file containing the columns {\tt x}, {\tt xp}, {\tt y},
+{\tt yp}, {\tt t}, and {\tt p}, giving the six phase-space coordinates for a set of macroparticles.
+This file can be produced from {\tt elegant}, for example, using the {\tt output} field of the {\tt run\_setup} 
+command, the {\tt bunch} field of the {\tt bunched\_beam} command, or the WATCH element in
+coordinate mode.
+
+\item {\em outputfile} --- An SDDS file containing columns giving
+moments, emittances, equivalent Twiss parameters, and so on, for the
+macro-particles.  Each row of this file corresponds to a page of the
+input file.  The names and meanings of the columns are identical to
+what is used for {\tt elegant}'s {\tt final} output file from the {\tt
+run\_setup} command.  The file from {\tt elegant}, however, stores the
+results as parameters instead of columns; to convert {\tt outputfile}
+to that convention, use the SDDS toolkit program {\tt sddsexpand}.
+
+\end{itemize}
+
+\item {\bf switches:}
+\begin{itemize}
+\item {\tt pipe} --- The standard SDDS Toolkit pipe option.
+\item {\tt nowarnings} --- Suppressses warning messages.
+\end{itemize}
+
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|sddsemitmeas|}\end{center}
+\end{latexonly}
+\subsection{sddsemitmeas}
+\label{sddsemitmeas}
+
+\begin{itemize}
+\item {\bf description:} 
+
+{\tt sddsemitmeas} analyzes quadrupole scan emittance measurement
+data.  It accepts a file containing the transport matrix for each data
+point and measured beam sizes.  Because {\tt sddsemitmeas} uses the
+matrix rather than a thin-lens model, it can analyze data from
+arbitrarily complex scans, involving, for example, multiple thick-lens
+quadrupoles.
+
+The matrix data can be prepared using {\tt elegant}.  For example, the
+{\tt vary\_element} command can be used to vary one or more
+quadrupoles.  In addition, the beam size data may be prepared using
+{\tt elegant}, to allow simulation of emittance measurements.
+
+{\tt sddsemitmeas} will perform error analysis using a Monte Carlo
+technique.  A user-specified number of random error sets are generated
+and added to all measurements.  Analysis is performed for each error
+set.  Statistics over all the error sets provide most likely values
+and error bars.
+
+\item {\bf examples:}
+\begin{flushleft}{\tt
+elegant quadScan.ele
+sddscollapse quadScan.fin -pipe=out \\
+| sddsxref -pipe=in quadScan.data -take=SigmaX,SigmaY \\
+| sddsemitmeas -pipe=in emitResults.sdds
+}\end{flushleft}
+
+\item {\bf synopsis:}
+\begin{flushleft}{\tt
+sddsemitmeas [{\em inputfile}] [{\em outputfile}] [-pipe=[input][,output]]
+ [-sigmaData={\em xName},{\em yName}]
+ [-energySpread={\em fractionalRMSValue}]
+ [-errorLevel={\em valueInm},[\{gaussian,{\em nSigmas} | uniform\}]]
+ [-nErrorSets={\em number}] [-seed=integer]
+ [-limitMode={resolution | zero}[{,reject}]
+ [-deviationLimit={\em xLevelm},{\em yLevelm}]
+ [-resolution={\em xResolutionm},{\em yResolutionm}]
+ [-uncertaintyFraction={\em xValue},{\em yValue}]
+ [-fixedUncertainty={\em xValuem},{\em yValuem}]
+ [-findUncertainties] [-minimumUncertainty={\em xValuem},{\em yValuem}]
+ [-constantWeighting] [-verbosity={\em level}]
+}\end{flushleft}
+
+\item {\bf files:}
+\begin{itemize}
+
+\item {\em inputfile} --- An SDDS file containing one or more pages
+with columns named \verb|R|{\em ij}, where {\em ij} is 11, 12, 33, and
+34.  These give elements of the horizontal and vertical transport
+matrices from the beginning of a system to the observation point.  The
+sigma matrix inferred will be that for the beginning of the system.
+Typically, one starts with the {\tt final} file from the {\tt
+run\_setup} command in {\tt elegant}, and collapses it using {\tt
+sddscollapse}.  Each page of {\em inputfile} corresponds to a different
+emittance measurement.
+
+If energy spread is included (\verb|-energySpread| option), the file
+must also contain columns named \verb|etax| and \verb|etay|, giving
+the horizontal and vertical dispersion at the observation point.
+These may be added to the {\tt final} file using {\tt sddsprocess} (to
+get the final values as parameters) and {\tt sddsxref} (to transfer
+the parameters), prior to using {\tt sddscollapse}.
+
+In addition to this data, {\em inputfile} must also contain columns
+giving the rms beam sizes in x and y.  The user supplies the names of
+the columns using the \verb|-sigmaData| option.  These columns may be
+from {\tt elegant} (e.g., \verb|Sx| and \verb|Sy|), if one wants to
+simulate an emittance measurement.  Note that the theory behind the
+emittance measurement is strictly correct only for true RMS beamsize
+measurements.  Use of FWHM or some other measure will give unreliable
+results.
+ 
+\item {\em outputfile} --- A file containing one page for each page of
+{\em inputfile}.  The parameters of {\em outputfile} give the measured
+geometric rms emittance, sigma matrix, and Twiss parameters of the 
+beam in the horizontal and vertical planes.  If error sets were requested
+(using \verb|-nErrorSets|), then there are also parameters giving the
+error bars (``sigma's'') of the measured values.
+
+The columns of {\em outputfile} contain various quantities depending
+on the mode.  For files generated with {\tt elegant} and no error sets,
+it contains the measured and fit beam size data, along with the strength
+of one of the varied quadrupoles.  In other cases, less data may be
+present.
+
+\end{itemize}
+
+\item {\bf switches:}
+\begin{itemize}
+
+\item {\tt -sigmaData={\em xName},{\em yName}} --- Supplies the names
+of the columns in {\em inputfile} from which the x and y rms beam
+sizes are to be taken.  Default values are {\tt Sx} and {\tt Sy},
+which are the data provided by {\tt elegant}.
+
+\item {\tt -energySpread={\em fractionalRMSValue}} --- Supplies the
+fractional rms energy spread of the beam.  If given, the {\em
+inputfile} must contain dispersion data, as described above.
+
+\item {\tt -errorLevel={\em valueInm},[{gaussian,{\em nSigmas} |
+uniform}]} --- Supplies the standard deviation of random errors to be
+added to the measured beam sizes for Monte Carlo error analysis.  This
+control should not be confused with the controls over the individual
+data point uncertainties; the latter are used for purposes of
+weighting the fits only.  Supposedly, the error levels and the
+uncertainties would be the same, however.
+
+\item {\tt -nErrorSets={\em number}} --- The number of sets of random
+errors to generate and add to the measurements.  Each error set is
+used to perturb the original measurement data.  The results are
+analyzed separately for each error set, then combined to give means
+and error bars.
+
+\item {\tt -seed=integer} --- Seed for the random number generator.
+Recommend a large, positive, odd integer less than $2^31$.  If no seed
+is given or if the given seed is negative, then a seed is generated
+from the system clock.
+
+\item {\tt -resolution={\em xResolutionm},{\em yResolutionm}} --- The
+resolution of the beam size measurements, in meters.  These values are
+subtracted in quadrature from the measured beam sizes to obtain the
+true beam sizes.
+
+\item {\tt -limitMode={resolution | zero}[,reject]} --- If measured or
+perturbed beam sizes are less than the resolution or less than zero,
+then errors will result.  One can use this option to limit minimum
+beam size values or reject points.  In general, if one has to do this
+the measurement is probably bad.
+
+\item {\tt -deviationLimit={\em xLevelm},{\em yLevelm}} --- Specifies
+the maximum deviation, in meters, from the fit that data points may
+have and still be included.  An initial fit is performed for each
+randomized set or the raw data, as appropriate.  Outliers are then
+removed and the fit is repeated.
+
+\item {\tt -uncertaintyFraction={\em xValue},{\em yValue}} ---
+Specifies that uncertainties in individual measurements should
+determined as the given fractions of the measured values.  Generally
+not realistic.
+\item {\tt -fixedUncertainty={\em xValuem},{\em yValuem}} --- Specifies that uncertainties in individual
+        measurements should be identical, at the values given (in meters).
+\item {\tt -findUncertainties} --- Specifies that uncertainties in individual measurements should be
+        deduced from an initial unweighted fit.
+\item {\tt -minimumUncertainty={\em xValuem},{\em yValuem}} --- Specifies that uncertainties may not
+        be smaller than the given values, in meters.
+\item {\tt -constantWeighting} --- Specifies uncertainties such that all points are given equal weight
+        in the fit.
+\item {\tt -verbosity={\em level}} --- Higher values of {\em level} result in more informational
+        printouts as the program runs.
+\end{itemize}
+
+\item {\bf author:} M. Borland, ANL/APS.
+
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|sddsmatchtwiss|}\end{center}
+\end{latexonly}
+\subsection{sddsmatchtwiss}
+\label{sddsmatchtwiss}
+
+\begin{itemize}
+\item {\bf description:} 
+{\tt sddsmatchtwiss} transforms a beam of macro-particles to match to given beta
+functions and dispersion.   This can be useful in taking macro-particle data from
+one simulation and using it in another.  For example, a beam file from PARMELA
+could be given the right beta functions for use with a specific lattice in an
+{\tt elegant} run, saving the trouble of rematching to join the two simulations.
+Similarly, a beam from {\tt elegant} could be matched into an FEL simulation.
+
+\item {\bf examples:}
+\begin{flushleft}{\tt
+sddsmatchtwiss elegantBeam.out FELBeam.in -xPlane=beta=1.0,alpha=-0.2 -yPlane=beta=0.5,alpha=0.2
+}\end{flushleft}
+
+\item {\bf synopsis:}
+\begin{flushleft}{\tt
+sddsmatchtwiss [-pipe=[input][,output]] {\em inputfile} {\em outputfile}
+[-xPlane=[beta={\em meters},alpha={\em value}][,etaValue={\em meters}][,etaSlope={\em value}]]
+[-yPlane=[beta={\em meters},alpha={\em value}][,etaValue={\em meters}][,etaSlope={\em value}]]
+[-nowarnings]
+}\end{flushleft}
+
+\item {\bf files:}
+
+{\em inputfile} is an SDDS file containing one or more pages of data
+giving the phase-space coordinates of macro particles.  The macro
+particle data is stored in columns named \verb|x|, \verb|xp|,
+\verb|y|, \verb|yp|, and \verb|p|.  The units are those used by {\tt
+elegant} for the {\tt output} file from {\tt run\_setup}, the {\tt
+bunch} file from {\tt bunched\_beam}, and the coordinate-mode output
+from the {\tt WATCH} element. The data from these columns is used
+together with the commandline arguments to produce new values for
+these columns; the new values are delivered to {\tt outputfile}.
+Other columns may be present in {\tt inputfile}; if so, they are
+passed to {\em outputfile} unchanged.
+
+\item {\bf switches:}
+\begin{itemize}
+\item {\tt -xPlane=[beta={\em meters},alpha={\em value}][,etaValue={\em meters}][,etaSlope={\em value}]} ---
+        Specifies the desired parameters for the beam in the horizontal plane.  {\tt beta} and {\tt alpha} give
+        $\beta$ and $\alpha = -\frac{1}{2}\frac{\partial \beta}{\partial s}$; they must both be given
+        or both be omitted.  {\tt etaValue} and {\tt etaSlope} give the dispersion, $\eta$, and 
+        its slope, $\frac{\partial \eta}{\partial s}$.
+\item {\tt -yPlane=[beta={\em meters},alpha={\em value}][,etaValue={\em meters}][,etaSlope={\em value}]} ---
+        Same as {\tt -xPlane}, except for the vertical plane.
+\item {\tt -nowarnings} --- Suppresses warning messages.
+\end{itemize}
+
+\item {\bf author:} M. Borland, ANL/APS.
+\end{itemize}
+
+\newpage
+\section{Accelerator and Element Description}
+
+As mentioned in the introduction, {\tt elegant} uses a variant of the
+MAD input format for describing accelerators.  With some exceptions,
+the accelerator description for one program can be read by the other
+with no modification.  Among the differences:
+\begin{itemize}
+\item {\tt elegant} does not support the use of MAD-style equations to compute
+the value of a quantity.  The \verb|link_element| namelist command
+can be used for this purpose, and is actually more flexible than the
+method used by MAD.  Also, \verb|rpn|-style equations may be given
+in double-quotes; these are evaluated once only when the lattice
+is parsed.
+\item {\tt elegant} does not support substitution of parameters in
+beamline definitions.
+\item {\tt elegant} contains many elements that MAD does not have, such
+as kick elements, wake fields, and numerically integrated elements.
+\item The length of an input line is not limited to 80 characters in 
+{\tt elegant}, as it is in MAD.  However, for compatibility, any lattice
+created by {\tt elegant} will conform to this limit.
+\end{itemize}
+
+{\tt elegant}'s \verb|print_dictionary| command allows the user to
+obtain a list of names and short descriptions of all accelerator
+elements recognized by the program, along with the names, units,
+types, and default values of all parameters of each element. 
+The present output of this command is listed in the next section.
+The reader is referred to the MAD manual\cite{MAD} for details on sign
+conventions for angles, focusing strength, and so forth.  
+
+\newpage
+\section{Element Dictionary}
+\include{dictionary}
+
+\newpage
+\section{Examples}
+
+Example runs and post-processing files are included along with the
+distribution of {\tt elegant}.  These are drawn from the author's
+research and all concern various aspects of the Argonne Positron
+Accumulator Ring (PAR) and its injection and ejection lines (LTP and
+PTB, respectively).
+
+The examples are intended to demonstrate program capabilities with
+minimal work on the user's part.  Each demo is invoked using a command
+(a C-shell script) that can both run {\tt elegant} and post-process
+the output.  After running the demo, the output can be viewed again
+without rerunning {\tt elegant} by invoking the command with the word
+\verb|review| added to the command line.  Including the word
+\verb|hardcopy| on the command line results in the graphs being sent
+to the default printer, which is assumed to accept Postscript.
+
+The post-processing is typically handled by a lower-level script that
+is called from the demo script.  These lower-level scripts are good
+models for the creation of customized scripts for user applications.
+
+\begin{enumerate}
+
+\item \verb|par10h*| --- These files provide a demonstration of Twiss
+parameter computation, tracking, element variation, and map analysis.
+The lattice is defined with kick elements, which are used for all
+tracking.  After computation of the Twiss parameters for the
+PAR\cite{Borland_PC}, a series of particles are tracked with different
+initial x coordinates.  Finally, the tunes and Twiss parameters are
+computed by tracking; they are very close to the analytical values.
+The post-processing commands make phase-space plots and plots of FFTs
+of the motion, showing that the motion becomes chaotic at the
+stability limit.  To execute this demo, type the command
+\verb|par10h|.
+
+\item \verb|par_sympl*| --- These files provide a demonstration of the
+symplecticity of tracking with {\tt elegant} kick elements.  A single
+large-amplitude particle is tracked for ${\rm 2^{14}}$ turns.  The
+invariant ${\rm J_x}$ is then computed and plotted as a function of
+turn number.  To execute this demo, type the command \verb|par_sympl|.
+The post-processing takes quite some time because of the very large
+number of points.
+
+\item \verb|par_chrom*| --- These files provide a demonstration of
+computing chromaticity and other parameters as a function of momentum
+offset using map analysis.  The lattice is the same as
+\verb|par10h.lte|, except all of the elements are implemented using
+second-order matrices.  Hence, the chromaticity from tracking should
+be nearly identical to the analytical results computed by the
+\verb|twiss_output| command, which it is.  To run this demonstration,
+enter \verb|par_chrom|.  The reader may wish to try this demo again
+using \verb|ksbend|, \verb|csbend|, or \verb|nibend| elements in place
+of the \verb|sbend| elements, and \verb|kquad| (\verb|ksext|) elements
+in place of the \verb|quad| (\verb|sext|) elements.
+
+\item \verb|par_damp*| --- These files provide a demonstration of
+damping partition calculation using single turn tracking with
+synchrotron radiation.  The expected value of the longitudinal damping
+partition for PAR is ${\rm J_\delta = 1.758}$.  The user may edit the
+lattice file, \verb|par_damp.lte|, to invoke a different element for
+the dipole magnet.  In particular, definitions for numerically
+integrated dipoles with extended fringe-fields are present.  To
+execute this demo, type the command \verb|par_damp|.
+
+\item \verb|par_dynap*| --- These files provide a demonstration of
+dynamic aperture runs for a series of randomized machines.  Also
+exhibited here are orbit, tune, and chromaticity correction.  The
+post-processing commands make a plot of the dynamic apertures with the
+physical aperture superimposed.  (The \verb|orbcorr_plots| script can
+also be used to plot orbit correction information.) To execute this
+demo, type the command \verb|par_dynap|.  The lattice has been
+stripped down so that only a few of the more significant multipoles
+are present.  Also, fictitious extra sextupoles have been added to
+compensate the lack of second-order edge terms in the bending magnets
+(these would result in nonsymplectic tracking if included).  Still,
+the running time is many hours.
+
+\item \verb|ejoptk*| --- These files provide a demonstration of the
+optimization of a multi-turn ejection bump for PAR, using a
+time-dependent kicker waveform (formed from two cubic splines).  After
+optimization, the lattice is tracked with a realistic beam
+distribution to verify good transmission and show the centroid
+position vs z over three turns.  To execute this demo, type the
+command \verb|ejoptk|.
+
+\item \verb|ltp_te*| --- These files provide a demonstration of
+transport line simulation.  The Linac-to-PAR transport line is
+simulated with errors and trajectory correction to predict the
+transmission losses and the steering error at the exit of the septum.
+The trajectory correction uses tracking of a beam distribution, which
+is slower than tracking the centroid, but which produces better
+results in the presence of the large momentum spread.  The reader may
+wish to verify this by turning off this feature and running the
+simulation again.  To execute this demo, type the command
+\verb|ltp_te|.  The running time for this demo is quite long.
+
+\end{enumerate}
+
+\newpage
+\section{The {\tt rpn} Calculator}
+
+The program {\tt rpn} is a Reverse Polish Notation programmable
+scientific calculator written in C.  It is incorporated as a
+subprogram into {\tt elegant}, and a number of the SDDS programs.  It
+also exists as a command-line program, {\tt rpnl}, which executes its
+command-line arguments as {\tt rpn} operations and prints the result
+before exiting.  Use of {\tt rpn} in any of these modes is extremely
+straightforward.  Use of the program in its stand-alone form is the
+best way to gain familiarity with it.  Once one has entered {\tt rpn},
+entering ``help'' will produce a list of the available operators with
+brief summaries of their function.  Also, the {\tt rpn} definitions
+file \verb|rpn.defns|, distributed with {\tt elegant}, gives examples
+of most {\tt rpn} operation types.
+
+Like all RPN calculators, {\tt rpn} uses stacks.  In particular, it
+has a numeric stack, a logical stack, and a string stack.  Items are
+pushed onto the numeric stack whenever a number-token is entered, or
+whenever an operation concludes that has a number as its result; items
+are popped from this stack by operations that require numeric
+arguments.  Items are pushed onto the logical stack whenever a logical
+expression is evaluated; they are popped from this stack by use of
+logical operations that require logical arguments (e.g., logical
+ANDing), or by conditional branch instructions.  Items enclosed in
+double quotes are pushed onto the string stack; items are popped from
+this stack by use of operations that require string arguments (e.g.,
+formatted printing).
+
+{\tt rpn} supports user-defined memories and functions.  To create a
+user-defined memory, one simply stores a value into the name, as in
+``1 sto unity''; the memory is created automatically when {\tt rpn}
+detects that it does not already exist.  To create a user-defined
+function, enter the ``udf'' command; {\tt rpn} will prompt for the
+function name and the text that forms the function body.  To invoke a
+UDF, simply type the name.
+
+A file containing {\tt rpn} commands can be executed by pushing the
+filename onto the string stack and invoking the ``@'' operator.  {\tt
+rpn} supports more general file I/O through the use of functions that
+mimic the standard C I/O routines.  Files are identified by integer
+unit numbers, with units 0 and 1 being permanently assigned to the
+terminal input and terminal output, respectively.
+
+\newpage
+\begin{thebibliography}{9}
+
+\bibitem{Kernighan}
+    B. W. Kernighan and D. M. Ritchie, {\em The C Programming Language},
+    Prentice-Hall, Englewood Cliffs, N.J., second edition, 1988.
+
+\bibitem{MAD}
+    H. Grote, F. C. Iselin, ``The MAD Program--Version 8.1,'' CERN/SL/90-13(AP), June 1991.
+
+\bibitem{KLBrown}
+    K. L. Brown, R. V. Servranckx, ``First- and Second-Order Charged Particle Optics,'' 
+    SLAC-PUB-3381, July 1984.
+
+\bibitem{Borland_thesis}
+    M. Borland, ``A High-Brightness Thermionic Microwave Electron Gun,'' SLAC-Report-402,
+    February 1991, Stanford University Ph.D. Thesis.
+
+\bibitem{Enge}
+    H. A. Enge, ``Achromatic Mirror for Ion Beams,'' Rev. Sci. Inst., 34(4), 1963.
+
+\bibitem{Borland_PC}
+    M. Borland, private communication.
+
+\bibitem{Numerical_Recipes}
+    W. H. Press, {\em et al}, {\em Numerical Recipes in C}, Cambridge University
+    Press, Cambridge, 1988.
+
+\bibitem{SDDS1}
+M. Borland, ``A Self-Describing File Protocol for Simulation
+Integration and Shared Postprocessors,'' Proc. 1995 PAC, May 1-5,
+1995, Dallas, Texas, pp. 2184-2186 (1996).
+
+\bibitem{SDDS2}
+M. Borland, ``A Universal Postprocessing Toolkit for Accelerator 
+Simulation and Data Analysis,'' Proc. 1998 ICAP Conference, 
+Sept. 14-18, 1998, Monterey, California, to be published.
+
+\bibitem{DQS} T. P. Green, ``Research Toward a Heterogeneous Networked
+Computer Cluster: The Distributed Queuing System Version 3.0,'' SCRI
+Technical Publication, 1994.
+
+\bibitem{S2EJitter} M. Borland {\em et al}, ``Start-to-End Jitter Simulation
+of the LCLS,'' Proceedings of the 2001 Particle Accelerator Conference,
+Chicago, 2001.
+
+\bibitem{TopUpTracking} M. Borland and L. Emery, ``Tracking Studies of
+Top-Up Safety for the Advanced Photon Source,'', Proceedings of the
+1999 Particle Accelerator Conference, New York, 1999, pg 2319-2321.
+
+\bibitem{MingXie} M. Xie, ``Free ElectronLaser Driven by SLAC
+LINAC''.
+
+\bibitem{GENESIS} S. Reiche, {\em NIM} A 429 (1999) 242.
+
+\end{thebibliography}
+
+\end{document}

@@ -1,0 +1,74 @@
+For the {\tt NIBEND} element, there are various fringe field models available.
+In the following descriptions, $l_f$ is the extend of the fringe field, which
+starts at $z=0$ for convenience in the expressions.  Also,
+$K = \frac{1}{g}\int_-\infty^\infty F_y(z) (1-F_y(z)) dz$ is K. Brown's fringe
+field integral (commonly called {\tt FINT}), where $g$ is the full magnet gap
+and $\vec{F} = \vec{B}/B_0$, $B_0$ being the value of the magnetic field well inside
+the magnet.
+
+\begin{itemize}
+\item {\bf Linear fringe field:} 
+\begin{eqnarray}
+        F_y & = & z F_a \\
+        F_z & = & y F_a \\
+        F_a & = & 1/(6 K g) 
+\end{eqnarray}
+For this model, the user specifies {\tt FINT} and {\tt HGAP} only.
+
+\item {\bf Cubic-spline fringe field:}
+\begin{eqnarray}
+        F_y & = & F_a z^2 + F_b z^3 + y^2 (-F_a - 3 F_b z) \\
+        F_z & = & (2 F_a z + 3 F_b z^2) y \\
+        F_a & = & 3/l_f^2 \\
+        F_b & = & -2/l_f^3 \\
+        l_f & = & 70 K g/9 
+\end{eqnarray}
+For this model, the user specifies {\tt FINT} and {\tt HGAP} only.
+
+\item  {\bf Tanh-like fringe field:}
+\begin{eqnarray}
+F_y & = & \frac{1}{2} (1 + \tanh F_a z) +
+          \frac{1}{2} (y F_a {\rm sech} F_a z )^2 \tanh F_a z + \\
+    &   & \frac{1}{24} (y F_a {\rm sech} F_a z)^4 {\rm sech} F_a z (11 \sinh F_a z - \sinh 3 F_a z) \\
+F_z & = & \frac{1}{2} y F_a {\rm sech}^2 F_a z + 
+          \frac{1}{6} (y F_a {\rm sech} F_a z)^3 {\rm sech} F_a z (2 - \cosh 2 F_a z)) + \\
+    &   & \frac{1}{120} (y F_a {\rm sech} F_a z)^5 {\rm sech} F_a z (33 - 26 \cosh 2 F_a z + cosh  4 F_z z) \\
+F_a & = & 1/(2 K g) \\
+l_f & = & P_1/F_a
+\end{eqnarray}
+For this model, the user specifies {\tt FINT} and {\tt HGAP}, along with the parameter {\tt FP1}, which
+is the quantity $P_1$ in the last equation.  It determines the length of the fringe field that is integrated.
+
+\item {\bf Quintic-spline fringe field, to third order in y:}
+\begin{eqnarray}
+F_y & = &    (F_a z^3 + F_b z^4 + F_c z^5) +
+             y^2 z (3 F_a + 6 F_b z + 10 F_c z^2) \\
+F_z & = &  y   (3 F_a z^2 + 4 F_b z^3 + 5 F_c z^4) +
+             y^3 (-F_a - 4 F_b z - 10 F_c z^2) \\
+F_a & = &  10/l_f^3 \\
+F_b & = & -15/l_f^4 \\
+F_c & = & 6/l_f^5 \\
+l_f & = & 231 K g /25
+\end{eqnarray}
+
+For this model, the user specifies {\tt FINT} and {\tt HGAP} only.
+
+\item {\bf Enge model with 3 coefficients:}
+\begin{eqnarray}
+F_0 & = & \frac{1}{1 + e^{a_1 + a_2 z/D + a_3 (z/D)^2}} \\
+F_y & = &  F_0 - \frac{1}{2} y^2 F_0^{(2)} + \frac{1}{24} y^4 F_0^{(4)} \\
+F_z & = &  y F_0^{(1)} - \frac{1}{6} y^3 F_0^{(3)} + \frac{1}{120} y^5 F_0^{(5)}
+\end{eqnarray}
+where $F_0^{(n)} = \frac{\partial^n F_0}{\partial z^n}$.
+
+The user may choose ``enge1'', ``enge3'', or ``enge5'', where the number indicates the order of the
+expansion of $F_z$ with respect to $y$.  
+
+The need only specify {\tt FINT} and {\tt HGAP.}  The Enge parameters are then automatically determined to
+give the correct linear focusing.
+
+However, if user gives non-zero value for {\tt FP2,} then {\tt FINT} and {\tt HGAP} are ignored.
+{\tt FP2}, {\tt FP3}, and {\tt FP4} and taken as the Enge coefficients $a_1$, $a_2$, and $a_3$,
+respectively.
+ 
+\end{itemize}

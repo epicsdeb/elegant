@@ -1,0 +1,30 @@
+This element simulates transport through a transverse magnetic field
+specified as a field map.  It does this by simply integrating the
+Lorentz force equation in cartesian coordinates.  It does not
+incorporate changes in the design trajectory resulting from the
+fields.  I.e., if you input a dipole field, it is interpreted as a
+steering element.
+
+The field map file is an SDDS file with the following columns:
+\begin{itemize}
+\item {\bf x}, {\bf y} --- Transverse coordinates in meters (units should be ``m'').
+\item {\bf Fx}, {\bf Fy} --- Normalized field values (no units).  The
+        field is multiplied by the value of the STRENGTH parameter to convert it to a 
+        local bending radius.  For example, if Fx=y and Fy=x, then STRENGTH is the
+        K1 quadrupole parameter.
+\item {\bf Bx}, {\bf By} --- Field values in Tesla (units should be ``T'').
+        The field is still multiplied by the value of the STRENGTH parameter, which
+        is dimensionless.  Note: the default value of STRENGTH is 0, so if you don't
+        set it to something, you'll get no effect!
+\end{itemize}
+
+The field map file must contain a rectangular grid of points,
+equispaced (separately) in x and y.  There should be no missing values
+in the grid (this is not checked by {\tt elegant}).  In addition, the
+x values must vary fastest as the values are accessed in row order.
+To ensure that this is the case, use the following command on the field
+file:
+\begin{flushleft}
+sddssort {\em fieldFile} -column=y,incr -column=x,incr
+\end{flushleft}
+

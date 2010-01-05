@@ -1,0 +1,15 @@
+The sign convention for the {\tt TILT}  parameter is confusing on this element.
+In particular, a positive {\tt TILT} rotates the beam counter-clockwise about the
+longitudinal axis.  This is the opposite sense to rotations of elements, where a 
+positive {\tt TILT} rotates the element clockwise about the longitudinal axis.
+
+Hence, if one wanted to rotate a series of elements by 0.1 rad, one could do the
+following:
+\begin{verbatim}
+ROT1: ROTATE,TILT=0.1
+ROT2: ROTATE,TILT=-0.1
+BL: line=(ROT1,...,ROT2)
+\end{verbatim}
+The {\tt TILT} value for {\tt ROT1} is the same (including the sign) as the individual
+{\tt TILT} values one would give to all the elements represented by \verb|...|.
+

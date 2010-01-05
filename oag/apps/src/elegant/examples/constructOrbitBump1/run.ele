@@ -1,0 +1,40 @@
+! construct an orbit bump using correctors and monitors.
+
+&run_setup
+    lattice = "par.lte",
+    p_central = 880,
+    use_beamline="par",
+    default_order = 1,
+    concat_order = 1,
+        semaphore_file = %s.done
+&end
+
+&run_control
+&end
+
+! Define the correctors to use for steering
+! This is a horizontal bump, so we restrict the horizontal correctors
+&steering_element name = P1H[12], item=KICK, tweek = 1e-6 &end
+&steering_element name = P2H[12], item=KICK, tweek = 1e-6 &end
+
+! In the vertical, we simply include all vertical correctors.  Since the
+! vertical orbit is zero, it doesn't matter.
+&steering_element name = P?V?, item=KICK, tweek = 1e-6, plane=v &end
+
+! Set the desired position for P1P1H and P2P1H
+! These are symmetrically arranged around the septum
+&alter_elements name=P[12]P1H, item=DX, value=1e-3 &end
+! Turn off all other H BPMs inside the bump
+&alter_elements name=P[12]P[234]H, item=WEIGHT, value=0 &end
+
+&correct 
+        mode = "orbit",  ! Set to "trajectory" for trajectory bump
+        n_xy_cycles = 2,
+        n_iterations = 5,
+        trajectory_output = "%s.orb"
+        corrector_output = "%s.cor"
+&end
+
+&bunched_beam &end
+
+&track &end

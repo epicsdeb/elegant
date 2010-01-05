@@ -1,0 +1,30 @@
+This element allows simulation of a transverse impedance using a
+``broad-band'' resonator or an impedance function specified in a file.
+The impedance is defined as the Fourier transform of the wake function
+\begin{equation}
+Z(\omega) = \int_{-\infty}^{+\infty} e^{-i \omega t} W(t) dt
+\end{equation}
+where $i = \sqrt{-1}$, $W(t)=0 for t<0$, and $W(t)$ has units of
+$V/C/m$.  Note that there is no factor of $i$ in front of the
+integral.  Thus, in {\tt elegant} the transverse impedance is simply
+the Fourier transform of the wake.  This makes it easy to convert data
+from a program like ABCI into the wake formalism using {\tt sddsfft}.
+
+For a resonator impedance, the functional form is
+\begin{equation}
+Z(\omega) = \frac{-i\omega_r}{\omega} \frac{R_s}{1 + iQ(\frac{\omega}{\omega_r} - \frac{\omega_r}{\omega})},
+\end{equation}
+where $R_s$ is the shunt impedance in $Ohms/m$, $Q$ is the quality
+factor, and $\omega_r$ is the resonant frequency.
+
+When providing an impedance in a file, the user must be careful to conform to these
+conventions.
+
+Other notes:
+\begin{enumerate}
+\item The frequency data required from the input file is {\em not} $\omega$, but rather
+  $f = \omega/(2 \pi)$.
+\item The default smoothing setting ({\tt SG\_HALFWIDTH=4}), may apply too much smoothing.
+It is recommended that the user vary this parameter if smoothing is employed.
+\end{enumerate}
+

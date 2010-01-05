@@ -1,0 +1,27 @@
+This element is similar to {\tt RFMODE}, but it allows faster simulation of more than
+one mode.  Also, the mode data is specified in an SDDS file.  This file can be
+generated using the APS version of URMEL, or by hand. It must have the following
+columns and units:
+\begin{enumerate}
+\item {\tt Frequency} --- The frequency of the mode in Hz.  Floating point.
+\item {\tt Q} --- The quality factor.  Floating point.
+\item {\tt ShuntImpedance} or {\tt ShuntImpedanceSymm} --- The shunt
+  impedance in Ohms, defined as $V^2/(2*P)$.   Floating point. By default, {\tt ShuntImpedance} is
+  used.  However, if the parameter \verb|USE_SYMM_DATA| is non-zero, then 
+  {\tt ShuntImpedanceSymm}  is used.  The latter is the full-cavity 
+  shunt impedance that URMEL computes
+  by assuming that the input cavity used is one half of a symmetric cavity.
+\end{enumerate}
+
+The file may also have the following column:
+\begin{enumerate}
+\item {\tt beta} --- Normalized load impedance (dimensionless).   Floating point.  If not given, the
+ $\beta=0$ is assumed for all modes.
+\end{enumerate}
+
+In many simulations, a transient effect may occur when using this
+element because, in the context of the simulation, the impedance is
+switched on instantaneously.  This can give a false indication of the
+threshold for instability. The {\tt RAMP\_PASSES} parameter should
+be used to prevent this by slowly ramping the impedance to full
+strength.  This idea is from M. Blaskiewicz (BNL).

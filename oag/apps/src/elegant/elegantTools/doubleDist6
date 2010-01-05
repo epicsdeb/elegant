@@ -1,0 +1,124 @@
+#!/bin/sh  
+# \
+exec tclsh "$0" "$@"
+
+# Script to repeatedly double the number of particles in a distribution.
+# Algorithm:
+# 1. For each doubling, insert a new particle "near" every pair of existing particles in time.
+#    The particle has a new t value, but the same (x, xp, y, yp, p) as one of the original particles.
+# 2. Bin the beam according to t into a large number of bins.  Randomize the assignment of p values
+#    across particles in the same bin.
+#
+# usage: doubleDist6 -input <name> -output <name> -doublings <number> -nt <bins>
+# -doublings <number> : give the number of times to double the number of particles.
+#                       -doublings 3 will multiply the number of particles by 2^3
+# -nt <bins>          : give the number of time bins to use.  Particle's total momenta
+#                       are randomly swapped within the same time bin to reduce the
+#                       number of particles with (x, xp, y, yp, p) all identical
+#
+# M. Borland, 2009.
+
+proc APSSetVarsFromList {args} {
+    set valueList ""
+    set variableList ""
+    if {[APSStrictParseArguments {valueList variableList}] || \
+          ![llength $valueList] || [llength $valueList]!=[llength $variableList]} {
+        return -code error "APSSetVarsFromList: invalid arguments/values"
+    }
+    foreach value $valueList variable $variableList {
+        uplevel 1 "set $variable \"$value\""
+    }
+}
+
+proc APSStrictParseArguments {optlist} {
+    upvar args arguments
+    set length [llength $arguments]
+    set index 0
+    set leftovers {}
+    while {$index<$length} {
+        set arg [lindex $arguments $index]
+        if {[string index $arg 0]=="-"} {
+            set keywordName [string range $arg 1 end]
+            if {[lsearch -exact $optlist $keywordName]!=-1} {
+                incr index
+                if {$index==$length} {
+                    lappend leftovers $arg
+                } else {
+                    set valueString [lindex $arguments $index]
+                    uplevel "set $keywordName {$valueString}"
+                    incr index
+                }
+            } else {
+                incr index
+                lappend leftovers $arg
+            }
+        } else {
+            lappend leftovers $arg
+            incr index
+        }
+    }
+    set arguments [concat $leftovers]
+    if {$arguments != ""} {
+        set procName [lindex [info level [expr {[info level] - 1}]] 0]
+        puts stderr "Unknown option(s) given to $procName \"$arguments\""
+        return -1
+    } else {
+        return 0
+    }
+}
+
+
+set usage {usage: doubleDist6 -input <name> -output <name> -doublings <number> -nt <bins>}
+set args $argv
+set output ""
+set input ""
+set nt 1000
+set doublings 1
+if {[APSStrictParseArguments {input output doublings nt}] \
+      || ![string length $input] || ![string length $output] || $doublings<1 || $nt<100} {
+    return -code error "$usage"
+}
+
+if ![file exists $input] {
+    return -code error "$input: not found"
+}
+if [file exists $output] {
+    return -code error "$output: already exists"
+}
+
+for {set d 0} {$d<$doublings} {incr d} {
+    puts stderr "Doubling pass $d"
+    exec sddscombine $input $input -pipe=out \
+      | sddsprocess -pipe -redefine=column,page,i_page,type=short \
+      | sddscombine -pipe -merge \
+      | sddssort -pipe -column=t \
+      | sddsprocess -pipe=in $output.$d \
+      "-redefine=parameter,n_rows2,n_rows 2 -,type=long" \
+      "-redefine=column,doAve,i_row n_rows2 < page 2 == && ? 1 : 0 $ ,type=short" \
+      "-redefine=column,t,doAve 1 == ? t i_row 1 + &t \[ + 2 / t i_row 1 + &t \[ - rnd 2 * 1 - * + : t $ " 
+    set input $output.$d
+    set last $output.$d
+    lappend fileList $output.$d
+}
+
+file rename $last $output.tm
+eval file delete $fileList
+
+puts stderr "Binning by time, randomizing p"
+exec sddsprocess $output.tm -pipe=out \
+    -process=t,min,tMin -process=t,spread,tSpread \
+    "-define=column,it,t tMin - tSpread / $nt *,type=long" \
+    | sddssort -pipe -column=it \
+    | sddsbreak -pipe -change=it \
+    | sddsprocess -pipe -define=column,RN,rnd -process=p,spread,pSpread \
+    "-redefine=column,p,rnd 2 * 1 - pSpread * 30 / p +" \
+    | sddssort -pipe -column=RN \
+    | sddscombine -pipe=in -merge $output.p -retain=column,p -overwrite
+
+puts stderr "Inserting new p values"
+exec sddsxref $output.p $output.tm $output -take=*
+
+file delete $output.p $output.tm $output.tb
+
+
+

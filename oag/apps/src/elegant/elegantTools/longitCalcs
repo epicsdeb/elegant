@@ -1,0 +1,120 @@
+#!/bin/sh  
+# \
+exec oagwish "$0" "$@"
+
+set auto_path [linsert $auto_path 0  /usr/local/oag/apps/lib/$env(HOST_ARCH)]
+set auto_path [linsert $auto_path 0 /usr/local/oag/lib_patch/$env(HOST_ARCH)]
+APSStandardSetup
+
+set usage "usage: longitCalcs -twiss <filename>"
+set twiss ""
+set args $argv
+if {[APSStrictParseArguments {twiss}] || ![string length $twiss]} {
+    puts stderr $usage
+    exit 1
+}
+if ![file exists $twiss] {
+    puts stderr "Not found: $twiss"
+    exit 1
+}
+
+set dataItemList [list U0 Sdelta0 ex0 alphac pCentral revFreq sMax]
+if [catch {exec sddsconvert $twiss -pipe=out -topage=1 \
+             | sddsprocess -pipe -process=s,max,sMax \
+             "-define=parameter,revFreq,sMax pCentral beta.p c_mks * / rec" \
+             | sdds2stream -pipe \
+             -parameter=[join $dataItemList ,]} dataList] {
+    puts stderr "$dataList"
+    exit 1
+}
+set index 0
+foreach item $dataItemList {
+    set ${item} [lindex $dataList $index]
+    incr index
+}
+set revFreq1 [expr $revFreq]
+set sMax1 [expr $sMax]
+
+APSApplication . -name longitCalcs 
+set harmonic 1296
+set extradE 0
+set superPeriods 1
+# initial start with overvoltage of 1.5
+# to avoid problem with arcsin function
+set voltage [expr $superPeriods*($U0+$extradE) * 1.5]
+if {$voltage < 9} {set voltage 9}
+
+APSLabeledEntry .voltage -parent .userFrame \
+  -label "Voltage (MV): " -textVariable voltage -width 22
+APSLabeledEntry .harmonic -parent .userFrame \
+  -label "Harmonic number: " -textVariable harmonic -width 22
+APSLabeledEntry .sdelta -parent .userFrame \
+    -label "Sigma P/P0: " -textVariable Sdelta0 -width 22
+APSLabeledEntry .extradE -parent .userFrame \
+    -label "Additional dE (MeV/period/turn): " -textVariable extradE -width 22
+APSLabeledEntry .super -parent .userFrame \
+    -label "Superperiods: " -textVariable superPeriods -width 22 
+foreach item {voltage harmonic sdelta extradE super} {
+    bind .userFrame.$item.entry <Return> compute
+}
+
+set synchTune 0
+set bunchLength 0
+set bunchDuration 0
+set synchPhaseDeg 0
+set overVoltage 0
+set rfAcceptance 0
+set rfFrequency 0
+set synchFreq 0
+set coupling 0
+APSLabeledOutput .length -parent .userFrame \
+    -label "Circumference (m): " -textVariable sMax1 -width 22
+APSLabeledOutput .revFreq -parent .userFrame \
+    -label "Rev. frequency (MHz): " -textVariable revFreq1 -width 22
+APSLabeledOutput .rfFreq -parent .userFrame \
+    -label "RF frequency (MHz): " -textVariable rfFrequency -width 22
+APSLabeledOutput .synchphase -parent .userFrame \
+  -label "Synchrotron Phase: " -textVariable synchPhaseDeg -width 22
+APSLabeledOutput .overvolt -parent .userFrame \
+    -label "Over Voltage: " -textVariable overVoltage  -width 22
+APSLabeledOutput .accept -parent .userFrame \
+    -label "RF Acceptance: " -textVariable rfAcceptance -width 22
+APSLabeledOutput .nus -parent .userFrame \
+  -label "Synchrotron Tune: " -textVariable synchTune  -width 22
+APSLabeledOutput .nuf -parent .userFrame \
+  -label "Synchrotron Frequency (Hz): " -textVariable synchFreq  -width 22
+APSLabeledOutput .blen -parent .userFrame \
+  -label "Bunch length (m): " -textVariable bunchLength -width 22
+APSLabeledOutput .bdur -parent .userFrame \
+  -label "Bunch duration (s): " -textVariable bunchDuration -width 22
+APSLabeledOutput .coupling -parent .userFrame \
+  -label "Longitudinal coupling: " -textVariable coupling -width 22
+
+proc compute {} {
+    global dataItemList
+    eval global $dataItemList synchTune bunchLength harmonic voltage synchPhaseDeg
+    global overVoltage rfAcceptance rfFrequency synchFreq coupling extradE
+    global bunchDuration superPeriods revFreq1 sMax1 sMax
+    set pi 3.141592653589793
+    set cMKS 2.997924580000000e+08
+    set U1 [expr $superPeriods*($U0+$extradE)]
+    set sMax1 [expr $superPeriods*$sMax]
+    set revFreq1 [expr $revFreq/$superPeriods]
+    set energy [expr sqrt($pCentral*$pCentral+1)*0.51099906]
+    set synchPhase [expr asin($U1/$voltage)]
+    set overVoltage [expr $voltage/$U1]
+    set rfAcceptance [expr sqrt(2*$U1/($pi*$alphac*$harmonic*$energy)*(sqrt($overVoltage*$overVoltage-1)-acos(1/$overVoltage)))]
+    set synchPhaseDeg [expr 180-180.0*$synchPhase/$pi]
+    set synchTune [expr sqrt($alphac*$harmonic*cos($synchPhase)*$voltage/(2*$pi*$energy))]
+    set synchFreq [expr $synchTune*$revFreq1]
+    set omegaRF [expr $harmonic*2*$pi*$revFreq1]
+    set rfFrequency [expr $omegaRF/(2*$pi*1.0e6)]
+    set bunchLength [expr $Sdelta0*$cMKS*sqrt($alphac*$energy/($revFreq1*$omegaRF*cos($synchPhase)*$voltage))]
+    set bunchDuration [expr $bunchLength/$cMKS]
+    # $Sdelta0*sqrt(2*$pi*$alphac*$harmonic*$cMKS*$cMKS*$energy/($omegaRF*$omegaRF*cos($synchPhase)*$voltage))]
+    set coupling [expr sqrt($alphac*$voltage*cos($synchPhase)*$omegaRF/($energy*$revFreq1*4.0))]
+    update
+}
+
+compute
+APSButton .compute -parent .userFrame -text Compute -command compute

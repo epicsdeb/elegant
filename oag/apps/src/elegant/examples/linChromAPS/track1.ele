@@ -1,0 +1,62 @@
+! For linear chromatic tracking, the lattice must have the form
+! <nonMatrixElements>,<matrixBasedElements>,<nonMatrixElement>.
+! Hence, we use transmute_elements to turn interior monitors, apertures,
+! and markers into zero-length drift spaces. 
+
+! transmute markers, apertures, and monitors into zero-length drifts
+&transmute_elements name=*, type=*MON*, new_type=DRIF &end
+&transmute_elements name=*, type=MAXAMP, new_type=DRIF &end
+&transmute_elements name=*, type=SCRAPER, new_type=DRIF &end
+&transmute_elements name=*, type=MARK*, new_type=DRIF &end
+
+! transmute any standard watch points (names S*) into zero-length drifts
+&transmute_elements name=S*, type=WATCH, new_type=DRIF &end
+
+&run_setup
+        lattice = "aps.lte",
+        use_beamline = "ringrfsr",
+        p_central = "{rpnl 7.0e3 mev /}",
+        default_order = 2,
+        concat_order = 2,
+        magnets = %s.mag,
+        parameters = "%s.param",
+&end
+
+! Set the S1 and S2 sextupoles
+&alter_elements name=S*S1,  item=K2, value=10.052 &end
+&alter_elements name=S*S2,  item=K2, value=-22.140 &end
+
+&run_control n_passes=1024 &end
+
+! Link all the S3 sextupoles to S1A:S3
+&link_elements target=S*S3, source=S1A:S3, item=K2, equation=K2, exclude=S1A:S3 &end
+! Link all the S4 sextupoles to S1A:S4
+&link_elements target=S*S4, source=S1A:S4, item=K2, equation=K2, exclude=S1A:S4 &end
+
+&chromaticity
+        sextupoles = "S1A:S3 S1A:S4"
+        dnux_dp = 6, 
+        dnuy_dp = 6, 
+        sextupole_tweek = 1e-5
+        use_perturbed_matrix = 1,
+        correction_fraction = 0.9,
+        n_iterations = 500
+        tolerance = 0.0025
+        strength_limit = 21.6,
+&end    
+
+&twiss_output 
+        filename=%s.twi,
+        matched = 1,
+        radiation_integrals = 1
+        concat_order=2,
+        output_at_each_step = 1
+&end
+
+&bunched_beam
+	n_particles_per_bunch = 1,
+        centroid[0] = 1e-4, 0, 1e-4, 0, 0, 1e-4
+&end
+
+&track use_linear_chromatic_matrix=1 &end
+

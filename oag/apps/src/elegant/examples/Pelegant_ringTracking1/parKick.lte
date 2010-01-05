@@ -1,0 +1,57 @@
+l1a: drift, l=0.2
+l1b: drift, l=1.531675
+s1h: ksext, l=0.1, k2=0.0, n_kicks=1
+s1: line=(s1h,s1h)
+l2: drift, l=0.08
+lqb: drift, l=0.24
+q1: kquadrupole, l=0.23, k1=1.786022448154, n_kicks=20
+b1: csbend, l=0.8, angle=-0.785398163397, e1=-0.445, e2=-0.445, k2=0.1375, &
+k3=100, hgap=0.0225, fint=0.41, integration_order=4, n_kicks=10, nonlinear=1, &
+edge_order=1
+b2: csbend, l=0.8, angle=-0.785398163397, e1=-0.445, e2=-0.445, k2=0.1375, &
+k3=100, hgap=0.0225, fint=0.41, integration_order=4, n_kicks=10, nonlinear=1, &
+edge_order=1
+q2: kquadrupole, l=0.23, k1=2.295915530046, n_kicks=20
+l3: drift, l=1.47
+l3a: drif,l=0.568095770758662
+l3b: drif,l=0.551904229241338
+! LHK is half the effective length of a kicker
+lhk: drift, l=0.175
+l34a: drif,l=0.811087
+l34b: drif,l=0.308913
+! vertical chromaticity sextupole plus vertical steering magnet
+sdh: ksextupole, l=0.1, k2=5.95873739969822, n_kicks=1
+sd: line=(sdh,sdh)
+l4: drift, l=0.08
+q3: kquadrupole, l=0.23, k1=0.0, n_kicks=20
+q4: kquadrupole, l=0.23, k1=2.270174600496, n_kicks=20
+l5: drift, l=0.325
+! horizontal chromaticity sextupole plus horizontal steering magnet
+sfh: ksextupole, l=0.1, k2=-1.65546424863732, n_kicks=1
+sf: line=(sfh,sfh)
+! markers for the septum center and the center of the RF straight
+msept: marker
+mrf: marker
+
+quadr2: line=(l1a,l1b,s1,l2,q1,lqb,b1,lqb,q2,l3a,lhk,&
+    lhk,l3b,sd,l4,q3,lqb,b2,lqb,q4,l5)
+
+half: line=(quadr2,sf,-quadr2)
+
+mal: malign
+w1: watch,filename="%s.w1",mode="parameters"
+w2: watch,filename="%s.w2",mode="coord"
+aper0: ecol, x_max=0.0008, y_max=0.0005
+aper: ecol, x_max=0.0015, y_max=0.0012
+aper1: rcol, x_max=0.0010, y_max=0.0007
+!aper: ecol, x_max=0.0000000001, y_max=0.0000000000002
+
+c1: center
+!par: line=( aper, aper1, w1,2*half,aper,w1, aper1, mal)
+!par: line=(mal,aper,w1,w2,2*half,aper)
+par: line=(mal,w1,w2,2*half)
+d0: drift,l=0
+test1: line=(d0,w1,d0)
+parc: line=(mal,w1,w2,half,half)
+return
+

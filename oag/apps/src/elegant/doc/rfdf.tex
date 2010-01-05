@@ -1,0 +1,34 @@
+This cavity provides a transverse deflection that is constant as
+a function of transverse coordinates.  It is probably the best model
+for a real cavity, because real cavities contain a mixture of TM- and
+TE-like modes that result in a uniform deflection.
+
+For simplicity of use, the deflection is specified as a voltage, even 
+though it originates in a magnetic field.  The magnetic field is
+\begin{equation}
+B = B_0 \hat{y} \cos \omega t
+\end{equation}
+The corresponding electric field is obtained from Faraday's law (MKS units)
+\begin{equation}
+\left(\nabla \times \vec{E}\right)_y = - \frac{\partial \vec{B}}{\partial y}.
+\end{equation}
+Assuming $E_x = E_y = 0$, we have
+\begin{equation}
+E_z = B_0 \omega x \sin \omega t.
+\end{equation}
+
+The change in momenta (in units of $m c$) in passing through a slice of length $\Delta L$ is
+\begin{eqnarray}
+\Delta p_x & = & \frac{q B_0 \Delta L}{m c} \cos \omega t \\
+\Delta p_y & = & 0 \\
+\Delta p_z & = & \frac{q B_0 \omega x \Delta L}{m c^2} \sin\omega t 
+\end{eqnarray}
+
+If we want to think in terms of a deflecting voltage, we can re-write this as
+\begin{eqnarray}
+\Delta p_x & = & \frac{q V}{m c^2} \cos \omega t \\
+\Delta p_y & = & 0 \\
+\Delta p_z & = & \frac{q V}{m c^2} k x \sin\omega t,
+\end{eqnarray}
+where $k = \omega/c$.
+

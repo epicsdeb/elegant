@@ -1,0 +1,74 @@
+#!/bin/sh  
+# \
+exec oagtclsh "$0" "$@"
+
+set auto_path [linsert $auto_path 0  /usr/local/oag/apps/lib/$env(HOST_ARCH)]
+set auto_path [linsert $auto_path 0 /usr/local/oag/lib_patch/$env(HOST_ARCH)]
+APSStandardSetup
+
+set usage {usage: shower2elegant <input> <output> [-positrons 1] [-reference "x y u v"]}
+if {[llength $argv]!=2 && [llength $argv]!=4} {
+    return -code error "$usage (1)"
+}
+set input  [lindex $argv 0]
+set output [lindex $argv 1]
+if ![file exists $input] {
+    return -code error "not found: $input"
+}
+if [file exists $output] {
+    return -code error "exists: $output"
+}
+
+set reference "0 0 0 0"
+set positrons 0
+set args [lrange $argv 2 end]
+if {[APSStrictParseArguments {reference positrons}]} {
+	return -code error "$usage (2)"
+}
+set xref [lindex [split $reference] 0]
+set yref [lindex [split $reference] 1]
+set uref [lindex [split $reference] 2]
+set vref [lindex [split $reference] 3]
+
+set type electrons
+if $positrons {
+    set type positrons
+} 
+
+
+set columnList [APSGetSDDSNames -class column -fileName $input]
+if [lsearch -exact $columnList t]!=-1 {
+    # Time data already present in input, don't create it 
+
+    exec sddsprocess $input -pipe=out \
+      -match=parameter,Type=$type \
+      -filter=column,w,0.01,1.01 \
+      "-define=column,xp,u $uref - w /" \
+      "-define=column,yp,v $vref - w /" \
+      "-define=column,p,Energy mev / sqr 1 - sqrt" \
+      "-define=column,vz,w c_mks *,units=m/s" \
+      -process=z,max,zMax \
+      "-redefine=column,x,x $xref - xp zMax z - * +,units=m" \
+      "-redefine=column,y,y $yref - yp zMax z - * +,units=m" \
+      | sddsconvert -pipe -retain=column,x,y,xp,yp,t,p \
+      | sddscombine -pipe=in $output -merge
+
+} else {
+    # Time data not present in input (old version of shower or new version without
+    # -addTimeColumn option), so create it
+
+    exec sddsprocess $input -pipe=out \
+      -match=parameter,Type=$type \
+      -filter=column,w,0.01,1.01 \
+      "-define=column,xp,u $uref - w /" \
+      "-define=column,yp,v $vref - w /" \
+      "-define=column,p,Energy mev / sqr 1 - sqrt" \
+      "-define=column,vz,w c_mks *,units=m/s" \
+      -process=z,max,zMax \
+      "-redefine=column,x,x $xref - xp zMax z - * +,units=m" \
+      "-redefine=column,y,y $yref - yp zMax z - * +,units=m" \
+      "-define=column,t,zMax z - vz /,units=s" \
+      | sddsconvert -pipe -retain=column,x,y,xp,yp,t,p \
+      | sddscombine -pipe=in $output -merge
+
+}

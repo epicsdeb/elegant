@@ -1,0 +1,94 @@
+This element provides an alternative to element-by-element modeling of synchrotron radiation.
+It should be used with care because the results will not necessarily be self-consistent.
+This is particularly an issue when there is dispersion at the location of the \verb|SREFFECTS|
+element.
+
+There are several instances in which one may want to use this element:
+\begin{itemize}
+\item Simulation of instabilities or other dynamics where radiation damping or quantum excitation is important.
+\item Simulation of dynamics with an rf cavity when the synchronous phase is significantly
+  different from 180 degrees, so that average radiation losses must be included.
+\item Computation of dynamic and momentum aperture in the presence of radiation damping.
+\end{itemize}
+
+The major parameters (\verb|JX|, \verb|JY|, \verb|EXREF|, \verb|SDELTAREF|,
+\verb|DDELTAREF|, and \verb|PREF|) can be supplied explicitly by the user, or filled in by {\tt elegant}
+if the \verb|twiss_output| command is given with \verb|radiation_integrals=1|.
+
+In explicit initialization, the user supplies the quantities {\tt
+EXREF}, {\tt EYREF}, {\tt SDELTAREF}, {\tt DDELTAREF}, and {\tt
+PREF}.  These are, respectively, the reference values for the x-plane
+emittance, y-plane emittance, fractional momentum spread, energy loss
+per turn, and momentum.  The first four values pertain to the
+reference momentum.  {\tt JX}, {\tt JY}, and {\tt JDELTA} may also
+be given, although the defaults work for typical lattices.
+
+In automatic initialization, the user turns on the radiation integral
+feature in {\tt twiss\_output}, causing {\tt elegant} to automatically
+compute the above quantities.  This will occur only if {\tt PREF=0}.
+The {\tt COUPLING} parameter can be used to change the partitioning of
+quantum excitation between the horizontal and vertical planes.
+Because the radiation integrals computation in \verb|twiss_output| pertains to the
+horizontal plane only, the user must supply either \verb|EYREF| or \verb|COUPLING| if
+non-zero vertical emittance is desired.
+
+The user may elect to turn off some aspects of the synchrotron radiation model.  These should be
+changed from the default values with care!
+\begin{itemize}
+\item \verb|DAMPING| --- Default is 1.  If set to 0, then no radiation damping effects will be included.
+  More precisely, it is equivalent to setting \verb|JX=JY=JDELTA=1|.  Damping still occurs at any
+  rf cavities (since {\tt elegant} works in trace space).
+\item \verb|QEXCITATION| --- Default is 1.  If set to 0, then no quantum excitation effects are included,
+  which is to say that all particles will experience the same perturbation.  
+\item \verb|LOSSES| --- Default is 1.  If set to 0, no average energy losses are included.
+\end{itemize}
+  
+
+{\em There are a number of caveats that must be observed when using this element.}
+
+\begin{enumerate}
+
+\item If there is dispersion at the location of the \verb|SREFFECTS| element,
+the closed orbit will change because of the average momentum change, but it will disagree with
+tracking results. The reason is that in tracking \verb|SREFFECTS| must displace the beam to the new
+equilibrium orbit, because otherwise there will be additional betatron motion excited
+and the wrong equilibrium emittance will be obtained.  
+(Since the \verb|SREFFECTS| element is already adding the betatron motion excitation for the
+entire ring, {\tt elegant} is forced to offset each particle by $\Delta \delta\vec{\eta}$
+to suppress any additional excitation.)
+
+This issue can be resolved by placing the \verb|SREFFECTS| element next to the
+rf cavity and setting \verb|INCLUDE_OFFSETS=0|.  Since the average momentum change is
+zero from the two elements, no additional betatron motion will be generated.
+Optionally, one can also use many \verb|SREFFECTS| elements at equivalent locations in
+the lattice, which will decrease the magnitude of the effect.
+
+\item When used for dynamic aperture and momentum aperture determination,  
+one should set \verb|QEXCITATION=0|.  Putting the rf cavity (if any) right next to
+the \verb|SREFFECTS| element is a good idea to avoid spurious excitation of betatron
+motion.
+
+\item Nothing prevents including this element in a lattice when doing frequency map analysis, although
+it probably doesn't make any sense.  Only the average energy loss per turn will be included.
+Again, putting an rf cavity right after \verb|SREFFECTS| is a good idea.
+
+\item In versions 19.0 and later, {\tt elegant} includes the effect of {\tt
+SREFFECTS} on the closed orbit.  This presents a dilemna when
+automatic initialization is used, because in order to perform
+automatic initialization, {\tt elegant} has to compute the optics
+functions.  However, it must determine the closed orbit to compute the
+optics functions.  The solution to this is for the user to pre-compute
+the twiss parameters and radiation integrals using \verb|twiss_output|
+with \verb|output_at_each_step=0|.  The user is free to subsequently
+give \verb|twiss_output| with \verb|output_at_each_step=1| to obtain
+the results on the closed orbit.
+
+\item Computation of Twiss parameters does not fully include the
+effects of synchrotron radiation losses when these are imposed using
+{\tt SREFFECTS} elements.  If {\tt PREF=0} (automatic initialization),
+these effects are completely missing.  If {\tt PREF} is non-zero, then
+{\tt elegant} will use the {\tt DDELTAREF} parameter to compute the
+energy offset from the element, and thus its effect on the beam
+trajectory.
+
+\end{enumerate}

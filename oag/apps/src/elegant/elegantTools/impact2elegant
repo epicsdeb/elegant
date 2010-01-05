@@ -1,0 +1,34 @@
+#!/bin/tcsh
+set nonomatch
+
+if ($#argv != 3) then
+    echo "Usage: impact2elegant <input> <ouput> <totalcharge>"
+    exit 1
+endif
+
+set input = $1
+set output = $2
+set totalcharge = $3
+
+if ( ! -e $input) then
+    echo "Not found: $input"
+    exit 1
+endif
+
+if ( -e $output ) then
+    echo "In use: $output"
+    exit 1
+endif
+
+plaindata2sdds $input -pipe=out \
+    -inputMode=ascii -outputMode=binary -noRowCount \
+    -column=x,double,units=m -column=px,double \
+    -column=y,double,units=m -column=py,double \
+    -column=z,double,units=m -column=pz,double \
+| sddsprocess -pipe=in $output\
+    "-define=par,Charge,$totalcharge,units=C" \
+    "-define=column,p,px sqr py sqr + pz sqr + sqrt" \
+    "-define=column,xp,px pz /" \
+    "-define=column,yp,py pz /" \
+    -process=z,average,avgz \
+    "-define=column,t,avgz z - p beta.p c_mks * /,units=s"

@@ -1,0 +1,41 @@
+This element provides simulation of undulators using kick maps \cite{Elleaume1992}.
+A script (\verb|km2sdds|) is provided with the {\tt elegant}
+distribution to translate RADIA \cite{radia} output into SDDS for use by
+\verb|elegant|.
+
+The input file has the following columns:
+\begin{itemize}
+\item \verb|x| --- Horizontal position in meters.
+\item \verb|y| --- Vertical position in meters.
+\item \verb|xpFactor| --- Horizontal kick factor $C_x$ in $T^2 m^2$.  This factor is defined by
+equation (5a) in \cite{Elleaume1992}.  In particular, $\Delta x^\prime = C_x/H^2$, where
+$H$ is the beam rigidity in  $T^2 m^2$.
+\item \verb|ypFactor| --- Vertical kick factor $C_y$ in $T^2 m^2$. This factor is defined by
+equation (5b) in \cite{Elleaume1992}.  In particular, $\Delta y^\prime = C_y/H^2$, where
+$H$ is the beam rigidity in  $T^2 m^2$.
+\end{itemize}
+The values of \verb|x| and \verb|y| must be laid out on a grid of equispaced points.
+It is assumed that the data is ordered such that \verb|x| varies fastest.  This can be
+accomplished with the command
+\begin{verbatim}
+% sddssort -column=y,increasing -column=x,increasing input1.sdds input2.sdds
+\end{verbatim}
+where \verb|input1.sdds| is the original (unordered) file and \verb|input2.sdds| is the
+new file, which would be used with \verb|UKICKMAP|.
+
+The data file is assumed to result from integration through a full device. If instead one
+integrates through just a single period of a full device, one must multiply \verb|FIELD_FACTOR|
+by $\sqrt{N_u}$, where $N_u$ is the number of periods in the full device.  It also makes
+a certain amount of sense to set \verb|N_KICKS| equal to $N_u$.
+
+{\tt elegant} performs radiation integral computations
+for \verb|UKICKMAP| and can also include radiation effects in
+tracking.  This feature has limitations, namely, that the radiation
+integral computations assume the device is horizontally deflecting.
+However, in tracking, no such assumption is made.  N.B.: at present
+this element is {\em not} presently included in beam moments
+computations via the \verb|moments_output| command.
+
+This element was requested by W. Guo (BNL), who also assisted with the
+implementation and debugging.
+

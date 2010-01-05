@@ -1,0 +1,26 @@
+The phase convention is as follows, assuming a positive rf voltage:
+\verb|PHASE=90| is the crest for acceleration.  \verb|PHASE=180| is the stable
+phase for a storage ring above transition without energy losses.
+
+The body-focusing model is based on Rosenzweig and Serafini, Phys. Rev. E 49 (2),
+1599.  As suggested by N. Towne (NSLS), I simplified this to assume a pure pi-mode
+standing wave.
+
+The \verb|CHANGE_T| parameter may be needed for reasons that stem from
+{\tt elegant}'s internal use of the total time-of-flight as the
+longitudinal coordinate.  If the accelerator is very long or a large
+number of turns are being tracked, rounding error may affect the
+simulation, introducing spurious phase jumps.  By setting
+\verb|CHANGE_T=1|, you can force {\tt elegant} to modify the time
+coordinates of the particles to subtract off $N T_{rf}$, where
+$T_{tf}$ is the rf period and $N = \lfloor t/T_{tf}+0.5\rfloor$.  If
+you are tracking a ring with rf at some harmonic $h$ of the revolution
+frequency, this will result in the time coordinates being relative to
+the ideal revolution period, $T_{rf}*h$.  If you have multiple rf
+cavities in a ring, you need only use this feature on one of them.
+Also, you can use \verb|CHANGE_T=1| if you simply prefer to have the
+offset time coordinates in output files and analysis. 
+
+N.B.: {\em Do not use \verb|CHANGE_T=1| if you have rf cavities that
+are not at harmonics of one another or if you have other
+time-dependent elements that are not resonant.}

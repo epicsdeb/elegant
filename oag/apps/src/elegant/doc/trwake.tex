@@ -1,0 +1,48 @@
+The input file for this element gives the transverse-wake Green
+functions, $W_x(t)$ and $W_y(t)$, versus time behind the particle. The
+units of the wakes are V/C/m, so this element simulates the integrated
+wake of some structure (e.g., a cell or series of cells).  If you
+have, for example, the wake for a cell and you need the wake for N
+cells, then you may use the {\tt FACTOR} parameter to make the
+appropriate multiplication.  The values of the time coordinate should
+begin at 0 and be equi-spaced.  A positive value of time represents
+the distance behind the exciting particle.   Time values must be equally
+spaced.
+
+The sign convention for $W_q$ ($q$ being $x$ or $y$) is as follows: a
+particle with $q>0$ will impart a positive kick ($\Delta q^\prime >
+0$) to a trailing particle following $t$ seconds behind if $W_q(t)>0$.
+A physical wake function should be zero at $t=0$ and also be initially
+positive as $t$ increases from 0.
+
+Use of the {\tt CHARGE} parameter on the {\tt TRWAKE} element is
+disparaged.  It is preferred to use the {\tt CHARGE} element as part
+of your beamline to define the charge.  
+
+Setting the {\tt N\_BINS} paramater to 0 is recommended.  This results
+in auto-scaling of the number of bins to accomodate the beam.  The bin
+size is fixed by the spacing of the time points in the wake.
+
+The default degree of smoothing ({\tt SG\_HALFWIDTH=4}) may be excessive.
+It is suggested that users vary this parameter to verify that results
+are reliable if smoothing is employed ({\tt SMOOTHING=1}).
+
+The {\tt XFACTOR} and {\tt YFACTOR} parameters can be used to adjust
+the strength of the wakes if the location at which you place the {\tt
+TRWAKE} element has different beta functions than the location at
+which the object that causes the wake actually resides.  
+
+The {\tt XPOWER} and {\tt YPOWER} parameters can be used to change the
+dependence of the wake on the x and y coordinates, respectively, of
+the particles.  Normally, {\tt XPOWER=1} and {\tt YPOWER=1}.  This is
+an ordinary dipole wake in a (supposedly) symmetric chamber.  
+
+If you have an asymmetric chamber, then you will have a transverse
+wake kick even if the beam is centered.  (Of course, you'll need a 3-D
+wake code like GdfidL or MAFIA to compute this wake.)  This part of
+the transverse wake is described with {\tt XPOWER=0} and {\tt
+YPOWER=0}.  It will result in an orbit distortion, but conceivably
+could have other effects, such as emittance dilution.  If {\tt
+XPOWER=0} or {\tt YPOWER=0}, the units for the x or y wake
+(respectively) must be $V/C$.  A negative value of the wake
+corresponds to a kick toward negative x (or y).

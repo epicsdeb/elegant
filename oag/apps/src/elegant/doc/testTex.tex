@@ -1,0 +1,59 @@
+\documentclass[11pt,html]{article}
+\pagestyle{plain}
+%\voffset=-0.75in
+\newenvironment{req}{\begin{equation} \rm}{\end{equation}}
+\setlength{\topmargin}{0.15 in}
+\setlength{\oddsidemargin}{0 in}
+\setlength{\evensidemargin}{0 in} % not applicable anyway
+\setlength{\textwidth}{6.5 in}
+\setlength{\headheight}{-0.5 in} % for 11pt font size
+\setlength{\footheight}{0 in}
+\setlength{\textheight}{9 in}
+\begin{document}
+
+This element is based on section 3.3.1 of the {\em Handbook of
+Accelerator Physics and Engineering}, specifically, the
+subsections {\bf Single Coulomb scattering of spin-${\rm \frac{1}{2}}$
+particles}, {\bf Multiple Coulomb scattering through small angles},
+and {\bf Radiation length}.
+There are two aspects to this element: scattering and energy loss.
+
+{\bf Scattering.}  The multiple Coulomb scattering formula is used
+whenever the thickness of the material is greater than $0.001 X_o$,
+where $X_o$ is the radiation length.  (Note that this is inaccurate
+for materials thicker than $100 X_o$.)  For this regime, the user need
+only specify the material thickness (L) and the radiation length (XO).
+
+For materials thinner than $0.001 X_o$, the user must specify
+additional parameters, namely, the atomic number (Z), atomic mass (A),
+and mass density (RHO) of the material.  Note that the density is
+given in units of $kG/m^3$.  (Multiply by $10^3$ to convert $g/cm^3$
+to $kG/m^3$.)  In addition, the simulation parameter PLIMIT may be
+modified.  
+
+To understand this parameter, one must understand how {\tt elegant}
+simulates the thin materials.  First, it computes the expected number
+of scattering events per particle, $ E = \sigma_T n L = \frac{K_1
+\pi^3 n L}{K_2^2 + K_2*\pi^2} $, where $n$ is the number density of
+the material, L is the thickness of the material, $K_1 = (\frac{2 Z
+r_e}{\beta^2 \gamma})^2$, and $K_2 = \frac{\alpha^2
+Z^\frac{2}{3}}{\beta\gamma}$, with $r_e$ the classical electron radius
+and $\alpha$ the fine structure constant.  The material is then broken
+into $N$ slices, where $N = E/P_{limit}$.  For each slice, each
+simulation particle has a probability $E/N$ of scattering.  If scattering
+occurs, the location within the slice is computed using a uniform
+distribution over the slice thickness.
+
+For each scatter that occurs, the scattering angle, $\theta$ is
+computed using the cumulative probability distribution
+$F(\theta>\theta_o) = \frac{K_2 (\pi^2 - \theta_o^2)}{\pi^2 (K_2 +
+\theta_o^2)}$.  This can be solved for $\theta_o$, giving
+$\theta_o = \frac{(1-F)K_2\pi^2}{K_2 + F \pi^2}$.  For each scatter,
+$F$ is chosen from a uniform random distribution on $[0,1]$.
+
+{\bf Energy loss.}  Energy loss simulation is very simple.
+The energy loss per unit distance traveled, $x$, is 
+${\frac dE}{dx} = -E/X_o$.  Hence, in traveling through a
+material of thickness $L$, the energy of each particle is
+transformed from $E$ to $E e^{-L/X_o}$.  
+\end{document}

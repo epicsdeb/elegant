@@ -1,0 +1,25 @@
+This element simulates a quadrupole using a matrix of first, second,
+or third order.
+
+By default, the element has hard edges and constant field within the
+defined length, {\tt L}.  However, soft-edge effects (up to second
+order) may be added using the {\tt FFRINGE} and {\tt FRINGE\_TYPE}
+parameters.  If {\tt FFRINGE} is zero (the default), then the magnet
+is hard-edged.  If {\tt FFRINGE} is positive, then the magnet has
+linear fringe fields of length {\tt FFRINGE*L/2} at each end.  That
+is, the total length of fringe field from both ends combined is {\tt
+FFRINGE*L}.
+
+Depending on the value of {\tt FRINGE\_TYPE}, the fringe fields are
+modeled as contained within the length {\tt L} (``inset'' type) or
+extending symmetrically outside the length {\tt L} (``fixed-strength''
+type).
+
+For ``inset'' type fringe fields, the length of the ``hard core'' part of
+the quadrupole is {\tt L*(1-FFRINGE)}.  For ``fixed-strength'' type fringe fields,
+the length of the hard core is {\tt L*(1-FFRINGE/2)}.  In the latter case,
+the fringe gradient reaches 50\% of the hard core value at the nominal boundaries
+of the magnet. This means that the integrated strength of the magnet does not
+change as the {\tt FFRINGE} parameter is varied. This is not the case with
+``inset'' type fringe fields.
+

@@ -1,0 +1,3 @@
+#!/bin/sh
+mpirun -np 11 Pelegant manyParticles_p.ele
+

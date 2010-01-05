@@ -1,0 +1,56 @@
+&transmute_elements
+        name = *, type = MAXAMP,
+        new_type = DRIF
+&end
+
+&transmute_elements
+        name = *, type = ?COL,
+        new_type = DRIF
+&end
+
+&transmute_elements
+        name = *, type = SCRAPER,
+        new_type = DRIF
+&end
+
+&run_setup
+	lattice = <kickLatticeFile>,
+	use_beamline = <kickBeamline>,
+	p_central = "{rpnl <momentum> mev /}",
+        magnets = %s.mag,
+        rootname = <mainDirectory>/<mainPrefix>HigherOrderDispersion<suffix>,
+        semaphore_file = %s.done,
+        tracking_updates = 0
+&end
+
+&load_parameters
+        filename_list = " <parameterFileList>",
+	force_occurence_data = <forceOccurence>,
+        change_defined_values = 1,
+        allow_missing_elements = 1,
+        allow_missing_parameters = 1,
+        allow_missing_files = 1,
+&end
+
+&alter_elements name=*, type=*SBEN*, item=EDGE_ORDER, value=1, allow_missing_elements=1, allow_missing_parameters=1 &end
+&alter_elements name=*, type=*SBEN*, item=ORDER, value=1, allow_missing_elements=1, allow_missing_parameters=1 &end
+&alter_elements name=<kickOffsetElement>, item=ON_PASS, value=-1 &end
+&alter_elements name=<kickOffsetElement>, item=DP, value=<delta> &end
+
+&run_control
+&end
+
+&closed_orbit
+        output = %s.clo,
+        iteration_fraction = 0.1,
+        closed_orbit_iterations = 500,
+&end
+
+&bunched_beam
+        n_particles_per_bunch = 1,        
+&end
+
+&track
+        center_on_orbit = 1
+&end
+

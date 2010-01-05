@@ -1,0 +1,2125 @@
+      SUBROUTINE URGENT(ITYPE_I,PERIOD_I,KX_I,KY_I,
+     $     PHASE_I,N_I,EMIN_I,EMAX_I,NE_I,
+     $     ENERGY_I,CUR_I,SIGX_I,SIGY_I,SIGX1_I,
+     $     SIGY1_I,D_I,XPC_I,YPC_I,XPS_I,YPS_I,NXP_I,NYP_I,
+     $     MODE_I,ICALC_I,IHARM_I,NPHI_I,NSIG_I,NALPHA_I,
+     $     DALPHA_I,NOMEGA_I,DOMEGA_I,
+     $     E1_O,LAMDA1_O,PTOT_O,PD_O,ISUB_O,IANG_O,
+     $     EE_O,LAMDA_O,MINH_O,MAXH_O,NEE_O,
+     $     XPMM_O,YPMM_O,RRAD_O,L1_O,L2_O,L3_O,L4_O,RADMAX_O,POWER_O,
+     $     I1_O,I2_O,IMAX_O,EI_O,SPEC1_O,SPEC2_O,
+     $     SPEC3_O,PDTOT_O,PTOT1_O,FTOT_O,IHARM_O,IHARM5_O,
+     $     X5_O,Y5_O,E5_O,POW5_O,FLUX5_O)
+        IMPLICIT DOUBLE PRECISION (A-H,K,L,O-Z)
+C output arrays
+        DIMENSION EE_O(5001),LAMDA_O(5001),XPMM_O(26000)
+        DIMENSION YPMM_O(26000),RRAD_O(26000),POWER_O(26000)
+        DIMENSION L1_O(26000),L2_O(26000),L3_O(26000),L4_O(26000)
+        DIMENSION EI_O(5001),SPEC1_O(5001),SPEC2_O(5001),SPEC3_O(5001)
+        DIMENSION I1_O(5001),I2_O(5001),IHARM_O(5001)
+        DIMENSION X5_O(750000),Y5_O(7500),E5_O(7500),
+     $       POW5_O(75000),FLUX5_O(7500)
+        INTEGER CODE
+C        character*78    infile,outfile
+        COMMON/UND/K3,KX,KY,LAMDAR,LEN,PHASE,N,ITYPE
+        COMMON/ANGLE/SINPHI(400),COSPHI(400),
+     $       DPHI,DALPHA,NPHI1,NPHI2,
+     $       NALPHA,ISG(400),CODE(400)
+        COMMON/BEAM/GAMMA,CUR,SIGX2,SIGY2,SIGU,SIGV,FU,
+     $       FV,GSIGUV,NSIG
+        COMMON/CONST/APMIN,APMAX,MODE,ICALC,IHARM,IANG
+        COMMON/SCREEN/D,XPMIN,DXP,YPMIN,DYP,FAC,NXP,NYP
+        COMMON/SCALE/EMIN,DE,NE,NE1,NE2
+        COMMON/CONVL/H(5001),WMIN,DW,NW
+        COMMON/CALC/BRI1(101,101),BRI2(101,101),BRI3(101,101),
+     $  BRI0(101,101),RAD1(501,501),RAD2(501,501),RAD3(501,501),
+     $  RAD0(501,501),I1(5001),I2(5001),
+     $  SPEC1(5001),SPEC2(5001),SPEC3(5001),SPEC0(5001),WK(5001)
+        COMMON/OUT1/NEE,MIN_I,MAX_I,II1(26000),II2(26000),
+     $       II(26000),IMAX,IHARM5
+        COMMON/OUT2/EE(5001),L_LAMDA(5001),RADMAX,
+     $       X_P(26000),Y_P(26000),EI1(5001),
+     $       POWER1(26000),RRAD(26000),PDTOT,PTOT1,FTOT,
+     $       LL1(26000),LL2(26000),LL3(26000),LL4(26000)
+        COMMON/OUT5A/X5(750000)
+        COMMON/OUT5B/Y5(750000)
+        COMMON/OUT5C/E5(750000)
+        COMMON/OUT5D/POW5(750000)
+        COMMON/OUT5F/FLUX5(750000)
+        DATA PI/3.141592653589/,IDEBUG/0/
+C
+C ***************************************************************
+C                   URGENT  -  VERSION 3.0 (04/09/91)
+C
+C       A program to calculate Undulator Radiation properties
+C
+C       Authors : R.P.WALKER & B.DIVIACCO, Sincrotrone Trieste
+C
+C       See URGENT.TXT for instructions
+C
+C ****************************************************************
+C
+C       READ INPUT PARAMETERS
+C
+C        READ(*,*)ITYPE,PERIOD,KX,KY,PHASE,N
+C        READ(*,*)EMIN,EMAX,NE
+C        READ(*,*)ENERGY,CUR,SIGX,SIGY,SIGX1,SIGY1
+C        READ(*,*)D,XPC,YPC,XPS,YPS,NXP,NYP
+C        READ(*,*)MODE,ICALC,IHARM
+C        READ(*,*)NPHI,NSIG,NALPHA,DALPHA,NOMEGA,DOMEGA
+        ITYPE=ITYPE_I
+        PERIOD=PERIOD_I
+        KX=KX_I
+        KY=KY_I
+        PHASE=PHASE_I
+        N=N_I
+        EMIN=EMIN_I
+        EMAX=EMAX_I
+        NE=NE_I
+        ENERGY=ENERGY_I
+        CUR=CUR_I
+        SIGX=SIGX_I
+        SIGY=SIGY_I
+        SIGX1=SIGX1_I
+        SIGY1=SIGY1_I
+        D=D_I
+        XPC=XPC_I
+        YPC=YPC_I
+        XPS=XPS_I
+        YPS=YPS_I
+        NXP=NXP_I
+        NYP=NYP_I
+        MODE=MODE_I
+        ICALC=ICALC_I
+        IHARM=IHARM_I
+        NPHI=NPHI_I
+        NSIG=NSIG_I
+        NALPHA=NALPHA_I
+        DALPHA=DALPHA_I
+        NOMEGA=NOMEGA_I
+        DOMEGA=DOMEGA_I
+C
+C       CONSTANTS
+C
+        IF(ITYPE.EQ.2)KX=0.0
+        GAMMA=ENERGY/0.000511
+        LAMDAR=PERIOD*1.0D+10/(2.0*GAMMA*GAMMA)
+        K2=(KX*KX)+(KY*KY)
+        K3=1.0+(K2/2.0)
+        LEN=N*PERIOD
+        LAMDA1=LAMDAR*K3
+        E1=12398.5/LAMDA1
+        PTOT=0.0725*N*K2*ENERGY*ENERGY*CUR/PERIOD
+        GK=0.0
+        IF(KX.LT.1.0E-04.OR.KY.LT.1.0E-04)THEN
+          K=KX+KY
+          GK=K*((K**6)+(24.*(K**4)/7.)+(4.*K*K)+(16./7.))
+     $    /((1.+(K*K))**3.5)
+        ENDIF
+        IF(ABS(KX-KY).LT.1.0E-04)THEN
+          K=KX
+          GK=32.0/7.0*K/(1.0+K*K)**3.0
+        ENDIF
+        PD=0.1161*(ENERGY**4)*N*K*GK*CUR/PERIOD
+        IF(ITYPE.EQ.2)THEN
+          PTOT=PTOT*2.0
+          PD=PD*2.0
+        ENDIF
+        PTOT_O=PTOT
+        PD_O=PD
+C
+C       DEFAULT VALUES
+C
+        IF(NPHI.EQ.0)NPHI=20
+        IF(NSIG.EQ.0)NSIG=4
+        IF(NALPHA.EQ.0)NALPHA=15
+        IF(DALPHA.EQ.0.0)DALPHA=2.0
+        IF(NOMEGA.EQ.0)NOMEGA=16
+        IF(DOMEGA.EQ.0.0)DOMEGA=2.0
+        IF(MODE.LT.0)THEN
+          IDEBUG=1
+          MODE=-MODE
+        ENDIF
+C
+C       SET IRRELEVANT PARAMETERS TO ZERO
+C
+        IF(MODE.EQ.1.OR.MODE.EQ.6)THEN
+          NE=0
+          EMAX=0.0
+        ENDIF
+        IF(MODE.EQ.6)EMIN=0.0
+        IF(MODE.EQ.2.OR.MODE.EQ.3.OR.MODE.EQ.5)THEN
+          XPS=0.0
+          YPS=0.0
+          NXP=0
+          NYP=0
+        ENDIF
+        IF(MODE.EQ.3.OR.MODE.EQ.5)THEN
+          D=0.0
+          XPC=0.0
+          YPC=0.0
+        ENDIF
+        IF(MODE.EQ.6.OR.ICALC.EQ.3)NPHI=0
+        IF(ICALC.EQ.3.OR.MODE.EQ.5.OR.(MODE.EQ.6.AND.ICALC.EQ.2))NSIG=0
+        IF(ITYPE.EQ.1.AND.(MODE.NE.1.OR.ICALC.NE.1))NALPHA=0
+        IF(ITYPE.EQ.2.AND.ICALC.EQ.3)NALPHA=0
+        IF(ITYPE.EQ.1.AND.ICALC.NE.3.AND.(MODE.NE.1.OR.ICALC.NE.1))
+     $    DALPHA=0.0
+        IF(ITYPE.EQ.2.OR.ICALC.NE.1.OR.MODE.EQ.1.OR.MODE.EQ.6)THEN
+          NOMEGA=0
+          DOMEGA=0.0
+        ENDIF
+C
+C       ENERGY SCALE
+C
+        IF(NE.GT.0)DE=(EMAX-EMIN)/NE
+        NE1=1
+        IF(ICALC.EQ.1.AND.MODE.NE.1.AND.MODE.NE.6.AND.ITYPE.NE.2)THEN
+          IF(EMIN.LT.(DOMEGA*E1/N))EMIN=DOMEGA*E1/N
+          IF(NE.GT.0)THEN
+            NOMEGA=(2.0*DOMEGA*E1/(N*DE))+1
+            IF(NOMEGA.LT.(4.0*DOMEGA))NOMEGA=(4.0*DOMEGA)+0.5
+            NOMEGA=2*(NOMEGA/2)
+          ENDIF
+          DE=2.0*DOMEGA*E1/(NOMEGA*N)
+          EMIN=EMIN-(NOMEGA*DE/2.0)
+          EMAX=EMAX+(NOMEGA*DE/2.0)
+          NE=((EMAX-EMIN)/DE)+1
+          NE1=(NOMEGA/2)+1
+        ENDIF
+        NE=NE+1
+        NE2=NE+1-NE1
+        EMINE=EMIN+((NE1-1)*DE)
+        EMAXE=EMIN+((NE2-1)*DE)
+        NEE=NE2-NE1
+C
+C       PRINT INPUT DATA ETC.
+C
+C        WRITE(6,500)
+C        IF(ITYPE.EQ.1)WRITE(6,1000)PERIOD,KX,KY,N
+C        IF(ITYPE.EQ.2)WRITE(6,1001)PERIOD,KY,PHASE,N
+C        WRITE(6,1100)EMINE,EMAXE,NEE
+C        WRITE(6,1200)ENERGY,CUR,SIGX,SIGY,SIGX1,SIGY1
+C        WRITE(6,1300)D,XPC,YPC,XPS,YPS,NXP,NYP
+C        WRITE(6,1400)MODE,ICALC,IHARM
+C        WRITE(6,1500)NPHI,NSIG,NALPHA,DALPHA,NOMEGA,DOMEGA
+C        WRITE(6,1600)E1,LAMDA1,PTOT,PD
+C        WRITE(6,1700)
+        PHASE=PHASE*(PI/180.0)
+        E1_O=E1
+        LAMDA1_O=LAMDA1
+        PTOT_O=PTOT
+        PD_O=PD
+C
+C       ANGULAR (IANG=1) OR SPATIAL (IANG=0) UNITS
+C
+        IANG=0
+        IF(D.EQ.0.0)THEN
+          IANG=1
+          D=1.0
+        ENDIF
+C
+C       ERROR CHECK
+C
+        IF(ITYPE.LT.1.OR.ITYPE.GT.2)GOTO 900
+        IF(MODE.LT.1.OR.MODE.GT.6)GOTO 900
+        IF(ICALC.LT.0.OR.ICALC.GT.3)GOTO 900
+        IF(MODE.EQ.5.AND.ICALC.EQ.3)GOTO 900
+        IF(MODE.EQ.6.AND.ICALC.EQ.3)GOTO 900
+        IF(ITYPE.EQ.2.AND.(MODE.EQ.3.OR.MODE.EQ.5.OR.MODE.EQ.6))GOTO 900
+        IF(IHARM.LT.-1000.OR.IHARM.GT.1000)GOTO 900
+        IF(NE.LT.1.OR.NE.GT.5001)GOTO 900
+        IF(NXP.LT.0.OR.NXP.GT.500.OR.NYP.LT.0.OR.NYP.GT.500)GOTO 900
+        IF(NPHI.GT.100.OR.NALPHA.GT.100)GOTO 900
+        IF(ITYPE.EQ.2.AND.NPHI.GT.25)GOTO 900
+        IF(MODE.GE.2.AND.MODE.LE.5.AND.EMIN.LE.0.0)GOTO 900
+        IF(ICALC.EQ.1.AND.MODE.NE.1.AND.MODE.NE.6.AND.ITYPE.NE.2)THEN
+          IF(NOMEGA.GT.5000)GOTO 900
+          IF((NOMEGA/DOMEGA).LT.4.0)GOTO 900
+        ENDIF
+        IF(SIGX1.EQ.0.0.OR.SIGY1.EQ.0.0)THEN
+          IF(MODE.LT.5.AND.ICALC.NE.3)GOTO 900
+          IF(MODE.EQ.6.AND.ICALC.EQ.1)GOTO 900
+        ENDIF
+C
+C       ELECTRON BEAM
+C
+        SIGX2=SIGX*SIGX
+        SIGY2=SIGY*SIGY
+        IF(IANG.EQ.0)THEN
+          SIGU2=((SIGX1*SIGX1)+(SIGX*SIGX/(D*D)))*1.0D-06
+          SIGV2=((SIGY1*SIGY1)+(SIGY*SIGY/(D*D)))*1.0D-06
+          SIGU=DSQRT(SIGU2)
+          SIGV=DSQRT(SIGV2)
+          IF(SIGU2.NE.0.0)FU=0.5/SIGU2
+          IF(SIGV2.NE.0.0)FV=0.5/SIGV2
+        ELSE
+          SIGU=SIGX1*1.0D-03
+          SIGV=SIGY1*1.0D-03
+          IF(SIGU.NE.0.0)FU=0.5/(SIGU*SIGU)
+          IF(SIGV.NE.0.0)FV=0.5/(SIGV*SIGV)
+        ENDIF
+        GSIGUV=GAMMA*DMIN1(SIGU,SIGV)
+C
+C       ACCEPTANCE : DETERMINE MIN. AND MAX. EMISSION ANGLES
+C
+        XE1=(XPC-(XPS/2.0))*1.0D-03/D
+        XE2=(XPC+(XPS/2.0))*1.0D-03/D
+        XEMAX=DMAX1(DABS(XE1),DABS(XE2))+(NSIG*SIGU)
+        YE1=(YPC-(YPS/2.0))*1.0D-03/D
+        YE2=(YPC+(YPS/2.0))*1.0D-03/D
+        YEMAX=DMAX1(DABS(YE1),DABS(YE2))+(NSIG*SIGV)
+        APMAX=GAMMA*GAMMA*((XEMAX*XEMAX)+(YEMAX*YEMAX))
+        IF(XE1.GT.0.0.AND.XE2.GT.0.0)THEN
+          XEMIN=XE1-(NSIG*SIGU)
+        ELSE
+          IF(XE1.LT.0.0.AND.XE2.LT.0.0)THEN
+            XEMIN=-XE2-(NSIG*SIGU)
+          ELSE
+            XEMIN=0.0
+          ENDIF
+        ENDIF
+        IF(XEMIN.LT.0.0)XEMIN=0.0
+        IF(YE1.GT.0.0.AND.YE2.GT.0.0)THEN
+          YEMIN=YE1-(NSIG*SIGV)
+        ELSE
+          IF(YE1.LT.0.0.AND.YE2.LT.0.0)THEN
+            YEMIN=-YE2-(NSIG*SIGV)
+          ELSE
+            YEMIN=0.0
+          ENDIF
+        ENDIF
+        IF(YEMIN.LT.0.0)YEMIN=0.0
+        APMIN=GAMMA*GAMMA*((XEMIN*XEMIN)+(YEMIN*YEMIN))
+        IF(XPC.EQ.0.0.AND.YPC.EQ.0.0)THEN
+          FAC=4.0
+          XPMIN=0.0
+          YPMIN=0.0
+          IF(NXP.GT.0)DXP=(XPS/(2.0*NXP))
+          IF(NYP.GT.0)DYP=(YPS/(2.0*NYP))
+        ELSE
+          FAC=1.0
+          XPMIN=XPC-(XPS/2.0)
+          YPMIN=YPC-(YPS/2.0)
+          IF(NXP.GT.0)DXP=XPS/NXP
+          IF(NYP.GT.0)DYP=YPS/NYP
+        ENDIF
+        IF(NXP.EQ.0.OR.NYP.EQ.0)FAC=0.0
+        NXP=NXP+1
+        NYP=NYP+1
+C
+C       SET UP ARRAY OF COSPHI AND SINPHI
+C
+        IF(MODE.NE.6.AND.ICALC.NE.3)THEN
+          NPHI1=(4*NPHI)
+          NPHI2=NPHI+1
+          INC=NPHI
+          ISIGN=1
+          DPHI=2.0*PI/FLOAT(NPHI1)
+          DO 10 IE=1,NPHI1
+          PHI=(IE-1)*DPHI
+          SINPHI(IE)=DSIN(PHI)
+          COSPHI(IE)=DCOS(PHI)
+          IF(ITYPE.NE.2)THEN
+            IF(IE.EQ.1)CODE(IE)=1
+            IF(IE.NE.1)CODE(IE)=CODE(IE-1)+ISIGN
+            IF(IE.EQ.(INC+1))ISIGN=-1
+            IF(IE.EQ.((2*INC)+1))ISIGN=1
+            IF(IE.EQ.((3*INC)+1))ISIGN=-1
+            ISG(IE)=ISIGN
+          ELSE
+            CODE(IE)=IE
+            ISG(IE)=1
+          ENDIF
+10        CONTINUE
+        ENDIF
+C
+C       SET UP NATURAL LINESHAPE FUNCTION
+C
+        IF(ICALC.EQ.1.AND.MODE.NE.1.AND.MODE.NE.6.AND.ITYPE.NE.2)THEN
+          WMIN=-DOMEGA
+          DW=2.0*DOMEGA/NOMEGA
+          NW=NOMEGA+1
+          DO 20 I=1,NW
+          W=WMIN+((I-1)*DW)
+          H(I)=1.0
+          IF(DABS(W).GT.1.0D-06)H(I)=(DSIN(PI*W)/(PI*W))**2
+20        CONTINUE
+        ENDIF
+C
+C       CALL ANALYSIS PROGRAM
+C
+        IF(MODE.EQ.1)ISUB=1
+        IF(MODE.GE.2.AND.MODE.LE.4)ISUB=2
+        IF(MODE.EQ.5)ISUB=3
+        IF(ICALC.EQ.3)ISUB=4
+        IF(MODE.EQ.6)ISUB=5
+        ISUB_O=ISUB
+        IANG_O=IANG
+        PTOT_O=PTOT
+        PD_O=PD
+        D_I = D
+        IF (D.EQ.1.0.AND.IANG.EQ.1)D_I=0
+        XPC_I = XPC
+        YPC_I = YPC
+        XPS_I = XPS
+        YPS_I = YPS
+        NXP_I = NXP-1
+        NYP_I = NYP-1
+        NALPHA_I = NALPHA
+        DALPHA_I = DALPHA
+        NOMEGA_I = NOMEGA
+        DOMEGA_I = DOMEGA
+        GOTO(100,200,300,400,450)ISUB
+        GOTO 900
+100     CALL SUB1(IDEBUG)
+        NEE_O=NEE
+        MINH_O=MIN_I
+        MAXH_O=MAX_I
+        EE_O(1)=EE(1)
+        LAMDA_O(1)=L_LAMDA(1)
+        DO 110 I=1,NEE
+           XPMM_O(I)=X_P(I)
+           YPMM_O(I)=Y_P(I)
+           RRAD_O(I)=RRAD(I)
+           L1_O(I)=LL1(I)
+           L2_O(I)=LL2(I)
+           L3_O(I)=LL3(I)
+           L4_O(I)=LL4(I)
+ 110    CONTINUE
+        RADMAX_O=RADMAX
+        RETURN
+200     CALL SUB2(IDEBUG)
+        NEE_O=NEE
+        DO 220 I=1,NEE
+           EE_O(I)=EE(I)
+           LAMDA_O(I)=L_LAMDA(I)
+           RRAD_O(I)=RRAD(I)
+           POWER_O(I)=POWER1(I)
+           I1_O(I)=II1(I)
+           I2_O(I)=II2(I)
+           L1_O(I)=LL1(I)
+           L2_O(I)=LL2(I)
+           L3_O(I)=LL3(I)
+           L4_O(I)=LL4(I)
+ 220    CONTINUE
+        PTOT1_O=PTOT1
+        PDTOT_O=PDTOT
+        RETURN
+300     CALL SUB3(IDEBUG)
+        NEE_O=NEE
+        PTOT1_O=PTOT1
+        PDTOT_O=PDTOT
+        DO 330 I=1,NEE
+           EE_O(I)=EE(I)
+           LAMDA_O(I)=L_LAMDA(I)
+           RRAD_O(I)=RRAD(I)
+           POWER_O(I)=POWER1(I)
+           I1_O(I)=II1(I)
+           I2_O(I)=II2(I)
+           L1_O(I)=LL1(I)
+           L2_O(I)=LL2(I)
+           L3_O(I)=LL3(I)
+           L4_O(I)=LL4(I)
+330     CONTINUE
+        RETURN
+400     CALL SUB4
+        NEE_O=NEE
+        IF(MODE.EQ.1)THEN
+           RADMAX_O=RADMAX
+           DO 410 I=1,NEE
+               XPMM_O(I)=X_P(I)
+               YPMM_O(I)=Y_P(I)
+               RRAD_O(I)=RRAD(I)
+               I1_O(I)=II1(I)
+               L1_O(I)=LL1(I)
+               L2_O(I)=LL2(I)
+               L3_O(I)=LL3(I)
+               L4_O(I)=LL4(I)
+ 410       CONTINUE
+        ELSE
+           PTOT1_O=PTOT1
+           PDTOT_O=PDTOT
+           DO 420 I=1,NEE
+C              WRITE(0,430)EE(I),I,II1(I),II2(I)
+              EE_O(I)=EE(I)
+              LAMDA_O(I)=L_LAMDA(I)
+              RRAD_O(I)=RRAD(I)
+              POWER_O(I)=POWER1(I)
+              I1_O(I)=II1(I)
+              I2_O(I)=II2(I)
+              L1_O(I)=LL1(I)
+              L2_O(I)=LL2(I)
+              L3_O(I)=LL3(I)
+              L4_O(I)=LL4(I)
+420     CONTINUE
+C        WRITE(0,422)PTOT1
+C422    FORMAT(/1X,'PTOT = ',D13.6)
+C 430    FORMAT(/1X,'E = ',F9.3,3X,'I=',I4,3x,'IMIN=',I4,3x,'IMAX=',I4)
+        ENDIF
+        RETURN
+450     CALL SUB5(IDEBUG)
+        NEE_O=NEE
+        DO 460 I=1,NEE
+           XPMM_O(I)=X_P(I)
+           YPMM_O(I)=Y_P(I)
+           EE_O(I)=EE(I)
+           RRAD_O(I)=RRAD(I)
+           POWER_O(I)=POWER1(I)
+460     CONTINUE
+        IMAX_O=IMAX
+        PTOT1_O=PTOT1
+        PDTOT_O=PDTOT
+        FTOT_O=FTOT
+        IF(IHARM.GT.0)RETURN
+        DO 480 I=1,IMAX
+           IHARM_O(I)=II(I)
+           EI_O(I)=EI1(I)
+           SPEC1_O(I)=SPEC1(I)
+           SPEC2_O(I)=SPEC2(I)
+           SPEC3_O(I)=SPEC3(I)
+ 480    CONTINUE
+        IF(IDEBUG.EQ.0)RETURN
+        IHARM5_O=IHARM5
+        DO 490 I=1,IHARM5*NEE
+           X5_O(I)=X5(I)
+           Y5_O(I)=Y5(I)
+           E5_O(I)=E5(I)
+           POW5_O(I)=POW5(I)
+           FLUX5_O(I)=FLUX5(I)
+ 490    CONTINUE
+        RETURN
+900     WRITE(0,9000)
+        STOP
+C500     FORMAT(' ****** URGENT - Version 3.0 ******')
+C1000    FORMAT(/' UNDULATOR : PERIOD = ',F7.5,2X,
+C     $  'KX = ',F7.4,2X,'KY = ',F7.4,2X,'N = ',I3)
+C1001    FORMAT(/' CROSSED-UNDULATOR : PERIOD = ',F7.5,2X,
+C     $  'K = ',F7.4,2X,'PHASE = ',F6.1,2X,'N = ',I3)
+C1100    FORMAT(/' PHOTON ENERGY RANGE : MIN = ',F9.3,2X,'MAX = ',
+C     $  F9.3,2X,'N = ',I4)
+C1200    FORMAT(/' ELECTRON BEAM : ENERGY = ',F6.3,2X,'CURRENT = ',
+C     $  F5.3/1X,'SIGX = ',F6.4,2X,'SIGY = ',F6.4,2X,'SIGX1 = ',F6.4,2X,
+C     $  'SIGY1 = ',F6.4)
+C1300    FORMAT(/' ACCEPTANCE : D = ',F8.3,2X,'XCENTRE = ',F7.3,
+C     $  2X,'YCENTRE = ',F7.3/1X,
+C     $  'XSIZE = ',F7.3,2X,'YSIZE = ',F7.3,2X,'NXP = ',I2,2X,
+C     $  'NYP = ',I2)
+C1400    FORMAT(/' MODE = ',I1,2X,'ICALC = ',I1,2X,'IHARM = ',I5)
+C1500    FORMAT(1X,'NPHI = ',I3,1X,'NSIG = ',I3,1X,'NALPHA = ',I3,1X,
+C     $  'DALPHA = ',F4.1,1X,'NOMEGA = ',I4,1X,'DOMEGA = ',F4.1)
+C1600    FORMAT(/' E1 = ',F9.3,' EV',2X,'LAMDA1 = ',F9.3,' ANGSTROM'/
+C     $  1X,'TOTAL POWER = ',F9.3,' WATTS',2X,'POWER DENSITY = ',
+C     $  F10.3,' WATTS/MRAD**2')
+C1700    FORMAT(/' UNITS :'/
+C     $  ' IRRADIANCE -               PHOTONS/S/MM**2/0.1%BW'/
+C     $  ' ANGULAR FLUX DENSITY -     PHOTONS/S/MRAD**2/0.1%BW'/
+C     $  ' BRIGHTNESS -               PHOTONS/S/MRAD*2/MM**2/0.1%BW'/
+C     $  ' FLUX -                     PHOTONS/S/0.1%BW'/
+C     $  ' (SPECTRAL) POWER DENSITY - WATTS/MM**2 OR MRAD**2(/EV)'/
+C     $  ' (SPECTRAL) POWER -         WATTS(/EV)')
+9000    FORMAT(//' *** INVALID INPUT PARAMETERS ***')
+        END
+C
+C       -----------------------
+
+        SUBROUTINE SUB1(IDEBUG)
+C       -----------------------
+        IMPLICIT DOUBLE PRECISION (A-H,K,L,O-Z)
+        INTEGER CODE
+        COMMON/UND/K3,KX,KY,LAMDAR,LEN,PHASE,N,ITYPE
+        COMMON/ANGLE/SINPHI(400),COSPHI(400),
+     $       DPHI,DALPHA,NPHI1,NPHI2,
+     $       NALPHA,ISG(400),CODE(400)
+        COMMON/BEAM/GAMMA,CUR,SIGX2,SIGY2,SIGU,SIGV,FU,
+     $       FV,GSIGUV,NSIG
+        COMMON/CONST/APMIN,APMAX,MODE,ICALC,IHARM,IANG
+        COMMON/SCREEN/D,XPMIN,DXP,YPMIN,DYP,FAC,NXP,NYP
+        COMMON/SCALE/EMIN,DE,NE,NE1,NE2
+        COMMON/CONVL/H(5001),WMIN,DW,NW
+        COMMON/CALC/BRI1(101,101),BRI2(101,101),BRI3(101,101),
+     $  BRI0(101,101),RAD1(501,501),RAD2(501,501),RAD3(501,501),
+     $  RAD0(501,501),I1(5001),I2(5001),
+     $  SPEC1(5001),SPEC2(5001),SPEC3(5001),SPEC0(5001),WK(5001)
+        COMMON/OUT1/NEE,MIN_I,MAX_I,II1(26000),II2(26000),
+     $       II(26000),IMAX,IHARM5
+        COMMON/OUT2/EE(5001),L_LAMDA(5001),RADMAX,
+     $       X_P(26000),Y_P(26000),EI1(5001),
+     $       POWER1(26000),RRAD(26000),PDTOT,PTOT1,FTOT,
+     $       LL1(26000),LL2(26000),LL3(26000),LL4(26000)
+        DATA PI/3.141592653589/
+        F1=4.55D+07*N*N*CUR/(2.0*PI*SIGU*SIGV*D*D)
+        ARGMAX=NSIG*NSIG/2.0
+C
+C       ANGULAR (IANG=1) OR SPATIAL (IANG=0) DISTRIBUTION OF FLUX
+C       AT A GIVEN PHOTON ENERGY, INCLUDING EMUTTANCE
+C       MODE  = 1
+C       ICALC = 1 - FINITE N
+C             = 2 - INFINITE N
+C
+C       SET PHOTON ENERGY
+C
+        E=EMIN
+        LAMDA=12398.5/E
+        R=LAMDA/LAMDAR
+        DO 10 IB=1,NXP
+        DO 10 IC=1,NYP
+        RAD1(IB,IC)=0.0
+        RAD2(IB,IC)=0.0
+        RAD3(IB,IC)=0.0
+        RAD0(IB,IC)=0.0
+10      CONTINUE
+        I1(1)=0
+        I2(1)=0
+        RADMAX=0.0
+        ICOUNT=0
+C
+C       SET HARMONIC NO.
+C
+        IMIN=((APMIN-(DALPHA*R/N)+K3)/R)+1
+        IMAX=(APMAX+(DALPHA*R/N)+K3)/R
+C        IF(IDEBUG.EQ.1)WRITE(6,9000)E,IMIN,IMAX
+        IF(IMAX.LT.IMIN)GOTO 900
+        IF(IHARM.GT.0.AND.(IHARM.LT.IMIN.OR.IHARM.GT.IMAX))GOTO 900
+        IF(IHARM.GT.0)THEN
+          I=IHARM-1
+        ELSE
+          I=IMIN-1
+        ENDIF
+20      I=I+1
+        IF(I1(1).EQ.0)I1(1)=I
+        ICOUNT=ICOUNT+1
+        ALP2I=(R*I)-K3
+        ALPI=0.0
+        IF(ALP2I.GT.0.0)ALPI=DSQRT(ALP2I)
+        IF(ICALC.EQ.2.AND.ITYPE.EQ.1)THEN
+          NALP=1
+          DALP=(R/(2.0*N))/ALPI
+          AMIN=ALPI-DALP/2.0
+        ELSE
+          A2MAX=ALP2I+(DALPHA*R/N)
+          AMAX=DSQRT(A2MAX)
+          A2MIN=ALP2I-(DALPHA*R/N)
+          IF(A2MIN.LT.0.0)A2MIN=0.0
+          AMIN=DSQRT(A2MIN)
+          DALP=(AMAX-AMIN)/NALPHA
+          NALP=NALPHA
+        ENDIF
+C
+C       CALCULATE BRIGHTNESS FUNCTION
+C
+        CALL BRIF(ALP2I,ALPI,AMIN,DALP,NALP,ICALC,R,I)
+C
+C       VARY POSITION IN ACCEPTANCE
+C
+        DO 200 IB=1,NXP
+        XPMM=XPMIN+((IB-1)*DXP)
+        XP=XPMM/1000.0
+        DO 200 IC=1,NYP
+        YPMM=YPMIN+((IC-1)*DYP)
+        YP=YPMM/1000.0
+C
+C       ADD THE CONTRIBUTION OF THE GIVEN HARMONIC AT THE GIVEN
+C       WAVELENGTH TO THE IRRADIANCE AT THE GIVEN  POSITION
+C       BY CONVOLUTING BRIGHTNESS AND ELECTRON BEAM DISTRIBUTIONS
+C
+        SUM1=0.0
+        SUM2=0.0
+        SUM3=0.0
+        SUM0=0.0
+        DO 64 ID=1,NALP
+        ALP=AMIN+(DALP/2.0)+((ID-1)*DALP)
+        THETA=ALP/GAMMA
+        DO 64 IE=1,NPHI1
+        IE1=CODE(IE)
+        XE1=THETA*COSPHI(IE)
+        YE1=THETA*SINPHI(IE)
+        U=(XP/D)-XE1
+        V=(YP/D)-YE1
+        ARG=(U*U*FU)+(V*V*FV)
+        IF(ARG.GT.ARGMAX)GOTO 64
+        P=DEXP(-ARG)
+        SUM1=SUM1+(BRI1(ID,IE1)*ALP*P)
+        SUM2=SUM2+(BRI2(ID,IE1)*ALP*P)*ISG(IE)
+        SUM3=SUM3+(BRI3(ID,IE1)*ALP*P)
+        SUM0=SUM0+(BRI0(ID,IE1)*ALP*P)
+64      CONTINUE
+        DELTA1=F1*SUM1*DALP*DPHI
+        DELTA2=F1*SUM2*DALP*DPHI
+        DELTA3=F1*SUM3*DALP*DPHI
+        DELTA0=F1*SUM0*DALP*DPHI
+C
+        RAD1(IB,IC)=RAD1(IB,IC)+DELTA1
+        RAD2(IB,IC)=RAD2(IB,IC)+DELTA2
+        RAD3(IB,IC)=RAD3(IB,IC)+DELTA3
+        RAD0(IB,IC)=RAD0(IB,IC)+DELTA0
+        IF(DELTA0.GT.(0.01*RAD0(IB,IC)))ICOUNT=0
+C        IF(IDEBUG.EQ.1)WRITE(6,9100)I,AMIN,ALPI,AMAX,XPMM,YPMM,DELTA0
+200     CONTINUE
+C
+C       INCLUDE HIGHER HARMONICS ?
+C
+        IF(IHARM.EQ.-1.AND.ICOUNT.LT.2.AND.I.LT.IMAX)GOTO 20
+        I2(1)=I
+C
+C       PRINT IRRADIANCE DISTRIBUTION AT THE GIVEN WAVELENGTH
+C
+        MIN_I=I1(1)
+        MAX_I=I2(1)
+        EE(1)=E
+        L_LAMDA(1)=LAMDA
+C        IF(IANG.EQ.0)WRITE(6,2000)E,LAMDA,I1(1),I2(1)
+C        IF(IANG.EQ.1)WRITE(6,2010)E,LAMDA,I1(1),I2(1)
+        IP=1
+        DO 75 IB=1,NXP
+           XPMM=XPMIN+((IB-1)*DXP)
+           DO 75 IC=1,NYP
+              YPMM=YPMIN+((IC-1)*DYP)
+              IF(RAD0(IB,IC).NE.0.0)THEN
+                 L1=RAD1(IB,IC)/RAD0(IB,IC)
+                 L2=RAD2(IB,IC)/RAD0(IB,IC)
+                 L3=RAD3(IB,IC)/RAD0(IB,IC)
+                 L4=1.0-DSQRT((L1*L1)+(L2*L2)+(L3*L3))
+              ELSE
+                 L1=0.0
+                 L2=0.0
+                 L3=0.0
+                 L4=0.0
+              ENDIF
+              X_P(IP)=XPMM
+              Y_P(IP)=YPMM
+              RRAD(IP)=RAD0(IB,IC)
+              LL1(IP)=L1
+              LL2(IP)=L2
+              LL3(IP)=L3
+              LL4(IP)=L4
+              IP=IP+1
+C              WRITE(6,2100)XPMM,YPMM,RAD0(IB,IC),L1,L2,L3,L4
+              IF(RAD0(IB,IC).GT.RADMAX)RADMAX=RAD0(IB,IC)
+ 75     CONTINUE
+        NEE=IP-1
+C        WRITE(6,3000)RADMAX
+        RETURN
+900     WRITE(0,9999)IHARM,IMIN,IMAX
+        STOP
+C2000    FORMAT(///1X,'E = ',F9.3,2X,'LAMDA = ',F9.3,2X,'IMIN = ',I3,
+C     $  2X,'IMAX = ',I3//2X,'X (MM)',4X,'Y (MM)',6X,'IRRADIANCE',6x,
+C     $  'l1',6x,'l2',6x,'l3',6x,'l4'/)
+C2010    FORMAT(///1X,'E = ',F9.3,2X,'LAMDA = ',F9.3,2X,'IMIN = ',I3,
+C     $  2X,'IMAX = ',I3//1X,'X (MRAD)',2X,'Y (MRAD)',2X,
+C     $  'ANG. FLUX DEN.',6x,'l1',6x,'l2',6x,'l3',6x,'l4'/)
+C2100    FORMAT(1X,F8.3,2X,F8.3,3X,D13.6,2x,4(f6.3,2x))
+C3000    FORMAT(//1X,'MAXIMUM VALUE = ',D13.6)
+C9000    FORMAT(' E = ',F9.3,2X,'IMIN = ',I3,2X,'IMAX = ',I3)
+C9100    FORMAT(1X,I3,1X,5(F7.4,1X),D13.6)
+9999    FORMAT(//' *** ERROR IN SUB1 : IHARM = ',I4,' IMIN = ',I4,
+     $  ' IMAX = ',I4,' ***')
+        END
+C
+C       -----------------------
+        SUBROUTINE SUB2(IDEBUG)
+C       -----------------------
+        IMPLICIT DOUBLE PRECISION (A-H,K,L,O-Z)
+        INTEGER CODE
+        COMMON/UND/K3,KX,KY,LAMDAR,LEN,PHASE,N,ITYPE
+        COMMON/ANGLE/SINPHI(400),COSPHI(400),
+     $       DPHI,DALPHA,NPHI1,NPHI2,
+     $       NALPHA,ISG(400),CODE(400)
+        COMMON/BEAM/GAMMA,CUR,SIGX2,SIGY2,SIGU,SIGV,FU,FV,GSIGUV,NSIG
+        COMMON/CONST/APMIN,APMAX,MODE,ICALC,IHARM,IANG
+        COMMON/SCREEN/D,XPMIN,DXP,YPMIN,DYP,FAC,NXP,NYP
+        COMMON/SCALE/EMIN,DE,NE,NE1,NE2
+        COMMON/CONVL/H(5001),WMIN,DW,NW
+        COMMON/CALC/BRI1(101,101),BRI2(101,101),BRI3(101,101),
+     $  BRI0(101,101),RAD1(501,501),RAD2(501,501),RAD3(501,501),
+     $  RAD0(501,501),I1(5001),I2(5001),
+     $  SPEC1(5001),SPEC2(5001),SPEC3(5001),SPEC0(5001),WK(5001)
+        COMMON/OUT1/NEE,MIN_I,MAX_I,II1(26000),II2(26000),
+     $       II(26000),IMAX,IHARM5
+        COMMON/OUT2/EE(5001),L_LAMDA(5001),RADMAX,
+     $       X_P(26000),Y_P(26000),EI1(5001),
+     $       POWER1(26000),RRAD(26000),PDTOT,PTOT1,FTOT,
+     $       LL1(26000),LL2(26000),LL3(26000),LL4(26000)
+        DATA PI/3.141592653589/,TWOPI/6.283185307/,EPI2/78.95683521/
+        F1=4.55D+07*N*N*CUR/(2.0*PI*SIGU*SIGV*D*D)
+        F6=4.55D+10*N*GAMMA*GAMMA*CUR/(D*D)
+        ARGMAX=NSIG*NSIG/2.0
+C
+C       SPECTRAL DISTRIBUTION INCLUDING EMITTANCE :
+C       MODE =  2 ANGULAR (IANG=1) OR SPATIAL (IANG=0) FLUX DENSITY
+C               3 ON-AXIS BRIGHTNESS
+C               4 FLUX INTEGRATED OVER ACCEPTANCE
+C       ICALC = 1 FINITE N (CONVOLUTION WITH INFINITE N SPECTRUM)
+C               2 INFINITE N
+C
+C       VARY PHOTON ENERGY
+C
+        DO 100 IA=1,NE
+        E=EMIN+((IA-1)*DE)
+        LAMDA=12398.5/E
+        R=LAMDA/LAMDAR
+        DO 10 IB=1,NXP
+        DO 10 IC=1,NYP
+        RAD1(IB,IC)=0.0
+        RAD2(IB,IC)=0.0
+        RAD3(IB,IC)=0.0
+        RAD0(IB,IC)=0.0
+10      CONTINUE
+        SPEC1(IA)=0.0
+        SPEC2(IA)=0.0
+        SPEC3(IA)=0.0
+        SPEC0(IA)=0.0
+        I1(IA)=0
+        I2(IA)=0
+        ICOUNT=0
+C
+C       SET HARMONIC NO.
+C
+        IF(ITYPE.EQ.1)THEN
+          IMIN=((APMIN+K3)/R)+1
+          IMAX=(APMAX+K3)/R
+        ELSE
+          IMIN=((APMIN-(DALPHA*R/N)+K3)/R)+1
+          IMAX=(APMAX+(DALPHA*R/N)+K3)/R
+        ENDIF
+C        IF(IDEBUG.EQ.1)WRITE(6,9000)IA,E,IMIN,IMAX
+        IF(IMAX.LT.IMIN)GOTO 100
+        IF(IHARM.GT.0.AND.(IHARM.LT.IMIN.OR.IHARM.GT.IMAX))GOTO 100
+        IF(IHARM.GT.0)THEN
+          I=IHARM-1
+        ELSE
+          I=IMIN-1
+        ENDIF
+20      I=I+1
+        ICOUNT=ICOUNT+1
+        ALP2I=(R*I)-K3
+        IF(ITYPE.NE.2.AND.ALP2I.LT.0.0)GOTO 100
+        ALPI=0.0
+        IF(ALP2I.GT.0.0)ALPI=DSQRT(ALP2I)
+        THETA=ALPI/GAMMA
+        IF(I1(IA).EQ.0)I1(IA)=I
+        IF(MODE.EQ.3)THEN
+          DEL=ALP2I*N/R
+          IF(DEL.LT.2.15)SIGR2=(1.29+(1.229*(DEL-0.8)*(DEL-0.8)))**2
+          IF(DEL.GT.2.15)SIGR2=5.81*DEL
+          SIGR2=SIGR2*LAMDA*LEN*1.0D-04/EPI2
+          F6=1.0/(TWOPI*DSQRT((SIGX2+SIGR2)*(SIGY2+SIGR2)))
+        ENDIF
+        IF(ITYPE.EQ.2)THEN
+          A2MAX=ALP2I+(DALPHA*R/N)
+          AMAX=DSQRT(A2MAX)
+          A2MIN=ALP2I-(DALPHA*R/N)
+          IF(A2MIN.LT.0.0)A2MIN=0.0
+          AMIN=DSQRT(A2MIN)
+          DALP=(AMAX-AMIN)/NALPHA
+          NALP=NALPHA
+        ENDIF
+C
+C       CALCULATE BRIGHTNESS FUNCTION AT GIVEN WAVELENGTH AND HARMONIC
+C
+        CALL BRIF(ALP2I,ALPI,AMIN,DALP,NALP,2,R,I)
+C
+C       VARY POSITION IN ACCEPTANCE
+C
+        DO 200 IB=1,NXP
+        XPMM=XPMIN+((IB-1)*DXP)
+        XP=XPMM/1000.0
+        DO 200 IC=1,NYP
+        YPMM=YPMIN+((IC-1)*DYP)
+        YP=YPMM/1000.0
+C
+C       ADD THE CONTRIBUTION OF THE GIVEN HARMONIC AT THE GIVEN
+C       WAVELENGTH TO THE IRRADIANCE AT THE GIVEN POSITION
+C
+        SUM1=0.0
+        SUM2=0.0
+        SUM3=0.0
+        SUM0=0.0
+C
+C       INTEGRATION OVER ALPHA AND PHI
+C       FOR CROSSED UNDULATOR (ITYPE=2)
+C
+        IF(ITYPE.NE.2)GOTO 250
+        DO 63 ID=1,NALP
+        ALP=AMIN+(DALP/2.0)+((ID-1)*DALP)
+        THETA=ALP/GAMMA
+        DO 63 IE=1,NPHI1
+        IE1=CODE(IE)
+        XE1=THETA*COSPHI(IE)
+        YE1=THETA*SINPHI(IE)
+        U=(XP/D)-XE1
+        V=(YP/D)-YE1
+        ARG=(U*U*FU)+(V*V*FV)
+        IF(ARG.GT.ARGMAX)GOTO 63
+        P=DEXP(-ARG)
+        SUM1=SUM1+(BRI1(ID,IE)*ALP*P)
+        SUM2=SUM2+(BRI2(ID,IE)*ALP*P)
+        SUM3=SUM3+(BRI3(ID,IE)*ALP*P)
+        SUM0=SUM0+(BRI0(ID,IE)*ALP*P)
+63      CONTINUE
+        DELTA1=F1*SUM1*DALP*DPHI
+        DELTA2=F1*SUM2*DALP*DPHI
+        DELTA3=F1*SUM3*DALP*DPHI
+        DELTA0=F1*SUM0*DALP*DPHI
+        GOTO 260
+C
+C       INTEGRATION OVER PHI (INFINITE N), (ITYPE=1)
+C
+250     DO 64 IE=1,NPHI1
+        IE1=CODE(IE)
+        XE1=THETA*COSPHI(IE)
+        YE1=THETA*SINPHI(IE)
+        U=(XP/D)-XE1
+        V=(YP/D)-YE1
+        ARG=(U*U*FU)+(V*V*FV)
+        IF(ARG.GT.ARGMAX)GOTO 64
+        P=DEXP(-ARG)
+        SUM1=SUM1+(BRI1(1,IE1)*P)
+        SUM2=SUM2+(BRI2(1,IE1)*P)*ISG(IE)
+        SUM3=SUM3+(BRI3(1,IE1)*P)
+        SUM0=SUM0+(BRI0(1,IE1)*P)
+64      CONTINUE
+        DELTA1=F1*SUM1*DPHI*R/(2.0*N)
+        DELTA2=F1*SUM2*DPHI*R/(2.0*N)
+        DELTA3=F1*SUM3*DPHI*R/(2.0*N)
+        DELTA0=F1*SUM0*DPHI*R/(2.0*N)
+        IF(MODE.EQ.3)DELTA0=DELTA0*F6
+260     RAD1(IB,IC)=RAD1(IB,IC)+DELTA1
+        RAD2(IB,IC)=RAD2(IB,IC)+DELTA2
+        RAD3(IB,IC)=RAD3(IB,IC)+DELTA3
+        RAD0(IB,IC)=RAD0(IB,IC)+DELTA0
+        IF(DELTA0.GT.(0.01*RAD0(IB,IC)))ICOUNT=0
+C        IF(IDEBUG.EQ.1)WRITE(6,9100)I,AMIN,ALPI,AMAX,XPMM,YPMM,DELTA0
+200     CONTINUE
+C
+C       INCLUDE HIGHER HARMONICS ?
+C
+        IF(IHARM.EQ.-1.AND.ICOUNT.LT.2.AND.I.LT.IMAX)GOTO 20
+        I2(IA)=I
+C
+C       SAVE REQUIRED SPECTRUM
+C
+        IF(MODE.EQ.2.OR.MODE.EQ.3)THEN
+          SPEC1(IA)=RAD1(1,1)
+          SPEC2(IA)=RAD2(1,1)
+          SPEC3(IA)=RAD3(1,1)
+          SPEC0(IA)=RAD0(1,1)
+        ELSE
+          CALL INTEG(RAD1,AREA1,DXP,DYP,501,NXP,NYP)
+          CALL INTEG(RAD2,AREA2,DXP,DYP,501,NXP,NYP)
+          CALL INTEG(RAD3,AREA3,DXP,DYP,501,NXP,NYP)
+          CALL INTEG(RAD0,AREA0,DXP,DYP,501,NXP,NYP)
+          SPEC1(IA)=FAC*AREA1
+          SPEC2(IA)=FAC*AREA2
+          IF(FAC.EQ.4.0.AND.ITYPE.NE.2)SPEC2(IA)=0.0
+          SPEC3(IA)=FAC*AREA3
+          SPEC0(IA)=FAC*AREA0
+        ENDIF
+100     CONTINUE
+C
+C       CONVOLUTE WITH NATURAL LINESHAPE
+C
+        IF(ICALC.EQ.1.AND.ITYPE.NE.2)THEN
+        CALL CONV(SPEC1,H,WK,NE1,NE2,NW,DW)
+        CALL CONV(SPEC2,H,WK,NE1,NE2,NW,DW)
+        CALL CONV(SPEC3,H,WK,NE1,NE2,NW,DW)
+        CALL CONV(SPEC0,H,WK,NE1,NE2,NW,DW)
+        ENDIF
+C
+C       PRINT RESULTS
+C
+C80      IF(MODE.EQ.2.AND.IANG.EQ.0)WRITE(6,3000)
+C        IF(MODE.EQ.2.AND.IANG.EQ.1)WRITE(6,3010)
+C        IF(MODE.EQ.3)WRITE(6,3020)
+C        IF(MODE.EQ.4)WRITE(6,3030)
+        PTOT=0.0
+        IP=1
+        DO 90 IA=NE1,NE2
+        E=EMIN+((IA-1)*DE)
+        LAMDA=12398.5/E
+        POWER=1.602D-16*SPEC0(IA)
+        IF(IA.EQ.1.OR.IA.EQ.NE)THEN
+          PTOT=PTOT+(POWER/2.0)
+        ELSE
+          PTOT=PTOT+POWER
+        ENDIF
+        IF(SPEC0(IA).NE.0.0)THEN
+        L1=SPEC1(IA)/SPEC0(IA)
+        L2=SPEC2(IA)/SPEC0(IA)
+        L3=SPEC3(IA)/SPEC0(IA)
+        L4=1.0-DSQRT((L1*L1)+(L2*L2)+(L3*L3))
+        ELSE
+        L1=0.0
+        L2=0.0
+        L3=0.0
+        L4=0.0
+        ENDIF
+        EE(IP)=E
+        L_LAMDA(IP)=LAMDA
+        RRAD(IP)=SPEC0(IA)
+        POWER1(IP)=POWER
+        II1(IP)=I1(IA)
+        II2(IP)=I2(IA)
+        LL1(IP)=L1
+        LL2(IP)=L2
+        LL3(IP)=L3
+        LL4(IP)=L4
+        IP=IP+1
+C        IF(MODE.NE.3)WRITE(6,3100)E,LAMDA,SPEC0(IA),POWER,I1(IA),I2(IA),
+C     $  L1,L2,L3,L4
+C        IF(MODE.EQ.3)WRITE(6,3200)E,LAMDA,SPEC0(IA),I1(IA),I2(IA)
+90      CONTINUE
+        NEE=IP-1
+        PTOT=PTOT*DE
+        IF(NE2.EQ.NE1)PTOT=0.0
+        PTOT1=PTOT
+        PDTOT=PTOT
+C        IF(MODE.EQ.2)WRITE(6,3300)PTOT
+C        IF(MODE.EQ.4)WRITE(6,3400)PTOT
+        RETURN
+C3000    FORMAT(/////3X,'E (EV)',3X,'LAMDA (A)',4X,'IRRADIANCE',
+C     $  4X,'SPECTRAL POWER DEN.',2X,'IMIN',2X,'IMAX',6x,'l1',6x,
+C     $  'l2',6x,'l3',6x,'l4'/)
+C3010    FORMAT(/////3X,'E (EV)',3X,'LAMDA (A)',2X,'ANG. FLUX DEN.',
+C     $  2X,'SPECTRAL POWER DEN.',2X,'IMIN',2X,'IMAX',6x,'l1',6x,
+C     $  'l2',6x,'l3',6x,'l4'/)
+C3020    FORMAT(/////3X,'E (EV)',3X,'LAMDA (A)',4X,'BRIGHTNESS',
+C     $  4X,'IMIN',2X,'IMAX'/)
+C3030    FORMAT(/////3X,'E (EV)',3X,'LAMDA (A)',7X,'FLUX',
+C     $  10X,'SPECTRAL POWER',4X,'IMIN',2X,'IMAX',6x,'l1',6x,
+C     $  'l2',6x,'l3',6x,'l4'/)
+C3100    FORMAT(1X,F9.3,2X,F9.3,2X,D13.6,6X,D13.6,5X,I4,2X,I4,
+C     $  2X,4(2X,F6.3))
+C3200    FORMAT(1X,F9.3,2X,F9.3,2X,D13.6,3X,I4,2X,I4)
+C3300    FORMAT(//1X,'TOTAL POWER DENSITY = ',D13.6)
+C3400    FORMAT(//1X,'TOTAL POWER = ',D13.6)
+C9000    FORMAT(' IA = ',I3,2X,'E = ',F9.3,2X,'IMIN = ',I3,2X,
+C     $  'IMAX = ',I3)
+C9200    FORMAT(1X,I3,1X,F7.3,1X,F7.3,1X,F7.4,1X,D13.6)
+C9100    FORMAT(1X,I3,1X,5(F7.4,1X),D13.6)
+        END
+C
+C       -----------------------
+        SUBROUTINE SUB3(IDEBUG)
+C       -----------------------
+        IMPLICIT DOUBLE PRECISION (A-H,K,L,O-Z)
+        INTEGER CODE
+        COMMON/UND/K3,KX,KY,LAMDAR,LEN,PHASE,N,ITYPE
+        COMMON/ANGLE/SINPHI(400),COSPHI(400),DPHI,
+     $       DALPHA,NPHI1,NPHI2,
+     $       NALPHA,ISG(400),CODE(400)
+        COMMON/BEAM/GAMMA,CUR,SIGX2,SIGY2,SIGU,SIGV,FU,FV,GSIGUV,NSIG
+        COMMON/CONST/APMIN,APMAX,MODE,ICALC,IHARM,IANG
+        COMMON/SCREEN/D,XPMIN,DXP,YPMIN,DYP,FAC,NXP,NYP
+        COMMON/SCALE/EMIN,DE,NE,NE1,NE2
+        COMMON/CONVL/H(5001),WMIN,DW,NW
+        COMMON/CALC/BRI1(101,101),BRI2(101,101),BRI3(101,101),
+     $  BRI0(101,101),RAD1(501,501),RAD2(501,501),RAD3(501,501),
+     $  RAD0(501,501),I1(5001),I2(5001),
+     $  SPEC1(5001),SPEC2(5001),SPEC3(5001),SPEC0(5001),WK(5001)
+        COMMON/OUT1/NEE,MIN_I,MAX_I,II1(26000),II2(26000),
+     $       II(26000),IMAX,IHARM5
+        COMMON/OUT2/EE(5001),L_LAMDA(5001),RADMAX,
+     $       X_P(26000),Y_P(26000),EI1(5001),
+     $       POWER1(26000),RRAD(26000),PDTOT,PTOT1,FTOT,
+     $       LL1(26000),LL2(26000),LL3(26000),LL4(26000)
+        DATA PI/3.141592653589/
+        F2=4.55D+13*N*N*CUR
+C
+C       FLUX INTEGRATED OVER ALL ANGLES
+C       MODE  = 5
+C       ICALC = 1 - FINITE N
+C       ICALC = 2 - INFINITE N
+C
+C       VARY PHOTON ENERGY
+C
+C        WRITE(6,1000)
+        DO 100 IA=1,NE
+        E=EMIN+((IA-1)*DE)
+        LAMDA=12398.5/E
+        R=LAMDA/LAMDAR
+        SPEC1(IA)=0.0
+        SPEC2(IA)=0.0
+        SPEC3(IA)=0.0
+        SPEC0(IA)=0.0
+        I1(IA)=0
+        I2(IA)=0
+C
+C       SET HARMONIC NO.
+C
+        IMIN=(K3/R)+1
+        IF(IMIN.LT.1)GOTO 100
+        IF(IHARM.GT.0.AND.IHARM.LT.IMIN)GOTO 100
+        IF(IHARM.GT.0)THEN
+          I=IHARM-1
+        ELSE
+          I=IMIN-1
+        ENDIF
+10      I=I+1
+        ALP2I=(R*I)-K3
+        ALPI=DSQRT(ALP2I)
+        IF(I1(IA).EQ.0)I1(IA)=I
+C
+C       CALCULATE BRIGHTNESS FUNCTION
+C
+        CALL BRIF(ALP2I,ALPI,AMIN,DALP,NALP,2,R,I)
+C
+C       INTEGRATE FLUX IN THIS HARMONIC
+C
+        SUM1=0.0
+        SUM2=0.0
+        SUM3=0.0
+        SUM0=0.0
+        DO 30 IE=1,NPHI2
+        IF(IE.EQ.1.OR.IE.EQ.NPHI2)THEN
+          SUM1=SUM1+(BRI1(1,IE)/2.0)
+          SUM3=SUM3+(BRI3(1,IE)/2.0)
+          SUM0=SUM0+(BRI0(1,IE)/2.0)
+        ELSE
+          SUM1=SUM1+BRI1(1,IE)
+          SUM3=SUM3+BRI3(1,IE)
+          SUM0=SUM0+BRI0(1,IE)
+        ENDIF
+30      CONTINUE
+        DELTA1=4.0*F2*SUM1*DPHI*R/(2.0*N)
+        DELTA3=4.0*F2*SUM3*DPHI*R/(2.0*N)
+        DELTA0=4.0*F2*SUM0*DPHI*R/(2.0*N)
+        SPEC1(IA)=SPEC1(IA)+DELTA1
+        SPEC3(IA)=SPEC3(IA)+DELTA3
+        SPEC0(IA)=SPEC0(IA)+DELTA0
+C        IF(IDEBUG.EQ.1)WRITE(6,9000)IA,I,ALPI,DELTA0
+C
+C       INCLUDE HIGHER HARMONICS ?
+C
+        IF(IHARM.GE.0)GOTO 40
+        IF(DELTA0.GT.(0.01*SPEC0(IA)))ICOUNT=0
+        IF(DELTA0.LE.(0.01*SPEC0(IA)))ICOUNT=ICOUNT+1
+        IF(ICOUNT.LT.2)GOTO 10
+40      I2(IA)=I
+100     CONTINUE
+C
+C       CONVOLUTION WITH NATURAL LINESHAPE
+C
+        IF(ICALC.EQ.1)THEN
+        CALL CONV(SPEC1,H,WK,NE1,NE2,NW,DW)
+        CALL CONV(SPEC3,H,WK,NE1,NE2,NW,DW)
+        CALL CONV(SPEC0,H,WK,NE1,NE2,NW,DW)
+        ENDIF
+C
+C       PRINT RESULTS
+C
+        PTOT=0.0
+        IP=1
+        DO 60 IA=NE1,NE2
+        E=EMIN+((IA-1)*DE)
+        LAMDA=12398.5/E
+        POWER=1.602D-16*SPEC0(IA)
+        IF(IA.EQ.1.OR.IA.EQ.NE)THEN
+          PTOT=PTOT+(POWER/2.0)
+        ELSE
+          PTOT=PTOT+POWER
+        ENDIF
+        IF(SPEC0(IA).NE.0.0)THEN
+        L1=SPEC1(IA)/SPEC0(IA)
+        L2=0.0
+        L3=SPEC3(IA)/SPEC0(IA)
+        L4=1.0-DSQRT((L1*L1)+(L2*L2)+(L3*L3))
+        ELSE
+        L1=0.0
+        L2=0.0
+        L3=0.0
+        L4=0.0
+        ENDIF
+        EE(IP)=E
+        L_LAMDA(IP)=LAMDA
+        RRAD(IP)=SPEC0(IA)
+        POWER1(IP)=POWER
+        II1(IP)=I1(IA)
+        Ii2(IP)=I2(IA)
+        LL1(IP)=L1
+        LL2(IP)=L2
+        LL3(IP)=L3
+        LL4(IP)=L4
+        IP=IP+1
+C        WRITE(6,2000)E,LAMDA,SPEC0(IA),POWER,I1(IA),I2(IA),L1,L2,L3,L4
+60      CONTINUE
+        PTOT=PTOT*DE
+        PTOT1=PTOT
+        PDTOT=PTOT
+C        WRITE(6,3000)PTOT
+        NEE=IP-1
+        RETURN
+C1000    FORMAT(/' *** FLUX INTEGRATED OVER ALL ANGLES ***'////3X,
+C     $  'E (EV)',3X,'LAMDA (A)',7X,'FLUX',6X,'SPECTRAL POWER',
+C     $  2X,'IMIN',2X,'IMAX',6x,'l1',4x,'l2',6x,'l3',6x,'l4'/)
+C2000    FORMAT(1X,F9.3,2X,F9.3,2X,D13.6,2X,D13.6,3X,I4,2X,I4,
+C     $  2X,4(2X,F6.3))
+C3000    FORMAT(/1X,'TOTAL POWER = ',D11.4)
+C9000    FORMAT(1X,I3,2X,I3,2X,F7.4,2X,D11.4)
+        END
+C
+C       ---------------
+        SUBROUTINE SUB4
+C       ---------------
+        IMPLICIT DOUBLE PRECISION (A-H,K,L,O-Z)
+        INTEGER CODE
+        COMMON/UND/K3,KX,KY,LAMDAR,LEN,PHASE,N,ITYPE
+        COMMON/ANGLE/SINPHI(400),COSPHI(400),DPHI,
+     $       DALPHA,NPHI1,NPHI2,
+     $       NALPHA,ISG(400),CODE(400)
+        COMMON/BEAM/GAMMA,CUR,SIGX2,SIGY2,SIGU,SIGV,FU,FV,GSIGUV,NSIG
+        COMMON/CONST/APMIN,APMAX,MODE,ICALC,IHARM,IANG
+        COMMON/SCREEN/D,XPMIN,DXP,YPMIN,DYP,FAC,NXP,NYP
+        COMMON/SCALE/EMIN,DE,NE,NE1,NE2
+        COMMON/CONVL/H(5001),WMIN,DW,NW
+        COMMON/CALC/BRI1(101,101),BRI2(101,101),BRI3(101,101),
+     $       BRI0(101,101),RAD1(501,501),RAD2(501,501),RAD3(501,501),
+     $       RAD0(501,501),I1(5001),I2(5001),
+     $       SPEC1(5001),SPEC2(5001),SPEC3(5001),SPEC0(5001),WK(5001)
+        COMMON/OUT1/NEE,MIN_I,MAX_I,II1(26000),II2(26000),
+     $       II(26000),IMAX,IHARM5
+        COMMON/OUT2/EE(5001),L_LAMDA(5001),RADMAX,
+     $       X_P(26000),Y_P(26000),EI1(5001),
+     $       POWER1(26000),RRAD(26000),PDTOT,PTOT1,FTOT,
+     $       LL1(26000),LL2(26000),LL3(26000),LL4(26000)
+        DATA PI/3.141592653589/,TWOPI/6.283185307/,EPI2/78.95683521/
+        F3=4.55D+07*N*N*GAMMA*GAMMA*CUR/(D*D)
+        F6=4.55D+10*N*GAMMA*GAMMA*CUR/(D*D)
+C
+C       ZERO EMITTANCE
+C       MODE  = 1 ANGULAR (IANG=1) OR SPATIAL (IANG=0) DISTRIBUTION
+C               2 ANGULAR (IANG=1) OR SPATIAL (IANG=0) DENSITY SPECTRUM
+C               3 ON-AXIS BRIGHTNESS
+C               4 FLUX INTEGRATED OVER ACCEPTANCE
+C       ICALC = 3
+C
+C        WRITE(6,500)
+C
+C       VARY PHOTON ENERGY
+C
+C        IF(MODE.EQ.2.AND.IANG.EQ.0)WRITE(6,1200)
+C        IF(MODE.EQ.2.AND.IANG.EQ.1)WRITE(6,1250)
+C        IF(MODE.EQ.3)WRITE(6,1300)
+C        IF(MODE.EQ.4)WRITE(6,1400)
+        PTOT=0.0
+        IPP=1
+        DO 100 IA=1,NE
+        E=EMIN+((IA-1)*DE)
+        LAMDA=12398.5/E
+        R=LAMDA/LAMDAR
+        I1(IA)=0
+        I2(IA)=0
+        RADMAX=0.0
+        IF(MODE.EQ.1)THEN
+           EE(1)=E
+           L_LAMDA(1)=LAMDA
+        ENDIF
+C        IF(MODE.EQ.1.AND.IANG.EQ.0)WRITE(6,1100)E,LAMDA
+C        IF(MODE.EQ.1.AND.IANG.EQ.1)WRITE(6,1150)E,LAMDA
+        IF(MODE.EQ.3)THEN
+          SR2=3.57*LAMDA*LEN*1.0D-04/EPI2
+          F6=1.0/(TWOPI*SR2)
+        ENDIF
+C
+C       VARY POSITION IN ACCEPTANCE
+C
+        IP=1
+        DO 200 IB=1,NXP
+        XPMM=XPMIN+((IB-1)*DXP)
+        XP=XPMM/1000.0
+        DO 200 IC=1,NYP
+        YPMM=YPMIN+((IC-1)*DYP)
+        YP=YPMM/1000.0
+        RAD1(IB,IC)=0.0
+        RAD2(IB,IC)=0.0
+        RAD3(IB,IC)=0.0
+        RAD0(IB,IC)=0.0
+C
+C       FIND HARMONIC NO. CONTRIBUTING AT THE
+C       GIVEN WAVELENGTH AND POSITION
+C
+        XE1=XP*GAMMA/D
+        YE1=YP*GAMMA/D
+        ALP2=(XE1*XE1)+(YE1*YE1)
+        I=0
+20      I=I+1
+        ALP2I=(R*I)-K3
+        A2MAX=ALP2I+(DALPHA*R/N)
+        IF(A2MAX.LT.ALP2)GOTO 20
+        A2MIN=ALP2I-(DALPHA*R/N)
+        IF(A2MIN.GT.ALP2)GOTO 30
+        IF(I1(IA).EQ.0)I1(IA)=I
+        I2(IA)=I
+        ALP=DSQRT(ALP2)
+        COSPH=0.0
+        SINPH=1.0
+        IF(ALP.GT.1.0D-06)THEN
+        COSPH=XE1/ALP
+        SINPH=YE1/ALP
+        ENDIF
+        DEL=2.0*PI*(K3+ALP2)/R
+        CALL BRIGHT(ALP,COSPH,SINPH,DEL,I,S0,S1,S2,S3)
+        RAD1(IB,IC)=F3*S1*SINC(ALP2,ALP2I,R,N)
+        RAD2(IB,IC)=F3*S2*SINC(ALP2,ALP2I,R,N)
+        RAD3(IB,IC)=F3*S3*SINC(ALP2,ALP2I,R,N)
+        RAD0(IB,IC)=F3*S0*SINC(ALP2,ALP2I,R,N)
+        IF(MODE.EQ.3)RAD0(IB,IC)=F6*RAD0(IB,IC)
+C
+C       PRINT IRRADIANCE DISTRIBUTION AT THE GIVEN WAVELENGTH
+C
+        IF(RAD0(IB,IC).NE.0.0)THEN
+        L1=RAD1(IB,IC)/RAD0(IB,IC)
+        L2=RAD2(IB,IC)/RAD0(IB,IC)
+        L3=RAD3(IB,IC)/RAD0(IB,IC)
+        L4=1.0-DSQRT((L1*L1)+(L2*L2)+(L3*L3))
+        ELSE
+        L1=0.0
+        L2=0.0
+        L3=0.0
+        L4=0.0
+        ENDIF
+30      IF(MODE.EQ.1)THEN
+           X_P(IP)=XPMM
+           Y_P(IP)=YPMM
+           RRAD(IP)=RAD0(IB,IC)
+           II1(IP)=I
+           LL1(IP)=L1
+           LL2(IP)=L2
+           LL3(IP)=L3
+           LL4(IP)=L4
+           IP=IP+1
+        ENDIF
+C30      IF(MODE.EQ.1)WRITE(6,2100)XPMM,YPMM,RAD0(IB,IC),I,L1,L2,L3,L4
+        IF(RAD0(IB,IC).GT.RADMAX)RADMAX=RAD0(IB,IC)
+200     CONTINUE
+        IF(MODE.EQ.1)THEN
+           NEE=NXP*NYP
+           RETURN
+        ENDIF
+C        IF(MODE.EQ.1)WRITE(6,2200)RADMAX
+C
+C       INTEGRATE FLUX AT THE GIVEN WAVELENGTH OVER THE ACCEPTANCE
+C
+        IF(MODE.EQ.4)THEN
+          CALL INTEG(RAD1,AREA1,DXP,DYP,501,NXP,NYP)
+          CALL INTEG(RAD2,AREA2,DXP,DYP,501,NXP,NYP)
+          CALL INTEG(RAD3,AREA3,DXP,DYP,501,NXP,NYP)
+          CALL INTEG(RAD0,AREA0,DXP,DYP,501,NXP,NYP)
+          AREA1=FAC*AREA1
+          AREA2=FAC*AREA2
+          IF(FAC.EQ.4.0.AND.ITYPE.NE.2)AREA2=0.0
+          AREA3=FAC*AREA3
+          AREA0=FAC*AREA0
+          POWER=1.602D-16*AREA0
+          IF(AREA0.NE.0.0)THEN
+          L1=AREA1/AREA0
+          L2=AREA2/AREA0
+          L3=AREA3/AREA0
+          L4=1.0-DSQRT((L1*L1)+(L2*L2)+(L3*L3))
+          ELSE
+          L1=0.0
+          L2=0.0
+          L3=0.0
+          L4=0.0
+          ENDIF
+          RRAD(IPP)=AREA0
+C          WRITE(6,3000)E,LAMDA,AREA0,POWER,I1(IA),I2(IA),L1,L2,L3,L4
+        ENDIF
+        IF(MODE.EQ.2)THEN
+          POWER=1.602D-16*RAD0(1,1)
+          IF(RAD0(1,1).NE.0.0)THEN
+          L1=RAD1(1,1)/RAD0(1,1)
+          L2=RAD2(1,1)/RAD0(1,1)
+          L3=RAD3(1,1)/RAD0(1,1)
+          L4=1.0-DSQRT((L1*L1)+(L2*L2)+(L3*L3))
+          ELSE
+          L1=0.0
+          L2=0.0
+          L3=0.0
+          L4=0.0
+          ENDIF
+          RRAD(IPP)=RAD0(1,1)
+C          WRITE(6,3000)E,LAMDA,RAD0(1,1),POWER,I1(IA),I2(IA),L1,L2,L3,L4
+        ENDIF
+        IF(MODE.EQ.3)RRAD(IPP)=RAD0(1,1)
+C        IF(MODE.EQ.3)WRITE(6,3100)E,LAMDA,RAD0(1,1),I1(IA),I2(IA)
+        EE(IPP)=E
+C        WRITE(0,5000)E,IPP,I1(IA),I2(IA)
+        L_LAMDA(IPP)=LAMDA
+        POWER1(IPP)=POWER
+        II1(IPP)=I1(IA)
+        II2(IPP)=I2(IA)
+        LL1(IPP)=L1
+        LL2(IPP)=L2
+        LL3(IPP)=L3
+        LL4(IPP)=L4
+        IPP=IPP+1
+        IF(IA.EQ.1.OR.IA.EQ.NE)THEN
+          PTOT=PTOT+(POWER/2.0)
+        ELSE
+          PTOT=PTOT+POWER
+        ENDIF
+100     CONTINUE
+        NEE=IPP-1
+        PTOT=PTOT*DE
+        PTOT1=PTOT
+        PDTOT=PTOT
+C        WRITE(0,5010)NEE
+C        IF(MODE.EQ.2)WRITE(6,4000)PTOT
+C        IF(MODE.EQ.4)WRITE(6,4100)PTOT
+        RETURN
+C500     FORMAT(/1X,'*** ZERO EMITTANCE ***'/)
+C1100    FORMAT(1X,'E = ',F9.3,2X,'LAMDA = ',F9.3//2X,
+C     $  'X (MM)',4X,'Y (MM)',5X,'IRRADIANCE',5X,'I',
+C     $  6x,'l1',6x,'l2',6x,'l3',6x,'l4'/)
+C1150    FORMAT(1X,'E = ',F9.3,2X,'LAMDA = ',F9.3//1X,
+C     $  'X (MRAD)',2X,'Y (MRAD)',2X,'ANG. FLUX DEN.',3X,'I',
+C     $  6x,'l1',6x,'l2',6x,'l3',6x,'l4'/)
+C1200    FORMAT(//3X,'E (EV)',3X,'LAMDA (A)',4X,'IRRADIANCE',
+C     $  4X,'SPECTRAL POWER DEN.',2X,'IMIN',2X,'IMAX',
+C     $  6x,'l1',6x,'l2',6x,'l3',6x,'l4'/)
+C1250    FORMAT(//3X,'E (EV)',3X,'LAMDA (A)',2X,'ANG. FLUX DEN.',
+C     $  2X,'SPECTRAL POWER DEN.',2X,'IMIN',2X,'IMAX',
+C     $  6x,'l1',6x,'l2',6x,'l3',6x,'l4'/)
+C1300    FORMAT(//3X,'E (EV)',3X,'LAMDA (A)',4X,'BRIGHTNESS',
+C     $  4X,'IMIN',2X,'IMAX'/)
+C1400    FORMAT(//3X,'E (EV)',3X,'LAMDA (A)',7X,'FLUX',
+C     $  10X,'SPECTRAL POWER',4X,'IMIN',2X,'IMAX',
+C     $  6x,'l1',6x,'l2',6x,'l3',6x,'l4'/)
+C2100    FORMAT(1X,F8.3,2X,F8.3,3X,D13.6,2X,I2,4x,4(f6.3,2x))
+C2200    FORMAT(/1X,'MAXIMUM VALUE = ',D13.6)
+C3000    FORMAT(1X,F9.3,2X,F9.3,2X,D13.6,6X,D13.6,5X,I4,2X,I4,
+C     $  2x,4(f6.3,2x))
+C3100    FORMAT(1X,F9.3,2X,F9.3,2X,D13.6,3X,I4,2X,I4)
+C4000    FORMAT(/1X,'TOTAL POWER DENSITY = ',D13.6)
+C4100    FORMAT(/1X,'TOTAL POWER = ',D13.6)
+C 5000    FORMAT(/1X,'E = ',F9.3,3X,'I=',I4, 'IMIN=',I4,'IMAX=',I4)
+C 5010    FORMAT(/1X,'PTOT = ',I4)
+        END
+C
+C       -----------------------
+        SUBROUTINE SUB5(IDEBUG)
+C       -----------------------
+        IMPLICIT DOUBLE PRECISION (A-H,K,L,O-Z)
+        INTEGER CODE
+        COMMON/UND/K3,KX,KY,LAMDAR,LEN,PHASE,N,ITYPE
+        COMMON/ANGLE/SINPHI(400),COSPHI(400),DPHI,
+     $       DALPHA,NPHI1,NPHI2,
+     $       NALPHA,ISG(400),CODE(400)
+        COMMON/BEAM/GAMMA,CUR,SIGX2,SIGY2,SIGU,SIGV,FU,FV,GSIGUV,NSIG
+        COMMON/CONST/APMIN,APMAX,MODE,ICALC,IHARM,IANG
+        COMMON/SCREEN/D,XPMIN,DXP,YPMIN,DYP,FAC,NXP,NYP
+        COMMON/SCALE/EMIN,DE,NE,NE1,NE2
+        COMMON/CONVL/H(5001),WMIN,DW,NW
+        COMMON/CALC/BRI1(0:100,0:100),BRI2(0:100,0:100),BRI3(101,101),
+     $  BRI0(101,101),FLUXD(501,501),PD(501,501),RAD3(501,501),
+     $  RAD0(501,501),I1(5001),I2(5001),
+     $  SPEC1(5001),SPEC2(5001),SPEC3(5001),SPEC0(5001),WK(5001)
+        COMMON/OUT1/NEE,MIN_I,MAX_I,II1(26000),II2(26000),
+     $       II(26000),IMAX,IHARM5
+        COMMON/OUT2/EE(5001),L_LAMDA(5001),RADMAX,
+     $       X_P(26000),Y_P(26000),EI1(5001),
+     $       POWER1(26000),RRAD(26000),PDTOT,PTOT1,FTOT,
+     $       LL1(26000),LL2(26000),LL3(26000),LL4(26000)
+        COMMON/OUT5A/X5(750000)
+        COMMON/OUT5B/Y5(750000)
+        COMMON/OUT5C/E5(750000)
+        COMMON/OUT5D/POW5(750000)
+        COMMON/OUT5F/FLUX5(750000)
+        DATA PI/3.141592653589/
+        F4=1.8095D-14*N*N*(GAMMA**4)*CUR/(LEN*D*D)
+        F6=4.55D+10*N*GAMMA*GAMMA*CUR/(D*D)
+        IF(ICALC.EQ.1)THEN
+          F5=F4/(2.0*PI*SIGU*SIGV)
+          F7=F6/(2.0*PI*SIGU*SIGV)
+        ENDIF
+        ARGMAX=NSIG*NSIG/2.0
+C
+C       POWER AND TOTAL FLUX DENSITY DISTRIBUTION INTEGRATED OVER ACCEPTANCE
+C       MODE  = 6
+C       ICALC = 1 - FINITE EMITTANCE
+C             = 2 - ZERO EMITTANCE
+C
+        DO 10 IB=1,NXP
+        DO 10 IC=1,NYP
+        PD(IB,IC)=0.0
+        FLUXD(IB,IC)=0.0
+10      CONTINUE
+        IF(FAC.EQ.1.0)THEN
+          IB0=(NXP+1)/2
+          IC0=(NYP+1)/2
+        ELSE
+          IB0=1
+          IC0=1
+        ENDIF
+        PTOT=0.0
+        PDTOT=0.0
+        FTOT=0.0
+        ICOUNT=0
+        IF(IHARM.GT.0)THEN
+          I=IHARM-1
+        ELSE
+          I=0
+        ENDIF
+        IF(ICALC.EQ.1)THEN
+          XEMAX=DABS(XPMIN+((NXP-1)*DXP))
+          IF(DABS(XPMIN).GT.XEMAX)XEMAX=DABS(XPMIN)
+          XEMAX=XEMAX/(1000.0*D)
+          DXE=SIGU
+          NXE=(XEMAX/DXE)+1+NSIG
+          YEMAX=DABS(YPMIN+((NYP-1)*DYP))
+          IF(DABS(YPMIN).GT.YEMAX)YEMAX=DABS(YPMIN)
+          YEMAX=YEMAX/(1000.0*D)
+          DYE=SIGV
+          NYE=(YEMAX/DYE)+1+NSIG
+          IF(NXE.GT.100.OR.NYE.GT.100)GOTO 999
+        ENDIF
+C
+C       VARY HARMONIC NUMBER
+C
+        IHARM5=0
+        NEE=NXP*NYP
+20      I=I+1
+        IHARM5=IHARM5+1
+C        IF(IHARM.GT.0.OR.IDEBUG.EQ.1)THEN
+C          WRITE(6,1000)I
+C          IF(IANG.EQ.0)WRITE(6,1100)
+C          IF(IANG.EQ.1)WRITE(6,1200)
+C        ENDIF
+        ICOUNT=ICOUNT+1
+        PTOTI=0.0
+        FTOTI=0.0
+C
+C       CALCULATE POWER DENSITY FUNCTION FOR GIVEN I
+C
+        IF(ICALC.EQ.1)CALL PDF(DXE,DYE,NXE,NYE,I)
+C
+C       VARY POSITION IN ACCEPTANCE
+C
+        IP=1
+        DO 200 IB=1,NXP
+        W1=1.0
+        IF(IB.EQ.1.OR.IB.EQ.NXP)W1=0.5
+        XPMM=XPMIN+((IB-1)*DXP)
+        XP=XPMM/1000.0
+        DO 200 IC=1,NYP
+        W2=1.0
+        IF(IC.EQ.1.OR.IC.EQ.NYP)W2=0.5
+        YPMM=YPMIN+((IC-1)*DYP)
+        YP=YPMM/1000.0
+        ALP2=GAMMA*GAMMA*((XP*XP)+(YP*YP))/(D*D)
+        LAMDA=LAMDAR*(K3+ALP2)/I
+        E=12398.5/LAMDA
+C
+C       ADD THE CONTRIBUTION OF THE GIVEN HARMONIC
+C       TO THE POWER DENSITY AT THE GIVEN POSITION
+C       BY DIRECT CALCULATION (ICALC=2) OR INCLUDING ELECTRON BEAM
+C       EMITTANCE (ICALC=1)
+C
+        IF(ICALC.EQ.2)THEN
+          XE1=XP*GAMMA/D
+          YE1=YP*GAMMA/D
+          ALP=DSQRT(ALP2)
+          COSPH=0.0
+          SINPH=1.0
+          IF(DABS(ALP).GT.1.0D-06)THEN
+          COSPH=XE1/ALP
+          SINPH=YE1/ALP
+          ENDIF
+          CALL BRIGHT(ALP,COSPH,SINPH,DEL,I,S0,S1,S2,S3)
+          DELTAP=F4*S0/(K3+ALP2)
+          DELTAF=F6*S0/I
+        ELSE
+          SUMP=0.0
+          SUMF=0.0
+          DO 64 ID=-NXE,NXE
+          WX=1.0
+          IF(ID.EQ.-NXE.OR.ID.EQ.NXE)WX=0.5
+          XE1=ID*DXE
+          U=(XP/D)-XE1
+          DO 64 IE=-NYE,NYE
+          WY=1.0
+          IF(IE.EQ.-NYE.OR.IE.EQ.NYE)WY=0.5
+          YE1=IE*DYE
+          V=(YP/D)-YE1
+          ARG=(U*U*FU)+(V*V*FV)
+          IF(ARG.GT.ARGMAX)GOTO 64
+          P=DEXP(-ARG)
+          SUMP=SUMP+(WX*WY*BRI1(IABS(ID),IABS(IE))*P)
+          SUMF=SUMF+(WX*WY*BRI2(IABS(ID),IABS(IE))*P)
+64        CONTINUE
+          DELTAP=F5*SUMP*DXE*DYE
+          DELTAF=F7*SUMF*DXE*DYE
+        ENDIF
+C
+C        IF(IHARM.GT.0.OR.IDEBUG.EQ.1)WRITE(6,1300)XPMM,YPMM,E,DELTAP,DELTAF
+        EE(IP)=E
+        IF(IHARM.GT.0)THEN
+           X_P(IP)=XPMM
+           Y_P(IP)=YPMM
+           POWER1(IP)=DELTAP
+           RRAD(IP)=DELTAF
+        ELSE
+           IF(IDEBUG.EQ.1)THEN
+              INDEX=IP+(IHARM5-1)*NEE
+              X5(INDEX)=XPMM
+              Y5(INDEX)=YPMM
+              E5(INDEX)=E
+              POW5(INDEX)=DELTAP
+              FLUX5(INDEX)=DELTAF
+           ENDIF
+        ENDIF
+        IP=IP+1
+        PD(IB,IC)=PD(IB,IC)+DELTAP
+        FLUXD(IB,IC)=FLUXD(IB,IC)+DELTAF
+        PTOTI=PTOTI+(W1*W2*DELTAP)
+        FTOTI=FTOTI+(W1*W2*DELTAF)
+        IF(DELTAP.GT.(0.005*PD(IB,IC)))ICOUNT=0
+        IF(IB.EQ.IB0.AND.IC.EQ.IC0)SPEC1(I)=DELTAP
+200     CONTINUE
+C        NEE=IP-1
+        SPEC2(I)=FAC*PTOTI*DXP*DYP
+        SPEC3(I)=FAC*FTOTI*DXP*DYP
+        PDTOT=PDTOT+SPEC1(I)
+        PTOT=PTOT+SPEC2(I)
+        FTOT=FTOT+SPEC3(I)
+        IF(SPEC2(I).GT.(0.005*PTOT))ICOUNT=0
+C
+C       INCLUDE HIGHER HARMONICS ?
+C
+        IF(IHARM.GT.0)RETURN
+        IF(IHARM.EQ.0.AND.ICOUNT.LT.2)GOTO 20
+        IF(IHARM.LT.0.AND.I.LT.-IHARM)GOTO 20
+        IMAX=I
+C
+C       PRINT TOTAL POWER DENSITY DISTRIBUTION (IHARM=0,-I)
+C
+C        WRITE(6,2000)IMAX
+C        IF(IANG.EQ.0)WRITE(6,2100)
+C        IF(IANG.EQ.1)WRITE(6,2200)
+        IP=1
+        DO 75 IB=1,NXP
+        XPMM=XPMIN+((IB-1)*DXP)
+        DO 75 IC=1,NYP
+        YPMM=YPMIN+((IC-1)*DYP)
+        X_P(IP)=XPMM
+        Y_P(IP)=YPMM
+        POWER1(IP)=PD(IB,IC)
+        RRAD(IP)=FLUXD(IB,IC)
+        IP=IP+1
+C        WRITE(6,2300)XPMM,YPMM,PD(IB,IC),FLUXD(IB,IC)
+75      CONTINUE
+C        NEE=IP-1
+C
+C       PRINT POWER DENSITY AND INTEGRATED POWER FOR EACH HARMONIC
+C
+C        WRITE(6,3000)
+        E1=12398.5/(LAMDAR*K3)
+        DO 100 I=1,IMAX
+        EI=E1*I
+        II(I)=I
+        EI1(I)=EI
+C        WRITE(6,4000)I,EI,SPEC1(I),SPEC2(I),SPEC3(I)
+100     CONTINUE
+        PTOT1=PTOT
+C        WRITE(6,5000)PDTOT,PTOT,FTOT
+        RETURN
+999     WRITE(0,9999)
+        STOP
+C1000    FORMAT(///1X,'ANGULAR DISTRIBUTION - HARMONIC ',I3)
+C1100    FORMAT(/2X,'X (MM)',4X,'Y (MM)',5X,'E (EV)',3X,'POWER DENSITY',
+C     $  7X,'FLUX'/)
+C1200    FORMAT(/1X,'X (MRAD)',2X,'Y (MRAD)',4X,'E (EV)',3X,
+C     $ 'POWER DENSITY',7X,'FLUX'/)
+C1300    FORMAT(1X,F8.3,2X,F8.3,2X,F9.3,2X,D13.6,2X,D13.6)
+C2000    FORMAT(///1X,'ANGULAR DISTRIBUTION - HARMONICS 1 TO ',I3)
+C2100    FORMAT(/2X,'X (MM)',4X,'Y (MM)',3X,'POWER DENSITY',7X,
+C     $  'FLUX'/)
+C2200    FORMAT(/1X,'X (MRAD)',2X,'Y (MRAD)',2X,'POWER DENSITY',7X,
+C     $  'FLUX'/)
+C2300    FORMAT(1X,F8.3,2X,F8.3,2X,D13.6,2X,D13.6)
+C3000    FORMAT(/////1X,'HARMONIC',4X,'E (EV)',3X,'POWER DENSITY',6X,
+C     $  'POWER',11X,'FLUX'/)
+C4000    FORMAT(3X,I4,4X,F9.3,2X,D13.6,2X,D13.6,2X,D13.6)
+C5000    FORMAT(/1X,'TOTAL :',14X,D13.6,2X,D13.6,2X,D13.6)
+9999    FORMAT(/' *** ERROR IN SUB 5 : ARRAY SIZE EXCEEDED ***')
+        END
+C
+C       ----------------------------------------------------
+        SUBROUTINE BRIF(ALP2I,ALPI,AMIN,DALP,NALP,ICALC,R,I)
+C       ----------------------------------------------------
+        IMPLICIT DOUBLE PRECISION (A-H,K,L,O-Z)
+        INTEGER CODE
+        COMMON/UND/K3,KX,KY,LAMDAR,LEN,PHASE,N,ITYPE
+        COMMON/ANGLE/SINPHI(400),COSPHI(400),DPHI,
+     $       DALPHA,NPHI1,NPHI2,
+     $       NALPHA,ISG(400),CODE(400)
+        COMMON/CALC/BRI1(101,101),BRI2(101,101),BRI3(101,101),
+     $  BRI0(101,101),RAD1(501,501),RAD2(501,501),RAD3(501,501),
+     $  RAD0(501,501),I1(5001),I2(5001),
+     $  SPEC1(5001),SPEC2(5001),SPEC3(5001),SPEC0(5001),WK(5001)
+        DATA PI/3.141592653589/
+C
+C       SET UP ARRAY OF VALUES OF "BRIGHTNESS" FUNCTION
+C
+        IF(ITYPE.EQ.2)GOTO 10
+        GOTO(10,20),ICALC
+C
+C       "EXACT" METHOD
+C
+10      NPH=NPHI2
+        IF(ITYPE.EQ.2)NPH=NPHI1
+        DO 15 ID=1,NALP
+        ALP=AMIN+(DALP/2.0)+((ID-1)*DALP)
+        ALP2=ALP*ALP
+        DEL=2.0*PI*(K3+ALP2)/R
+        H=SINC(ALP2,ALP2I,R,N)
+        DO 15 IE1=1,NPH
+        CALL BRIGHT(ALP,COSPHI(IE1),SINPHI(IE1),DEL,I,S0,S1,S2,S3)
+        BRI1(ID,IE1)=S1*H
+        BRI2(ID,IE1)=S2*H
+        BRI3(ID,IE1)=S3*H
+        BRI0(ID,IE1)=S0*H
+15      CONTINUE
+        GOTO 50
+C
+C       INFINITE N APPROX.
+C
+20      DO 25 IE1=1,NPHI2
+        CALL BRIGHT(ALPI,COSPHI(IE1),SINPHI(IE1),DEL,I,S0,S1,S2,S3)
+        BRI1(1,IE1)=S1
+        BRI2(1,IE1)=S2
+        BRI3(1,IE1)=S3
+        BRI0(1,IE1)=S0
+25      CONTINUE
+C
+50      RETURN
+        END
+C
+C       -------------------------------------
+        SUBROUTINE PDF(DXE,DYE,NXE,NYE,I)
+C       -------------------------------------
+        IMPLICIT DOUBLE PRECISION (A-H,K,L,O-Z)
+        INTEGER CODE
+        COMMON/UND/K3,KX,KY,LAMDAR,LEN,PHASE,N,ITYPE
+        COMMON/BEAM/GAMMA,CUR,SIGX2,SIGY2,SIGU,SIGV,FU,FV,GSIGUV,NSIG
+        COMMON/CALC/BRI1(0:100,0:100),BRI2(0:100,0:100),BRI3(101,101),
+     $  BRI0(101,101),RAD1(501,501),RAD2(501,501),RAD3(501,501),
+     $  RAD0(501,501),I1(5001),I2(5001),
+     $  SPEC1(5001),SPEC2(5001),SPEC3(5001),SPEC0(5001),WK(5001)
+C
+C       SET UP ARRAY OF VALUES OF POWER AND FLUX DENSITY
+C       INTEGRATED OVER THE LINEWIDTH
+C
+        DO 15 ID=0,NXE
+        XE1=ID*DXE
+        DO 15 IE=0,NYE
+        YE1=IE*DYE
+        THETA=DSQRT((XE1*XE1)+(YE1*YE1))
+        ALP=GAMMA*THETA
+        ALP2=ALP*ALP
+        COSPHI=0.0
+        SINPHI=1.0
+        IF(THETA.GT.1.0D-06)THEN
+          COSPHI=XE1/THETA
+          SINPHI=YE1/THETA
+        ENDIF
+        CALL BRIGHT(ALP,COSPHI,SINPHI,DEL,I,S0,DUM,DUM,DUM)
+        BRI1(ID,IE)=S0/(K3+ALP2)
+        BRI2(ID,IE)=S0/I
+        BRI3(ID,IE)=0.0
+        BRI0(ID,IE)=0.0
+15      CONTINUE
+        RETURN
+        END
+C
+C       -----------------------------
+        FUNCTION SINC(ALP2,ALP2I,R,N)
+C       -----------------------------
+        IMPLICIT DOUBLE PRECISION (A-H,O-Z)
+        DATA PI/3.141592653589/
+C
+C       CALCULATE THE LINESHAPE FUNCTION
+C
+        SINC=1.0
+        X=N*PI*(ALP2-ALP2I)/R
+        IF(DABS(X).LT.1.0D-06)RETURN
+        SINC=DSIN(X)/X
+        SINC=SINC*SINC
+        RETURN
+        END
+C
+C       --------------------------------------
+        SUBROUTINE INTEG(F,AREA,DX,DY,N,NX,NY)
+C       --------------------------------------
+        IMPLICIT DOUBLE PRECISION (A-H,O-Z)
+        DIMENSION F(N,1)
+C
+C       SIMPLE TRAPEZOIDAL INTEGRATION OF 2 DIMENSIONAL
+C       FUNCTION F
+C
+        AREA=0.0
+        DO 10 I=1,NX
+        I1=2
+        IF(I.EQ.1.OR.I.EQ.NX)I1=1
+        DO 10 J=1,NY
+        J1=2
+        IF(J.EQ.1.OR.J.EQ.NY)J1=1
+        W=I1*J1
+        AREA=AREA+(W*F(I,J))
+10      CONTINUE
+        AREA=AREA*DY/2.0
+        IF(NX.NE.1)AREA=AREA*DX/2.0
+        RETURN
+        END
+C
+C       ----------------------------------
+        SUBROUTINE CONV(G,H,F,N1,N2,NH,DX)
+C       ----------------------------------
+        IMPLICIT DOUBLE PRECISION (A-H,O-Z)
+        DIMENSION F(1),G(1),H(1)
+C
+C       PERFORM THE CONVOLUTION F(X)=G(X)*H(X)
+C       ASSUMING EQUAL SPACING (DX) OF G AND H
+C
+        DO 10 I=N1,N2
+        F(I)=0.0
+        DO 20 J=1,NH
+        F(I)=F(I)+(G(I+N1-J)*H(J))
+20      CONTINUE
+        F(I)=F(I)*DX
+10      CONTINUE
+        DO 30 I=N1,N2
+        G(I)=F(I)
+30      CONTINUE
+        RETURN
+        END
+C
+C       ----------------------------------------------------------
+        SUBROUTINE BRIGHT(ALPHA,COSPHI,SINPHI,DEL,I,S0,S1,S2,S3)
+C       ----------------------------------------------------------
+        IMPLICIT DOUBLE PRECISION (A-H,K,L,O-Z)
+        COMMON/UND/K3,KX,KY,LAMDAR,LEN,PHASE,N,ITYPE
+        DATA KMIN/0.001/
+        IF(ITYPE.EQ.2)GOTO 100
+        IF(I.LE.0.OR.ALPHA.LT.0.0)GOTO 40
+        IF(KX.LT.KMIN.AND.KY.LT.KMIN)GOTO 40
+        IF(KX.LT.KMIN.AND.KY.GT.KMIN)GOTO 10
+        IF(KX.GT.KMIN.AND.KY.LT.KMIN)GOTO 20
+        IF(KX.GT.KMIN.AND.KY.GT.KMIN)GOTO 30
+10      CALL BRIGH1(ALPHA,COSPHI,SINPHI,KY,I,AXR,AYR,S0,S1,S2,S3)
+        RETURN
+20      CALL BRIGH1(ALPHA,SINPHI,-COSPHI,KX,I,AXR,AYR,S0,S1,S2,S3)
+        S1=-S1
+        S2=-S2
+        RETURN
+30      CALL BRIGH3(ALPHA,COSPHI,SINPHI,KX,KY,I,S0,S1,S2,S3)
+        RETURN
+C
+C       CROSSED UNDULATOR
+C
+100     CALL BRIGH1(ALPHA,COSPHI,SINPHI,KY,I,A1XR,A1YR,S01,S1,S2,S3)
+        CALL BRIGH1(ALPHA,SINPHI,-COSPHI,KY,I,A2XR,A2YR,S02,S1,S2,S3)
+        DUM=A2YR
+        A2YR=A2XR
+        A2XR=-DUM
+        COSPH=DCOS((N*DEL)+PHASE)
+        SINPH=DSIN((N*DEL)+PHASE)
+        AXR=A1XR+(A2XR*COSPH)
+        AXI=A2XR*SINPH
+        AYR=A1YR+(A2YR*COSPH)
+        AYI=A2YR*SINPH
+        S0=AXR*AXR+AXI*AXI+AYR*AYR+AYI*AYI
+        S1=AXR*AXR+AXI*AXI-AYR*AYR-AYI*AYI
+        S2=2.0*(AXR*AYR+AXI*AYI)
+        S3=2.0*(AXI*AYR-AXR*AYI)
+        RETURN
+40      WRITE(0,9000)
+        STOP
+9000    FORMAT(//' *** ERROR IN BRIGHT : INVALID PARAMETERS  ***')
+        END
+C
+C       -------------------------------------------------------
+        SUBROUTINE BRIGH1(ALPHA,COSPHI,SINPHI,K,I,AXR,AYR,S0,S1,S2,S3)
+C       -------------------------------------------------------
+        IMPLICIT DOUBLE PRECISION (A-H,J,K,O-Z)
+        COMMON/JDATA/JNX(1000),JNY(1000),J0X,J0Y,MAXX,MAXY
+        DATA NMAX/1000/,TOL1/1.0D-05/,TOL2/1.0D-05/
+C
+C       CALCULATE THE UNDULATOR RADIATION BRIGHTNESS FUNCTION
+C       FOR A PLANE TRAJECTORY
+C       USING THE BESSEL FUNCTION APPROXIMATION
+C
+C       CALCULATE VARIABLES X, Y
+C
+        A=1.0+((K*K)/2.0)+(ALPHA*ALPHA)
+        X=I*2.0*K*ALPHA*COSPHI/A
+        Y=I*K*K/(4.0*A)
+        IF(DABS(X).LT.TOL1)GOTO 10
+C
+C       CALCULATE A0, A1 IN THE GENERAL CASE
+C
+        CALL JSET(JNX,J0X,X,TOL2,MAXX,NMAX)
+        CALL JSET(JNY,J0Y,Y,TOL2,MAXY,NMAX)
+        CALL JSUM1(X,Y,SUM1,SUM2,I,MAXX,MAXY)
+        A0=SUM1
+        A1=((2.0*I*SUM1)+(4.0*SUM2))/X
+        GOTO 30
+C
+C       CALCULATE A0, A1 WHEN X = 0.0
+C
+10      CALL JSET(JNY,J0Y,Y,TOL2,MAXY,NMAX)
+        IF(((I+1)/2).GT.MAXY)RETURN
+        IF(I.EQ.((I/2)*2))GOTO 20
+        N1=(-I-1)/2
+        N2=(-I+1)/2
+        A0=0.0
+        A1=JY(N1)+JY(N2)
+        GOTO 30
+20      N=-I/2
+        A0=JY(N)
+        A1=0.0
+C
+C       CALCULATE STOKES PARAMETERS
+C
+30      AXR=2.0*I/A*(A0*ALPHA*COSPHI-K*A1/2.0)
+        AYR=2.0*I/A*(A0*ALPHA*SINPHI)
+        S0=AXR*AXR+AYR*AYR
+        S1=AXR*AXR-AYR*AYR
+        S2=2.0*AXR*AYR
+        S3=0.0
+        RETURN
+        END
+C
+C       -----------------------------------------------------------
+        SUBROUTINE BRIGH3(ALPHA,COSPHI,SINPHI,KX,KY,I,S0,S1,S2,S3)
+C       -----------------------------------------------------------
+        IMPLICIT DOUBLE PRECISION (A-H,J,K,O-Z)
+        INTEGER Q
+        COMMON/JDATA/JNX(1000),JNY(1000),J0X,J0Y,MAXX,MAXY
+        DATA NMAX/1000/,TOL1/1.0D-05/,TOL2/1.0D-05/
+C
+C       CALCULATE THE UNDULATOR RADIATION BRIGHTNESS FUNCTION
+C       FOR A GENERAL ELLIPTICAL/HELICAL TRAJECTORY
+C       USING THE BESSEL FUNCTION APPROXIMATION
+C
+        S0R =0.0
+        S0I =0.0
+        S1R =0.0
+        S1I =0.0
+        SM1R=0.0
+        SM1I=0.0
+C
+C       CALCULATE VARIABLES X, Y, PHI
+C
+        A=1.0+((KX*KX)/2.0)+((KY*KY)/2.0)+(ALPHA*ALPHA)
+        X=I*2.0*ALPHA*DSQRT(((KX*SINPHI)**2)+((KY*COSPHI)**2))/A
+        Y=I*((KY*KY)-(KX*KX))/(4.0*A)
+        PHI=DATAN2((KX*SINPHI),(KY*COSPHI))
+        IF(X.LT.TOL1.AND.DABS(Y).LT.TOL1)GOTO 30
+        IF(X.LT.TOL1)GOTO 10
+        IF(DABS(Y).LT.TOL1)GOTO 20
+C
+C       SET UP BESSEL FUNCTIONS IN THE GENERAL CASE
+C
+        CALL JSET(JNX,J0X,X,TOL2,MAXX,NMAX)
+        CALL JSET(JNY,J0Y,Y,TOL2,MAXY,NMAX)
+C
+C       DO THE SUMS
+C
+        Q=0
+        CALL JSUM2(S0R,S0I,PHI,I,Q)
+        Q=-1
+        CALL JSUM2(SM1R,SM1I,PHI,I,Q)
+        Q=1
+        CALL JSUM2(S1R,S1I,PHI,I,Q)
+        GOTO 40
+C
+C       CALCULATE S0,S1,SM1 WHEN X = 0.0
+C
+10      CALL JSET(JNY,J0Y,Y,TOL2,MAXY,NMAX)
+        IF(I.EQ.((I/2)*2))GOTO 15
+        N1=(-I-1)/2
+        N2=(-I+1)/2
+        S1R =JY(N1)
+        SM1R=JY(N2)
+        GOTO 40
+15      N=-I/2
+        S0R =JY(N)
+        GOTO 40
+C
+C       CALCULATE S0,S1,SM1 WHEN Y = 0.0
+C
+20      N1=I
+        N2=I+1
+        N3=I-1
+        CALL JSET(JNX,J0X,X,TOL2,MAXX,NMAX)
+        S0R = DCOS(N1*PHI)*JX(N1)
+        S0I =-DSIN(N1*PHI)*JX(N1)
+        S1R = DCOS(N2*PHI)*JX(N2)
+        S1I =-DSIN(N2*PHI)*JX(N2)
+        SM1R= DCOS(N3*PHI)*JX(N3)
+        SM1I=-DSIN(N3*PHI)*JX(N3)
+        GOTO 40
+C
+C       CALCULATE S0,S1,SM1 WHEN X = 0.0 AND Y = 0.0
+C
+30      IF(I.EQ.1)SM1R=1.0
+C
+C       CALCULATE STOKES PARAMETER
+C
+40      AXR=((2.0*S0R*ALPHA*COSPHI)-(KY*(S1R+SM1R)))*I/A
+        AXI=((2.0*S0I*ALPHA*COSPHI)-(KY*(S1I+SM1I)))*I/A
+        AYR=((2.0*S0R*ALPHA*SINPHI)+(KX*(S1I-SM1I)))*I/A
+        AYI=((2.0*S0I*ALPHA*SINPHI)-(KX*(S1R-SM1R)))*I/A
+        S0=AXR*AXR+AXI*AXI+AYR*AYR+AYI*AYI
+        S1=AXR*AXR+AXI*AXI-AYR*AYR-AYI*AYI
+        S2=2.0*(AXR*AYR+AXI*AYI)
+        S3=2.0*(AXI*AYR-AXR*AYI)
+        RETURN
+        END
+C
+C       --------------------------------------
+        SUBROUTINE JSUM1(X,Y,S1,S2,I,MAXX,MAXY)
+C       --------------------------------------
+        IMPLICIT DOUBLE PRECISION (A-H,J,O-Z)
+C
+C       CALCULATE SUMS S1 AND S2
+C
+        S1=0.0
+        IF(I.LE.MAXX)S1=JY(0)*JX(I)
+        S2=0.0
+        SIGN=1.0
+        DO 10 N=1,MAXY
+        SIGN=-SIGN
+        N1=(2*N)+I
+        N2=(-2*N)+I
+        J1=JY(N)
+        J2=JX(N1)
+        J3=JX(N2)
+        S1=S1+(J1*(J2+(J3*SIGN)))
+        S2=S2+(N*J1*(J2-(J3*SIGN)))
+10      CONTINUE
+        RETURN
+        END
+C
+C       ------------------------------
+        SUBROUTINE JSUM2(SR,SI,PHI,I,Q)
+C       ------------------------------
+        IMPLICIT DOUBLE PRECISION (A-H,J,K,O-Z)
+        INTEGER P,Q
+        COMMON/JDATA/JNX(1000),JNY(1000),J0X,J0Y,MAXX,MAXY
+        SR=0.0
+        SI=0.0
+        DO 10 P=-MAXY,MAXY
+        N=I+(2*P)+Q
+        IF(IABS(N).GT.MAXX)GOTO 10
+        F=JX(N)*JY(P)
+        SR=SR+(DCOS(N*PHI)*F)
+        SI=SI-(DSIN(N*PHI)*F)
+10      CONTINUE
+        RETURN
+        END
+C
+C       --------------
+        FUNCTION JX(N)
+C       --------------
+        IMPLICIT DOUBLE PRECISION (A-H,J,O-Z)
+        COMMON/JDATA/JNX(1000),JNY(1000),J0X,J0Y,MAXX,MAXY
+        JX=0.0
+        IF(IABS(N).GT.MAXX)RETURN
+        IF(N.NE.0)GOTO 10
+        JX=J0X
+        RETURN
+10      SIGN=1.0
+        N1=N
+        IF(N.GT.0)GOTO 20
+        N1=-N
+        IF(N1.NE.((N1/2)*2))SIGN=-1.0
+20      JX=JNX(N1)*SIGN
+        RETURN
+        END
+C
+C       --------------
+        FUNCTION JY(N)
+C       --------------
+        IMPLICIT DOUBLE PRECISION (A-H,J,O-Z)
+        COMMON/JDATA/JNX(1000),JNY(1000),J0X,J0Y,MAXX,MAXY
+        JY=0.0
+        IF(IABS(N).GT.MAXY)RETURN
+        IF(N.NE.0)GOTO 10
+        JY=J0Y
+        RETURN
+10      SIGN=1.0
+        N1=N
+        IF(N.GT.0)GOTO 20
+        N1=-N
+        IF(N1.NE.((N1/2)*2))SIGN=-1.0
+20      JY=JNY(N1)*SIGN
+        RETURN
+        END
+C
+C       ----------------------------------------
+        SUBROUTINE JSET(JNX,J0X,X0,TOL,MAX,NMAX)
+C       ----------------------------------------
+        IMPLICIT DOUBLE PRECISION (A-H,J,O-Z)
+        DIMENSION JNX(1)
+        DATA BIGNO/1.0D+10/,BIGNI/1.0D-10/
+C
+C       SET UP ARRAY OF BESSEL FUNCTIONS UP TO ORDER MAX
+C       SUCH THAT JMAX (X) < TOL AND MAX > X
+C       USING MILLER'S DOWNWARD RECURRENCE ALGORITHM
+C       MODIFIED FORM OF NUMERICAL RECIPIES ROUTINE BESSJN
+C       NB] ARGUMENT CAN BE NEGATIVE
+C
+        X=DABS(X0)
+        IF(X.LE.0.1)THEN
+          M=4
+        ELSE
+          IF(X.LE.1.0)THEN
+            M=8
+          ELSE
+            M=2*((INT(1.18*X)+13)/2)
+          ENDIF
+        ENDIF
+        IF(M.GT.NMAX)GOTO 999
+C
+        TOX=2.0/X
+        ISUM=0
+        SUM=0.
+        BJP=0.
+        BJ=1.
+        JNX(M)=1.0
+        DO 10 N1=M,1,-1
+        N=N1-1
+        BJN=N1*TOX*BJ-BJP
+        BJP=BJ
+        BJ=BJN
+        IF(DABS(BJ).GT.BIGNO)THEN
+          BJ=BJ*BIGNI
+          BJP=BJP*BIGNI
+          SUM=SUM*BIGNI
+          DO 20 I=N1,M
+          JNX(I)=JNX(I)*BIGNI
+20        CONTINUE
+        ENDIF
+        IF(N.NE.0)JNX(N)=BJ
+        IF(ISUM.NE.0)SUM=SUM+BJ
+        ISUM=1-ISUM
+10      CONTINUE
+        SUM=(2.0*SUM)-BJ
+        J0X=BJ/SUM
+        SIGN=1.0
+        DO 30 N=1,M
+        SIGN=-SIGN
+        JNX(N)=JNX(N)/SUM
+        IF(X0.LT.0.0)JNX(N)=JNX(N)*SIGN
+        IF(N.LE.DABS(X).OR.JNX(N).GT.TOL)MAX=N
+30      CONTINUE
+        RETURN
+999     WRITE(0,9999)
+        STOP
+9999    FORMAT(//' *** OVERFLOW OF BESSEL FUNCTION ARRAY ***')
+        END
+
+

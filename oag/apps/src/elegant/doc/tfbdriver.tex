@@ -1,0 +1,25 @@
+This element is used together with the {\tt TFBPICKUP} element to
+simulate a digital transverse feedback system.  Each {\tt TFBDRIVER}
+element must have a unique identification string assigned to it using
+the {\tt ID} parameter.  The same identifier must be used on a {\tt
+TFBPICKUP} element.  This is the pickup from which the driver gets its
+signal.  Each pickup may feed more than one driver, but a driver can
+use only one pickup.
+
+A 15-term FIR filter can be defined using the {\tt A0} through {\tt
+A14} parameters.  The output of the filter is simply $\sum_{i=0}^{14}
+a_i P_i$, where $P_i$ is the pickup filter output from $i$ turns ago.
+The output of the filter is optionally delayed by the number of turns
+given by the {\tt DELAY} parameter.
+
+To some extent, the {\tt DELAY} is redundant.  For example, the filter
+$a_0=0, a_1=1$ with a delay of 0 is equivalent to $a_0=1, a_1=0$ with
+a delay of 1.  However, for long delays or delays combined with
+many-term filters, the {\tt DELAY} feature must be used.
+
+The output of the filter is multiplied by the {\tt STRENGTH} parameter
+to get the kick to apply to the beam.  The {\tt KICK\_LIMIT} parameter
+provides a very basic way to simulate saturation of the kicker output.
+
+See Section 7.2.14 of {\em Handbook of Accelerator Physics and Engineering}
+(Chao and Tigner, eds.) for a discussion of feedback systems.

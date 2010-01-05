@@ -1,0 +1,49 @@
+The input file for this element gives the longitudinal Green function,
+$W(t)$ versus time behind the particle. The units of the wake are V/C,
+so this element simulates the integrated wake of some structure (e.g.,
+a cell or series of cells).  If you have, for example, the wake for a
+cell and you need the wake for N cells, then you may use the {\tt
+FACTOR} parameter to make the appropriate multiplication.  The values
+of the time coordinate should begin at 0 and be equi-spaced.  A
+positive value of time represents the distance behind the exciting
+particle.  
+
+A positive value of $W(t)$ results in energy {\em loss}.  A physical
+wake function should be positive at $t=0$.
+
+Use of the {\tt CHARGE} parameter on the {\tt WAKE} element is
+disparaged.  It is preferred to use the {\tt CHARGE} element as part
+of your beamline to define the charge.  
+
+Setting the {\tt N\_BINS} paramater to 0 is recommended.  This results
+in auto-scaling of the number of bins to accomodate the beam.  The bin
+size is fixed by the spacing of the time points in the wake.
+
+The default degree of smoothing ({\tt SG\_HALFWIDTH=4}) may be excessive.
+It is suggested that users vary this parameter to verify that results
+are reliable if smoothing is employed ({\tt SMOOTHING=1}).
+
+The algorithm for the wake element is as follows:
+\begin{enumerate}
+\item Compute the arrival time of each particle at the wake element. This
+ is necessary because {\tt elegant} uses the longitudinal coordinate $s=\beta c t$.
+\item Find the mean, minimum, and maximum arrival times ($t_{mean}$, $t_{min}$, and
+ $t_{max}$, respectively).  If $t_{max}-t_{min}$ is greater than the duration of 
+ the wakefield data, then {\tt elegant} either exits (default) or issues a warning (if 
+ \verb|ALLOW_LONG_BEAM| is nonzero).  In the latter case, that part of the beam that
+ is furthest from $t_{mean}$ is ignored for computation of the wake.
+\item If the user has specified a fixed number of bins (not recommended), then {\tt elegant}
+ centers those bins on $t_{mean}$.  Otherwise, the binning range encompasses $t_{min}-\Delta t$
+ to $t_{max}+\Delta t$, where $\Delta t$ is the spacing of data in the wake file.
+\item Create the arrival time histogram.  If any particles are outside the histogram range,
+ issue a warning.
+\item If \verb|SMOOTHING| is nonzero, smooth the arrival time histogram.
+\item Convolve the arrival time histogram with the wake function.
+\item Multiply the resultant wake by the charge and any user-defined factor.
+\item Apply the energy changes for each particle.  This is done in such a way that
+ the transverse momentum are conserved.
+\item If \verb|CHANGE_P0| is nonzero, change the reference momentum of the beamline to 
+ match the average momentum of the beam.
+\end{enumerate}
+
+

@@ -1,0 +1,49 @@
+
+
+This element simulates transverse space charge (SC) kick using
+K.Y. Ng's formula ( K.Y. Ng, FNAL, private communication). 
+{\bf N.B.: This element is not designed for space charge
+calculations in guns or linacs.  It is only intended for
+simulating space charge in rings. }
+
+The linear SC force is given by:
+\[
+\Delta x'=\frac{K_{sc}Le^{-z^2/(2\sigma_z^2)}}{\sqrt{2\pi}\sigma_z}
+\frac{x}{\sigma_x(\sigma_x+\sigma_y)}
+\]
+\begin{equation}
+\Delta y'=\frac{K_{sc}Le^{-z^2/(2\sigma_z^2)}}{\sqrt{2\pi}\sigma_z}
+\frac{y}{\sigma_y(\sigma_x+\sigma_y)}
+\end{equation}
+where $K_{sc}=\frac{2Nr_e}{\gamma^3\beta^2}$,
+$L$ is the integrating length, $\sigma_{x,y,z}$ are rms beam size.
+
+The non-linear SC force is given by:
+\[
+\Delta x'=\frac{K_{sc}Le^{-z^2/(2\sigma_z^2)}}{2\sigma_z\sqrt{\sigma_x^2-\sigma_y^2}}
+Im\left [ w\left( \frac{x+iy}{\sqrt{2(\sigma_x^2-\sigma_y^2)}} \right)
+-e^{-\frac{x^2}{2 \sigma_x^2}-\frac{y^2}{2 \sigma_y^2}}
+w\left(\frac{x\frac{\sigma_y}{\sigma_x}+iy\frac{\sigma_x}{\sigma_y}}
+{\sqrt{2(\sigma_x^2-\sigma_y^2)}}\right)\right ]
+\]
+\begin{equation}
+\Delta y'=\frac{K_{sc}Le^{-z^2/(2\sigma_z^2)}}{2\sigma_z\sqrt{\sigma_x^2-\sigma_y^2}}
+Re\left [ w\left( \frac{x+iy}{\sqrt{2(\sigma_x^2-\sigma_y^2)}} \right)
+-e^{-\frac{x^2}{2 \sigma_x^2}-\frac{y^2}{2 \sigma_y^2}}
+w\left(\frac{x\frac{\sigma_y}{\sigma_x}+iy\frac{\sigma_x}{\sigma_y}}
+{\sqrt{2(\sigma_x^2-\sigma_y^2)}}\right)\right ]
+\label{equa2}
+\end{equation}
+where $w(z)$ is the complex error function
+\begin{equation}
+w(z)=e^{-z^2}\left [ 1+\frac{2i}{\sqrt{\pi}}\int\limits_0^z e^{\zeta^2}d\zeta\right ]
+\end{equation}
+Equation~\ref{equa2} appear to diverge when $\sigma_x=\sigma_y$. In fact, this is not
+true, because the expressions inside the square brackets will provide zero too at
+$\sigma_x=\sigma_y$ to cancel the poles outside. In our code, we calculate this equation
+at  $1.01 \sigma_x$ and $0.99\sigma_x$, and average the total effects. 
+ 
+To invoke the calculation, one must use set up command
+``insert\_sceffects'' proceed ``run\_setup'' and ``Twiss\_output''
+command proceed ``track''.
+

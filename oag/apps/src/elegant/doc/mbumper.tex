@@ -1,0 +1,28 @@
+This element simulates a time-dependent multipole kicker magnet.  To
+use this element, you must supply an SDDS file giving the
+time-dependent waveform.  The element is called {\tt MBUMPER} to
+because {\tt HKICK}, {\tt VKICK}, {\tt KICKER} are used for steering
+magnets.
+
+The arrival time of the beam is taken to define the reference time,
+$t=0$.  Hence, if the waveform file has the maximum amplitude at
+$t=0$, the beam will get kicked at the peak of the waveform.  If the waveform
+peaks at $t=t_{peak}$, then setting \verb|TIME_OFFSET| equal to $-t_{peak}$
+will ensure that the beam is kicked at the peak amplitude.
+
+By default, the kicker fires on the first beam passage.  However, if 
+\verb|FIRE_ON_PASS| is used, then the kicker is treated like a drift space until
+the specified pass.
+
+If \verb|PHASE_REFERENCE| is non-zero, then the initial timing is
+taken from the first time-dependent element that has the same
+\verb|PHASE_REFERENCE| value.  This would allow, for example,
+simulating several kickers firing at the same time.  Delays relative
+to this reference time can then be given with positive adjustments to
+\verb|TIME_OFFSET|.
+
+The input file need not have equispaced points in time.  However, the
+time values should increase monotonically.
+
+This element simulates a quadrupole or higher order kicker
+only.  For dipole kickers, see the {\tt BUMPER} element.

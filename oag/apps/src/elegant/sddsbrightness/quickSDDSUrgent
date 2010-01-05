@@ -1,0 +1,666 @@
+#!/bin/sh  
+# \
+exec oagwish "$0" "$@"
+
+#
+# $Log: quickSDDSUrgent,v $
+# Revision 1.3  2006/07/31 23:44:49  jiaox
+# Made the mode and method selection based on which calculation code(us or urgent) used. Now users can see these as text descriptions instead of numbers.
+#
+# Revision 1.2  2006/07/14 15:41:30  jiaox
+# Corrected the number of  skiplines from 26 to 25 for the US output data. The previous one omitted the first data point.
+#
+# Revision 1.1  2006/03/16 15:46:58  jiaox
+# First version in CVS. A quick graphic user interface for sddsurgent.
+#
+# Revision 1.1  2006/01/06 22:18:01  jiaox
+# First Version in CVS.
+#
+
+set auto_path [linsert $auto_path 0  /usr/local/oag/apps/lib/$env(HOST_ARCH)]
+set auto_path [linsert $auto_path 0 /usr/local/oag/lib_patch/$env(HOST_ARCH)]
+
+package require sdds
+
+set CVSRevisionAuthor "\$Revision: 1.3 $ \$Author: jiaox $"
+APSApplication . -name "Undulator Radiation Properties" -version $CVSRevisionAuthor  
+
+set status "Ready..."
+APSScrolledStatus .status -parent .userFrame -textVariable status -width 90 -height 6 -packOption "-side top -fill x -expand false"
+proc setStatus {text} {
+    global status
+    set status "[clock format [clock seconds] -format %H:%M:%S]: $text"
+    update
+}    
+ 
+
+
+proc setMethodItems { args } {
+    global URP
+    set menuName ""
+    APSStrictParseArguments { menuName }
+    $menuName delete 0 end 
+    set URP(calculation.method) ""   
+   
+    if { [ string compare $URP(us) "-us" ]  == 0 } {
+       if { [ lsearch  { 2 3 4 } $URP(calculation.mode) ] != -1 } {  
+          $menuName add command -label "1 - Non-zero emittance;  finite-N" -command "set URP(calculation.method) 1"
+          $menuName add command -label "3 - Zero-emittance; finite-N" -command "set URP(calculation.method) 3"
+          $menuName add command -label "4 - Non-zero emittance;infinite-N Dejus's Convolution" -command "set URP(calculation.method) 4"
+          $menuName add command -label "14 - Non-zero emittance;infinite-N Walker's Convolution" -command "set URP(calculation.method) 14"
+       } elseif {  [ lsearch  { 1 6 } $URP(calculation.mode) ] != -1 }  {
+          $menuName add command -label "1 - Non-zero emittance;  finite-N" -command "set URP(calculation.method) 1"
+          $menuName add command -label "3 - Zero-emittance; finite-N" -command "set URP(calculation.method) 3"
+       } elseif { $URP(calculation.mode)  == 5 } {
+          $menuName add command -label "4 - Non-zero emittance;infinite-N Dejus's Convolution" -command "set URP(calculation.method) 4"
+          $menuName add command -label "14 - Non-zero emittance;infinite-N Walker's Convolution" -command "set URP(calculation.method) 14"
+       }           
+       
+    } else {
+       if { [ lsearch  { 1 2 3 4 } $URP(calculation.mode) ] != -1 } { 
+          $menuName add command -label "1 - Non-zero emittance;  finite-N" -command "set URP(calculation.method) 1"
+          $menuName add command -label "2 - Non-zero emittance; infinite-N" -command "set URP(calculation.method) 2"
+          $menuName add command -label "3 - Zero emittance; finite-N" -command "set URP(calculation.method) 3"     
+       } elseif { [ lsearch { 6 -6 } $URP(calculation.mode) ] != -1 } {
+          $menuName add command -label "1 - Finite-N" -command "set URP(calculation.method) 1"
+          $menuName add command -label "2 - Infinite-N" -command "set URP(calculation.method) 2"
+       } elseif { $URP(calculation.mode)  == 5 }  {
+          $menuName add command -label "1 -Non-zero emmitance" -command "set URP(calculation.method) 1"
+          $menuName add command -label "2 - Zero emmitance" -command "set URP(calculation.method) 2"
+       }
+   
+   } 
+}
+
+proc setModeItems { args }  {
+    global URP
+    set Mode [list  "1 - angular/spatial flux density distrubution" \
+                    "2 - spectrum of angular/spatial flux density" \
+                    "3 - spectrum of on-axis brightness" \
+                    "4 - spectrum of flux over the defined range of acceptance"\
+                    "5 - spectrum of flux integrated over all angles"\
+                    "6 - power density and integrated power" ]
+
+    set menuName ""
+    APSStrictParseArguments {  menuName }
+    $menuName delete 0 end
+    set URP(calculation.mode) ""
+    set i 0
+    foreach mode $Mode {
+       incr i
+       $menuName add command -label $mode -command "set URP(calculation.mode) $i;setMethodItems -menuName .userFrame.method.frame.method.frame.method_arrow.m"  
+    }
+    if {  [ string compare $URP(us) "-us"] !=0 }  {
+       $menuName add command -label "-6 - enhanced options for mode 6" -command "set  URP(calculation.mode) -6;setMethodItems -menuName .userFrame.method.frame.method.frame.method_arrow.m"
+    } 
+    
+     
+}
+
+global URP 
+global outputFile inputFile
+global par_input_file currentDir
+global tmp_us_in tmp_us_in tmp_urgent_in tmp_urgent_out tmp_dir
+global US_EXE URGENT_EXE sddsurgent_exe
+set US_EXE "/home/oxygen/JIAOX/OAG/urgent/us_urgent_example/us"
+set URGENT_EXE "/home/oxygen/JIAOX/OAG/urgent/us_urgent_example/urgent"
+set sddsurgent_EXE "sddsurgent"
+
+set tmp_dir "/tmp/$env(USER)"
+if { ![ file exist $tmp_dir ] } {
+   eval exec mkdir $tmp_dir
+}   
+set tmp_us_in "${tmp_dir}/us.dat"
+set tmp_us_out "us.plt"
+set tmp_urgent_in "${tmp_dir}/urgent.in"
+set tmp_urgent_out "${tmp_dir}/urgent.out"
+
+
+set currentDir "."
+
+APSLabeledEntry .output -parent .userFrame -label "Output file: " -width 90 \
+      -commandButton 1 -textVariable outputFile
+      
+APSLabeledEntry .intput -parent .userFrame -label "Input file: " -width 90 \
+      -commandButton 1 -textVariable inputFile
+
+     
+APSFrame .readinput -parent .userFrame   
+set w .userFrame.readinput.frame           
+APSLabel .readLabel -parent $w -text "Load parameters from: "    -packOption "-side left -expand true"
+APSButton .defaults -parent $w -text "  APS Default  " -command "loadDefaults"  
+APSButton .us -parent $w -text "  US input  " -command "read_par -type US"  
+APSButton .urgent -parent $w -text "  URGENT input  " -command "read_par -type URGENT"  
+
+
+APSFrame .undulator -parent .userFrame -label "Undulator Parameters"
+set w .userFrame.undulator.frame   
+#APSLabeledEntry  .und_type -parent $w -label "type: " -width 3 -textVariable URP(undulator.type) -packOption "-side left -expand false" 
+APSLabeledEntry  .und_period -parent $w -label "period: " -width 10 -textVariable URP(undulator.period) -packOption "-side left -expand false"
+APSLabeledEntry  .und_kx -parent $w -label "kx: " -width 10 -textVariable URP(undulator.kx) -packOption "-side left -expand false"
+APSLabeledEntry  .und_ky -parent $w -label "ky: " -width 10 -textVariable URP(undulator.ky) -packOption "-side left -expand false"
+APSLabeledEntry  .und_phase -parent $w -label "phase: " -width 10 -textVariable URP(undulator.phase) -packOption "-side left -expand false" -contextHelp "phase difference(degree) for canted undulator"
+APSLabeledEntry  .und_np -parent $w -label "numberofPeriods: " -width 10 -textVariable URP(undulator.numberofPeriods) -packOption "-side left -expand false"
+
+APSFrame .pinhole -parent .userFrame -label "Pinhole Parameters"
+set w .userFrame.pinhole.frame
+APSLabeledEntry  .pin_dist -parent $w -label "distance: " -width 6 -textVariable URP(pinhole.distance) -packOption "-side left -expand false" -contextHelp "distances from the source (m)(distance=0.0  if using angular units)"
+APSLabeledEntry  .pin_xp -parent $w -label "xPos: " -width 6 -textVariable URP(pinhole.xPosition) -packOption "-side left -expand false" -contextHelp "X-coordinate for center of pinhole (mm) or (mrad) "
+APSLabeledEntry  .pin_yp -parent $w -label "yPos: " -width 6 -textVariable URP(pinhole.yPosition) -packOption "-side left -expand false" -contextHelp "Y-coordinate for center of pinhole (mm) or (mrad) "
+APSLabeledEntry  .pin_xs -parent $w -label "xSize: " -width 6 -textVariable URP(pinhole.xSize) -packOption "-side left -expand false" -contextHelp "X-size of pinhole (full width)   (mm) or (mrad)"
+APSLabeledEntry  .pin_ys -parent $w -label "ySize: " -width 6 -textVariable URP(pinhole.ySize) -packOption "-side left -expand false" -contextHelp "Y-size of pinhole (full width)   (mm) or (mrad)"
+APSLabeledEntry  .pin_xn -parent $w -label "xNum: " -width 6 -textVariable URP(pinhole.xnumber) -packOption "-side left -expand false"
+APSLabeledEntry  .pin_yn -parent $w -label "yNum: " -width 6 -textVariable URP(pinhole.ynumber) -packOption "-side left -expand false"
+
+APSFrame .photon -parent .userFrame -label "Photo Energy"
+set w .userFrame.photon.frame
+APSLabeledEntry  .ph_min -parent $w -label "minimum(eV): " -width 10 -textVariable URP(photonEnergy.minimum) -packOption "-side left -expand false"
+APSLabeledEntry  .ph_max -parent $w -label "maximum(eV): " -width 10 -textVariable URP(photonEnergy.maximum) -packOption "-side left -expand false"
+APSLabeledEntry  .ph_pts -parent $w -label "points: " -width 10 -textVariable URP(photonEnergy.points) -packOption "-side left -expand false"
+
+APSFrame .beam -parent .userFrame -label "Electron Beam"
+set w .userFrame.beam.frame
+APSLabeledEntry  .beam_en -parent $w -label "energy(GeV): " -width 6 -textVariable URP(electronBeam.energy) -packOption "-side left -expand false"
+APSLabeledEntry  .beam_c -parent $w -label "current(A): " -width 6 -textVariable URP(electronBeam.current) -packOption "-side left -expand false"
+APSLabeledEntry  .beam_Sx -parent $w -label "Sx: " -width 6 -textVariable URP(electronBeam.xsigma) -packOption "-side left -expand false"
+APSLabeledEntry  .beam_Sy -parent $w -label "Sy: " -width 6 -textVariable URP(electronBeam.ysigma) -packOption "-side left -expand false"
+APSLabeledEntry  .beam_Sxp -parent $w -label "Sxp: " -width 6 -textVariable URP(electronBeam.xprime) -packOption "-side left -expand false"
+APSLabeledEntry  .beam_Syp -parent $w -label "Syp: " -width 6 -textVariable URP(electronBeam.yprime) -packOption "-side left -expand false"
+APSLabeledEntry  .beam_nS -parent $w -label "nSigma: " -width 4 -textVariable URP(electronBeam.nsigma) -packOption "-side left -expand false"
+
+APSFrame .method -parent .userFrame -label "Calculation Mode and Method"
+set w .userFrame.method.frame
+
+APSRadioButtonFrame .others_us -parent $w -label "program: " -orientation horizontal \
+      -buttonList {use_urgent use_US} \
+      -valueList { "" "-us" } \
+      -variable URP(us)  -packOption "-side left -expand false" \
+      -commandList { "setModeItems -menuName .userFrame.method.frame.mode.frame.mode_arrow.m; setMethodItems -menuName .userFrame.method.frame.method.frame.method_arrow.m"  \
+"setModeItems -menuName .userFrame.method.frame.mode.frame.mode_arrow.m; setMethodItems -menuName .userFrame.method.frame.method.frame.method_arrow.m"  }
+
+
+APSFrame .mode -parent $w  -packOption "-side left -expand false"
+set w .userFrame.method.frame.mode.frame
+
+APSLabeledEntry  .method_mode -parent $w -label "mode: " -width 10 -textVariable URP(calculation.mode) -packOption "-side left -expand false" -contextHelp "1 angular/spatial flux density distribution\n2 Angular/spatial flux density spectrum\n3 On-axis brilliance spectrum\n4 Flux spectrum through a pinhole\n5 Flux spectrum integrated over all angles\n6 Power density and integrated power\n-1 compute with all above modes. "
+
+if {[lsearch -exact [image names] "oag_downarrow"] == -1} {
+        image create bitmap oag_downarrow -data {
+            #define down_width 11
+            #define down_height 11
+            static unsigned char down_bits[] = {
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0x07, 
+                0xfe, 0x03, 0xfc, 0x01, 0xf8, 0x00, 0x70, 0x00, 
+                0x20, 0x00, 0x00, 0x00, 0x00, 0x00
+            };
+        }
+}
+menubutton $w.mode_arrow  -indicatoron 0  -image oag_downarrow  -menu $w.mode_arrow.m  -state normal  -takefocus 1 -highlightthickness 2  -relief raised  -bd 2
+menu $w.mode_arrow.m -tearoff 0
+pack $w.mode_arrow 
+
+
+APSFrame .method -parent .userFrame.method.frame  -packOption "-side left -expand false"
+set w .userFrame.method.frame.method.frame
+APSLabeledEntry  .method_method -parent $w -label "method: " -width 10 -textVariable URP(calculation.method) -packOption "-side left -expand false" -contextHelp "1 Non-zero emittance; finite-N.\n2 Non-zero emittance; infinite-N.\n3 Zero emittance;     finite-N.\n\n Additional methods for US
+                \n4 Non-zero emittance; infinite-N + convolution (Dejus)\n14 Non-zero emittance; infinite-N + convolution (Walker)\n\n-1 compute with all above methods."
+
+menubutton $w.method_arrow  -indicatoron 0  -image oag_downarrow  -menu $w.method_arrow.m  -state normal  -takefocus 1 -highlightthickness 2  -relief raised  -bd 2
+menu $w.method_arrow.m -tearoff 0
+pack $w.method_arrow 
+
+setModeItems -menuName .userFrame.method.frame.mode.frame.mode_arrow.m 
+
+set w .userFrame.method.frame
+
+APSLabeledEntry  .method_harmonics -parent $w -label "harmonics:  " -width 10 -textVariable URP(calculation.harmonics) -packOption "-side left -expand false" -contextHelp "=0, include all harmonics for calculation.\n=-1, Lowest order harmonic\n=I (I>0), Ith harmonic\n=-I (I>0), include harmonics from 1 to I."
+
+
+
+APSFrame .calc -parent .userFrame -label "Calculation Parameters"
+set w .userFrame.calc.frame
+APSLabeledEntry  .calc_nphi -parent $w -label "nphi: " -width 8 -textVariable URP(nphi) -packOption "-side left -expand false"
+APSLabeledEntry  .calc_alpha -parent $w -label "alpha_steps: " -width 8 -textVariable URP(alpha.steps) -packOption "-side left -expand false"
+APSLabeledEntry  .calc_dalpha -parent $w -label "alpha_delta: " -width 8 -textVariable URP(alpha.delta) -packOption "-side left -expand false"
+APSLabeledEntry  .calc_omega -parent $w -label "omega_steps: " -width 8 -textVariable URP(omega.steps) -packOption "-side left -expand false"
+APSLabeledEntry  .calc_domega -parent $w -label "omega_delta: " -width 8 -textVariable URP(omega.delta) -packOption "-side left -expand false"
+
+APSFrame .others -parent .userFrame -label "sddsurgent options"
+set w .userFrame.others.frame
+APSLabeledEntry  .others_coup -parent $w -label "coupling: " -width 8 -textVariable URP(coupling) -packOption "-side left -expand false"
+APSLabeledEntry  .others_emittance -parent $w -label "or emittanceRatio: " -width 8 -textVariable URP(emittanceRatio) -packOption "-side left -expand false"
+
+set w .userFrame   
+
+
+APSLabeledEntry .urgent_exe -parent $w -label "URGENT executable: " -width 90 -commandButton 1 -textVariable URGENT_EXE
+APSLabeledEntry .us_exe -parent $w -label "US executable: " -width 90 -commandButton 1 -textVariable US_EXE
+APSCheckButtonFrame .type -parent $w -packOption "-side top -expand 0" -label "Also run Fortran program" -buttonList { "URGENT" "US" } \
+                    -variableList {  RUN_URGENT RUN_US } -orientation horizontal 
+
+
+APSButton  .run -parent $w -text "  RUN  " -command "run"     
+
+
+proc disableBeamPara {} {
+   set w .userFrame.beam.frame
+   APSDisableWidget $w.beam_Sx.entry
+   APSDisableWidget $w.beam_Sy.entry
+   APSDisableWidget $w.beam_Sxp.entry
+   APSDisableWidget $w.beam_Syp.entry
+}
+
+proc enableBeamPara {} {
+   set w .userFrame.beam.frame
+   APSEnableWidget $w.beam_Sx.entry
+   APSEnableWidget $w.beam_Sy.entry
+   APSEnableWidget $w.beam_Sxp.entry
+   APSEnableWidget $w.beam_Syp.entry
+  
+}
+
+proc loadDefaults {} {
+   global inputFile
+   global URP
+   enableBeamPara
+   set URP(undulator.type) 1
+   set URP(undulator.period) 0.033
+   set URP(undulator.kx) 0.0
+   set URP(undulator.ky) 2.760
+   set URP(undulator.phase) 0.0
+   set URP(undulator.numberofPeriods) 70
+   set URP(photonEnergy.minimum) 1000
+   set URP(photonEnergy.maximum) 20000
+   set URP(photonEnergy.points) 2000
+   set URP(electronBeam.energy) 7.0
+   set URP(electronBeam.current) 0.1
+   set URP(electronBeam.nsigma) 4
+   set URP(electronBeam.xsigma) 0.273
+   set URP(electronBeam.ysigma) 0.01
+   set URP(electronBeam.xprime) 0.0112
+   set URP(electronBeam.yprime) 0.0034
+   set URP(pinhole.distance) 30.0
+   set URP(pinhole.xPosition) 0.
+   set URP(pinhole.yPosition) 0.
+   set URP(pinhole.xSize) 2.0
+   set URP(pinhole.ySize) 2.0
+   set URP(pinhole.xnumber) 20
+   set URP(pinhole.ynumber) 20
+   set URP(calculation.mode) 3
+   set URP(calculation.method) 3
+   set URP(calculation.harmonics) 0
+   set URP(nphi) 20
+   set URP(alpha.steps) 15
+   set URP(alpha.delta) 2.0
+   set URP(omega.steps) 64
+   set URP(omega.delta) 8.0
+   set URP(us) ""
+   
+   if { [llength $inputFile] } {
+      disableBeamPara
+   }   
+}
+
+proc read_par { args } {
+   set type ""
+   APSStrictParseArguments {type}
+   global par_input_file
+   global currentDir
+   global inputFile
+   global URP
+   
+   set par_input_file [APSFileSelectDialog .openFile -path $currentDir -title "Select a $type input"]
+   if { [llength $par_input_file] == 0  } {
+      return
+   }   
+   set currentDir [string replace  [join [lreplace [ split $par_input_file / ] end end {} ] / ] end end ""]
+   
+   get_${type}_input $par_input_file
+   
+   if { [llength $inputFile] } {
+      disableBeamPara
+   }   
+   
+}
+
+proc get_US_input { inputfile } {
+   global URP
+   set f ""
+   set line ""
+   set valid 0
+   
+   set f [ open $inputfile r ]
+   gets $f line     
+   if { [gets $f line] > 0} {
+       set URP(electronBeam.energy) [ lindex $line 0 ]
+       set URP(electronBeam.current) [ expr [ lindex $line 1]/1000.]
+   }  
+   if { [gets $f line] > 0} {
+       set URP(electronBeam.xsigma) [ lindex $line 0 ]
+       set URP(electronBeam.ysigma) [ lindex $line 1 ]
+       set URP(electronBeam.xprime) [ lindex $line 2 ]
+       set URP(electronBeam.yprime) [ lindex $line 3 ]
+   } 
+   if { [gets $f line] > 0} {
+       set URP(undulator.period) [ expr [ lindex $line 0 ]/100.]
+       set URP(undulator.numberofPeriods) [ lindex $line 1 ]
+       set URP(undulator.kx) [ lindex $line 2 ]
+       set URP(undulator.ky) [ lindex $line 3 ]
+       set URP(undulator.phase) 0
+   } 
+   if { [gets $f line] > 0} {
+       set URP(photonEnergy.minimum) [ lindex $line 0 ]
+       set URP(photonEnergy.maximum) [ lindex $line 1 ]
+       set URP(photonEnergy.points) [ lindex $line 2 ]
+   } 
+   if { [gets $f line] > 0} {
+       set URP(pinhole.distance) [ lindex $line 0 ]
+       set URP(pinhole.xPosition) [ lindex $line 1 ]
+       set URP(pinhole.yPosition) [ lindex $line 2 ]
+       set URP(pinhole.xSize) [ lindex $line 3 ]
+       set URP(pinhole.ySize) [ lindex $line 4 ]
+       set URP(pinhole.xnumber) [ lindex $line 5 ]
+       set URP(pinhole.ynumber) [ lindex $line 6 ]
+   } 
+   if { [gets $f line] > 0} {
+       set URP(calculation.mode) [ lindex $line 0 ]
+       set URP(calculation.method) [ lindex $line 1]
+       set URP(calculation.harmonics) [ lindex $line 2]
+   }
+   if { [gets $f line] > 0} {
+       set URP(nphi) [ lindex $line 0 ]
+       set URP(alpha.steps) [ lindex $line 1 ]
+       set URP(alpha.delta) [ lindex $line 2 ]
+       set URP(omega.steps) [ lindex $line 3 ] 
+       set URP(omega.delta) [ lindex $line 4 ]
+       set URP(electronBeam.nsigma) [ lindex $line 5 ]
+   }
+   
+   close $f
+}
+
+
+proc get_URGENT_input { inputfile } {
+   global URP
+   set f ""
+   set line ""
+   set valid 0
+   set f [ open $inputfile r ]
+   if { [gets $f line] > 0} {
+      set URP(undulator.type) [ lindex $line 0 ]
+      set URP(undulator.period) [ lindex $line 1]
+      set URP(undulator.kx) [ lindex $line 2]
+      set URP(undulator.ky) [ lindex $line 3]
+      set URP(undulator.phase) [ lindex $line 4]
+      set URP(undulator.numberofPeriods) [ lindex $line 5]
+      
+   }
+   if { [gets $f line] > 0} {
+      set URP(photonEnergy.minimum) [ lindex $line 0 ]
+      set URP(photonEnergy.maximum) [ lindex $line 1 ]
+      set URP(photonEnergy.points) [ lindex $line 2 ]
+   }
+   if { [gets $f line] > 0} {
+     set URP(electronBeam.energy) [ lindex $line 0 ]
+     set URP(electronBeam.current) [ lindex $line 1]
+     set URP(electronBeam.xsigma) [ lindex $line 2 ]
+     set URP(electronBeam.ysigma) [ lindex $line 3 ]
+     set URP(electronBeam.xprime) [ lindex $line 4 ]
+     set URP(electronBeam.yprime) [ lindex $line 5 ]
+   }
+   if { [gets $f line] > 0} {
+     set URP(pinhole.distance) [ lindex $line 0 ]
+     set URP(pinhole.xPosition) [ lindex $line 1 ]
+     set URP(pinhole.yPosition) [ lindex $line 2 ]
+     set URP(pinhole.xSize) [ lindex $line 3 ]
+     set URP(pinhole.ySize) [ lindex $line 4 ]
+     set URP(pinhole.xnumber) [ lindex $line 5 ]
+     set URP(pinhole.ynumber) [ lindex $line 6 ]
+   }
+   if { [gets $f line] > 0} {
+     set URP(calculation.mode) [ lindex $line 0 ]
+     set URP(calculation.method) [ lindex $line 1]
+     set URP(calculation.harmonics) [ lindex $line 2]
+   }
+   if { [gets $f line] > 0} {
+     set URP(nphi) [ lindex $line 0 ]
+     set URP(electronBeam.nsigma) [ lindex $line 1 ]
+     set URP(alpha.steps) [ lindex $line 2 ]
+     set URP(alpha.delta) [ lindex $line 3 ]
+     set URP(omega.steps) [ lindex $line 4 ] 
+     set URP(omega.delta) [ lindex $line 5 ]
+   }
+   close $f
+}
+
+  
+proc saveAs_US_input { filename } {
+     global URP
+     file delete -force $filename
+     set f [ open $filename w+ ]
+     puts $f "#This is a header line "
+     puts $f "$URP(electronBeam.energy) [ expr  1000 * $URP(electronBeam.current)  ] "
+     puts $f "$URP(electronBeam.xsigma) $URP(electronBeam.ysigma) $URP(electronBeam.xprime) $URP(electronBeam.yprime) "
+     puts $f "[expr $URP(undulator.period) * 100 ] $URP(undulator.numberofPeriods) $URP(undulator.kx) $URP(undulator.ky) "
+     puts $f "$URP(photonEnergy.minimum) $URP(photonEnergy.maximum) $URP(photonEnergy.points)"
+     puts $f "$URP(pinhole.distance) $URP(pinhole.xPosition) $URP(pinhole.yPosition) $URP(pinhole.xSize) $URP(pinhole.ySize) \
+              $URP(pinhole.xnumber) $URP(pinhole.ynumber) "
+     puts $f "$URP(calculation.mode) $URP(calculation.method) $URP(calculation.harmonics)"
+     puts $f "$URP(nphi) $URP(alpha.steps) $URP(alpha.delta) $URP(omega.steps) $URP(omega.delta) $URP(electronBeam.nsigma)"
+     flush $f
+     close $f        
+}
+
+proc run_US {} {
+     global tmp_us_in tmp_us_out US_EXE tmp_dir env
+     global outputFile status
+     if { ![ file exist $tmp_dir ] } {
+      eval exec mkdir $tmp_dir
+     }    
+     if { ![ llength $outputFile] } {
+        setStatus "Need an output filename!"
+	update
+	return
+     }	
+     saveAs_US_input $tmp_us_in
+     file delete -force $tmp_us_out
+     set foo [pwd]
+     cd $tmp_dir 
+     catch { exec $US_EXE < $tmp_us_in > $tmp_us_out  }
+     cd $foo
+     exec cp "/tmp/$env(USER)/$tmp_us_out" ${outputFile}.US
+     setStatus "Run $US_EXE successfully"
+     setStatus "Saved US output file to ${outputFile}.US"
+     
+}
+
+proc run_URGENT {} {
+     global tmp_urgent_in tmp_urgent_out URGENT_EXE tmp_dir
+     global outputFile status
+     if { ![ file exist $tmp_dir ] } {
+       eval exec mkdir $tmp_dir
+     }   
+     if { ![ llength $outputFile] } {
+        setStatus "Need an output filename!"
+	update
+	return
+     }	
+     saveAs_URGENT_input $tmp_urgent_in
+     file delete -force $tmp_urgent_out
+     exec $URGENT_EXE < $tmp_urgent_in > $tmp_urgent_out 
+     exec cp $tmp_urgent_out ${outputFile}.URGENT
+     setStatus "Run $URGENT_EXE successfully"
+     setStatus "Saved URGENT output file to ${outputFile}.URGENT"
+
+}
+proc saveAs_URGENT_input { filename } {
+     global URP
+     file delete -force $filename
+     set f [ open $filename w+ ]
+     if { $URP(undulator.phase) != 0 } {
+        set $URP(undulator.type)  2
+     }	
+     puts $f "$URP(undulator.type) $URP(undulator.period) $URP(undulator.kx) $URP(undulator.ky) $URP(undulator.phase) $URP(undulator.numberofPeriods)"
+     puts $f "$URP(photonEnergy.minimum) $URP(photonEnergy.maximum) $URP(photonEnergy.points)"
+     puts $f "$URP(electronBeam.energy) $URP(electronBeam.current) \
+              $URP(electronBeam.xsigma) $URP(electronBeam.ysigma) $URP(electronBeam.xprime) $URP(electronBeam.yprime)"
+     puts $f "$URP(pinhole.distance) $URP(pinhole.xPosition) $URP(pinhole.yPosition) $URP(pinhole.xSize) $URP(pinhole.ySize) \
+              $URP(pinhole.xnumber) $URP(pinhole.ynumber) "
+     puts $f "$URP(calculation.mode) $URP(calculation.method) $URP(calculation.harmonics)"
+     puts $f "$URP(nphi) $URP(electronBeam.nsigma) $URP(alpha.steps) $URP(alpha.delta) $URP(omega.steps) $URP(omega.delta)"
+     puts $f "   "
+     flush $f 
+     close $f       
+}
+
+
+proc run_sddsurgent {} {
+    global URP sddsurgent_EXE
+    global outputFile status inputFile
+    if { ![ llength $outputFile] } {
+        setStatus "Need an output filename!"
+	update
+	return
+    }	
+     
+    set execute "$sddsurgent_EXE $inputFile $outputFile  -undulator=period=$URP(undulator.period),kx=$URP(undulator.kx),ky=$URP(undulator.ky),phase=$URP(undulator.phase),numberofPeriods=$URP(undulator.numberofPeriods) -photonEnergy=minimum=$URP(photonEnergy.minimum),maximum=$URP(photonEnergy.maximum),points=$URP(photonEnergy.points) -pinhole=distance=$URP(pinhole.distance),xPosition=$URP(pinhole.xPosition),yPosition=$URP(pinhole.yPosition),xSize=$URP(pinhole.xSize),ySize=$URP(pinhole.ySize),xnumber=$URP(pinhole.xnumber),ynumber=$URP(pinhole.ynumber) -nphi=$URP(nphi) -alpha=steps=$URP(alpha.steps),delta=$URP(alpha.delta) -omega=steps=$URP(omega.steps),delta=$URP(omega.delta) -calculation=mode=$URP(calculation.mode),method=$URP(calculation.method),harmonics=$URP(calculation.harmonics) -electronBeam=energy=$URP(electronBeam.energy),current=$URP(electronBeam.current),nsigma=$URP(electronBeam.nsigma)"
+    
+    if { ![ llength $inputFile] } {
+       set execute "$execute,xsigma=$URP(electronBeam.xsigma),ysigma=$URP(electronBeam.ysigma),xprime=$URP(electronBeam.xprime),yprime=$URP(electronBeam.yprime)"
+       
+    } else {
+    
+        if { [ string length $URP(coupling) ] } {
+           set execute "$execute -coupling=$URP(coupling) "
+        }
+    
+        if { [ string length $URP(emittanceRatio) ] }    {
+            set execute "$execute  -emittanceRatio=$URP(emittanceRatio) "
+        }
+    }
+    
+    set execute "$execute $URP(us)"   
+    
+    setStatus "$execute\n"
+    if { [ catch  { eval exec $execute } results ] } {
+       setStatus $results
+       error "Failed to run sddsurgent"
+    }
+    
+    setStatus "Done!"
+       
+    return 
+}
+
+proc run {} {
+     global RUN_US RUN_URGENT outputFile tmp_us_
+     
+     set outputFile [ file normalize $outputFile ]
+     
+     if { [catch run_sddsurgent result] } {
+	  setStatus $result
+	  
+     }  
+	
+     
+     if { $RUN_URGENT } {
+        run_URGENT
+     }
+     if { $RUN_US } {
+        run_US
+     }	
+     display
+     			
+}
+
+
+proc display {} {
+     global outputFile URP RUN_US RUN_URGENT tmp_dir tmp_urgent_out
+     
+     set cols [ exec sddsquery -col $outputFile ]
+    
+     if { [ lsearch $cols "Energy" ] <0 } { 
+         setStatus "\nCurrently, this application only plots energy vs. {Flux | Brilliance/Brightness | Irradiance | L1 } \nNo Energy columns found in $outputFile. Please check with sddsEditNew."
+	 return
+     }
+     
+     set convertOptions ""
+     foreach col $cols {
+        lappend convertOptions "-col=$col,double"
+     }	
+     
+     set cmpfile ""
+     
+     if { $RUN_US &&  $URP(us) == "-us" } {
+        set cmpfile ${tmp_dir}/us_to_SDDS
+        eval exec plaindata2sdds ${outputFile}.US ${tmp_dir}/us_to_SDDS -skiplines=25 -norowcounts $convertOptions
+	set legend "US_FORTRAN"
+     }	
+          
+     if { $RUN_URGENT && $URP(us) == "" } {
+        set cmpfile ${tmp_dir}/urgent_to_SDDS
+	if [ catch { set rows [ APSGetSDDSRowCount -fileName $outputFile ] } result ] {
+	   setStatus $result
+	   return
+	}
+	
+	set f [ open $tmp_urgent_out r ] 
+	set fcut [ open ${tmp_urgent_out}.cut w+ ]
+	set line  ""
+	for { set i 1 } { $i < 33 } { incr i } {
+	   gets $f line
+	}
+	for { set i 0 } { $i < $rows } { incr i } {
+	   gets $f line
+	   while { [ set j [ string first D $line ] ] != -1 }  {
+	      set line [ string replace $line  $j $j E ]
+	   }
+	   puts $fcut $line ; flush $fcut
+	}
+	close $fcut ; close $f   
+	
+	eval exec plaindata2sdds ${tmp_urgent_out}.cut ${tmp_dir}/urgent_to_SDDS -norowcounts $convertOptions
+	set legend "URGENT_FORTRAN"
+	
+     }	
+        
+     set execute "sddsplot -graph=line,vary -layout=2,2"
+     
+     if {  [ lsearch $cols "Brilliance"] >= 0  ||  [ lsearch $cols "Brightness" ] >= 0  } {
+        set execute "$execute -topline=Brightness -col=Energy,Bri* $outputFile {-legend=spec=sddsurgent $URP(us)}  "
+	if {  [llength $cmpfile ] } {
+	   set execute "$execute  -col=Energy,Bri* $cmpfile -legend=spec=$legend "
+	   
+	}   
+     }
+     
+     if { [ lsearch $cols "Flux"] >= 0 } {
+        set execute "$execute -col=Energy,Flux $outputFile {-legend=spec=sddsurgent $URP(us)}  -topline=Flux -newpanel "
+	if {  [llength $cmpfile ] } {
+	   set execute "$execute -col=Energy,Flux $cmpfile -legend=spec=$legend "
+	}  
+     }
+     
+     if { [ lsearch $cols "Irradiance"] >= 0 } {
+        set execute "$execute  -col=Energy,Irradiance $outputFile {-legend=spec=sddsurgent $URP(us)} -topline=Irradiance -newpanel "
+	if {  [llength $cmpfile ] } {
+	   set execute "$execute -col=Energy,Irradiance $cmpfile -legend=spec=$legend "
+	}
+     }  
+     
+     if { [ lsearch $cols "L1"] >= 0 } {
+        set execute "$execute  -col=Energy,L1 $outputFile {-legend=spec=sddsurgent $URP(us)} -topline=Polarization -newpanel "
+	if {  [llength $cmpfile ] } {
+	   set execute "$execute  -col=Energy,L1 $cmpfile -legend=spec=$legend "
+	}
+     } 
+     
+     if [ catch  { eval exec $execute &  } result ] {
+        setStatus $result
+     }	
+     	  
+
+}
+
+
+

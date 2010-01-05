@@ -1,0 +1,127 @@
+#!/bin/sh  
+# \
+exec oagtclsh "$0" "$@"
+
+set auto_path [linsert $auto_path 0  /usr/local/oag/apps/lib/$env(HOST_ARCH)]
+set auto_path [linsert $auto_path 0 /usr/local/oag/lib_patch/$env(HOST_ARCH)]
+APSStandardSetup
+
+set usage {usage: km2sdds -input <filename> -output <filename> [-plot 1]}
+set input ""
+set output ""
+set plot 0
+set args $argv
+if {[APSStrictParseArguments {input output plot}] || ![string length $input] || ![string length $output]} {
+    return -code error "$usage"
+}
+
+if ![file exists $input] {
+    return -code error "not found: $input"
+}
+if [file exists $output] {
+    return -code error "in use: $output"
+}
+
+set fdi [open $input r]
+set itemList [list length nh nv]
+set formatList [list %f %d %d]
+set index 0
+set found 0
+while {![eof $fdi]} {
+    gets $fdi data
+    if [string match "\#*" $data] continue
+    if [string compare START $data]==0 {
+        set found 1
+        break
+    }
+    scan $data [lindex $formatList $index] value
+    set [lindex $itemList $index] $value
+    incr index
+}
+if !$found {
+    puts stderr "File ends prematurely (no horizontal data)"
+    exit 1
+}
+
+# Scan x kick table
+gets $fdi data
+eval set data [os editstring "$nh\(s/ /x/ /)" [string trim $data]]
+set xdata [split $data]
+
+set ydata ""
+
+for {set iy 0} {$iy<$nv} {incr iy} {
+    if [eof $fdi] {
+        puts stderr "File ends prematurely (vertical data)"
+        exit 1
+    }
+    gets $fdi data
+    if [string match "\#*" $data] {
+        puts stderr "Wrong number of rows (horizontal data )"
+        exit 1
+    }
+    eval set data [os editstring "$nh\(s/ /x/ /)" [string trim $data]]
+    set data [split $data]
+    set y [lindex $data 0]
+    set data [lrange $data 1 end]
+    set ydata [concat $ydata $y] 
+    set xpdata($iy) $data
+}
+
+set found 0
+while {![eof $fdi]} {
+    gets $fdi data
+    if [string compare $data "START"]==0 {
+        set found 1
+        break
+    }
+}
+if !$found {
+    puts stderr "File ends prematurely (no vertical data)"
+    exit 1
+}
+
+gets $fdi data
+for {set iy 0} {$iy<$nv} {incr iy} {
+    if [eof $fdi] {
+        puts stderr "File ends prematurely (vertical data)"
+        exit 1
+    }
+    gets $fdi data
+    if [string match "\#*" $data] {
+        puts stderr "Wrong number of rows (horizontal data )"
+        exit 1
+    }
+    eval set data [os editstring "$nh\(s/ /x/ /)" [string trim $data]]
+    set data [lrange [split $data] 1 end]
+    set ypdata($iy) $data
+}
+
+if [catch {sdds open $output.1 w} fdo] {
+    return -code error "$fdo"
+}
+
+sdds defineParameter $fdo yc -type SDDS_DOUBLE -units m
+sdds defineColumn    $fdo x -type SDDS_DOUBLE -units m
+sdds defineColumn    $fdo xpFactor -type SDDS_DOUBLE -units "(T*m)\$a2\$n"
+sdds defineColumn    $fdo ypFactor -type SDDS_DOUBLE -units "(T*m)\$a2\$n"
+sdds writeLayout $fdo
+for {set iy 0} {$iy<$nv} {incr iy} {
+    sdds startPage $fdo $nh
+    sdds setParameter $fdo yc [lindex $ydata $iy]
+    eval sdds setColumn $fdo x $xdata
+    eval sdds setColumn $fdo xpFactor $xpdata($iy)
+    eval sdds setColumn $fdo ypFactor $ypdata($iy)
+    sdds writePage $fdo
+}
+sdds close $fdo
+
+if $plot {
+    exec sddscontour -shade=100 $output.1 -waterfall=parameter=yc,independent=x,color=xpFactor &
+    exec sddscontour -shade=100 $output.1 -waterfall=parameter=yc,independent=x,color=ypFactor &
+}
+
+exec sddsprocess $output.1 -pipe=out -define=column,y,yc,units=m \
+| sddscombine -pipe -merge \
+| sddssort -pipe=in $output -column=y,incr -column=x,incr
+

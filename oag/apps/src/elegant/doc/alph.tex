@@ -1,0 +1,36 @@
+This element provides a matrix-based implementation of an alpha magnet \cite{Enge}. 
+Matrices up to third order are available \cite{Borland_thesis}.
+
+The parameter {\tt XMAX} determines the size of the alpha, which is related
+to the gradient $g$ in the magnet and the central momentum $\beta\gamma$ by
+\begin{equation}
+x_{max} [m] = 0.07504986 \sqrt{\frac{\beta\gamma}{g [T/m]}}.
+\end{equation}
+The path length of the central particle is $2.554 x_{max}$.
+
+Because an alpha magnet has large dispersion at the midplane, it is often used
+for momentum filtration in addition to bunch compression.  The dispersion at the
+center is given by the simple relation 
+\begin{equation}
+R_{16} = -\frac{1}{2} x_{max}.
+\end{equation}
+To use an alpha magnet for momentum filtration in {\tt elegant}, one must split the
+alpha magnet into two pieces.  One may then either use the scraper features of the
+{\tt ALPH} element or other elements such as {\tt SCRAPER} or {\tt RCOL}.
+
+To split an alpha magnet, one uses the {\tt PART} parameter.  E.g.,
+\begin{verbatim}
+! First half, with momentum filter between -5% and +2.5%
+AL1: ALPH,XMAX=0.11,PART=1,DP1=-0.05,DP2=0.025
+! Second half 
+AL2: ALPH,XMAX=0.11,PART=2
+AL:  LINE=(AL1,AL2)
+\end{verbatim}
+
+As just illustrated, the parameters {\tt DP1} and {\tt DP2} may be used to filter the
+momentum by providing fractional momentum deviation limits.  These are implemented in
+a physical fashion by computing the corresopnding horizontal position deviations and
+imposing these as limits on the particle coordinates.  One may also do this directly
+using the {\tt XS1} and {\tt XS2} parameters, which specify maximum acceptable deviations
+from the nominal horizontal position.  {\tt XS1} is the allowed deviation on the low-energy
+side while {\tt XS2} is the allowed deviation on the high-energy side.

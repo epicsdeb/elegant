@@ -1,0 +1,8 @@
+&load_parameters
+        filename_list = <errorInputFile>,
+	force_occurence_data = 1,
+        change_defined_values = 0,
+        allow_missing_elements = 1,
+        allow_missing_parameters = 1,
+        allow_missing_files = 0,
+&end

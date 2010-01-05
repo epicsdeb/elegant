@@ -1,0 +1,37 @@
+This element simulates a sextupole using a kick method based on
+symplectic integration.  The user specifies the number of kicks and
+the order of the integration.  For computation of twiss parameters,
+chromaticities, and response matrices, this element is treated like a
+standard thick-lens sextuupole; i.e., the number of kicks and the
+integration order become irrelevant.
+
+\begin{raggedright}
+Specification of systematic and random multipole errors is supported
+through the \verb|SYSTEMATIC_MULTIPOLES| and 
+\verb|RANDOM_MULTIPOLES|
+fields.  These fields give the names of SDDS files that supply the
+multipole data.  The files are expected to contain a single page of
+data with the following elements:
+\end{raggedright}
+\begin{enumerate}
+\item Floating point parameter {\tt referenceRadius} giving the reference
+ radius for the multipole data.
+\item An integer column named {\tt order} giving the order of the multipole.
+The order is defined as $(N_{poles}-2)/2$, so a quadrupole has order 1, a
+sextupole has order 2, and so on.
+\item Floating point columns {\tt an} and {\tt bn} giving the values for the
+normal and skew multipole strengths, respectively.  These are defined as a fraction 
+of the main field strength measured at the reference radius, R: 
+$a_n  = \frac{K_n r^n / n!}{K_m r^m / m!}$, where 
+$m=2$ is the order of the main field and $n$ is the order of the error multipole.
+A similar relationship holds for the skew multipoles.
+For random multipoles, the values are interpreted as rms values for the distribution.
+\end{enumerate}
+
+Apertures specified via an upstream \verb|MAXAMP| element or an \verb|aperture_input|
+command will be imposed inside this element, with the following rules/limitations:
+\begin{itemize}
+\item If apertures from both sources are present, the smallest is used.
+\item The apertures are assumed to be rectangular, even if the \verb|ELLIPTICAL| qualifier
+ is set for \verb|MAXAMP|.
+\end{itemize}

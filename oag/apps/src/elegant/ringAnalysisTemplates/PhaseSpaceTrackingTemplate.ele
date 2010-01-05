@@ -1,0 +1,60 @@
+&transmute_elements
+        name = *, type = MAXAMP,
+        new_type = DRIF
+&end
+
+&transmute_elements
+        name = *, type = ?COL,
+        new_type = DRIF
+&end
+
+&transmute_elements
+        name = *, type = SCRAPER,
+        new_type = DRIF
+&end
+
+&run_setup
+	lattice = <kickLatticeFile>,
+	use_beamline = <kickBeamline>
+	p_central = "{rpnl <momentum> mev /}",
+        rootname = <mainDirectory>/<mainPrefix>PhaseSpaceTracking<suffix>
+        semaphore_file = %s.done,
+        tracking_updates = 0,
+	default_order = 1,
+	concat_order = 1
+&end
+
+&load_parameters
+        filename_list = " <parameterFileList>",
+	force_occurence_data = <forceOccurence>,
+        change_defined_values = 1,
+        allow_missing_elements = 1,
+        allow_missing_parameters = 1,
+        allow_missing_files = 1,
+&end
+
+&alter_elements name=*, type=*SBEN*, item=EDGE_ORDER, value=1, allow_missing_elements=1, allow_missing_parameters=1 &end
+&alter_elements name=*, type=*SBEN*, item=ORDER, value=1, allow_missing_elements=1, allow_missing_parameters=1 &end
+
+! May be needed if SREFFECTS elements are present
+&twiss_output
+        radiation_integrals = 1
+        matched = 1
+        output_at_each_step = 0
+&end
+
+&alter_elements name=<kickOffsetElement>, item=ON_PASS, value=0 &end
+&alter_elements name=<kickOffsetElement>, item=D<otherPlane>, value=<otherCoord> &end
+&alter_elements name=<kickOffsetElement>, item=D<offsetPlane>, value=<offset> &end
+&alter_elements name=<kickOffsetElement>, item=DP, value=<delta> &end
+
+&run_control
+        n_passes = <turns>,
+&end
+
+&bunched_beam
+&end
+
+&track
+&end
+

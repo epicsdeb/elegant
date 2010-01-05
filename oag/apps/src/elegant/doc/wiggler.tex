@@ -1,0 +1,42 @@
+This element simulates a wiggler or undulator.  There are two aspects
+to the simulation: the effect on radiation integrals and the vertical
+focusing.  Both are included as of release 15.2 of elegant.  
+
+N.B.: at present this element is {\em not} included in computations
+of beam moments (\verb|moments_output| command).
+
+If the number of poles should be an odd integer, we include
+half-strength end poles to match the dispersion, but only for the
+radiation integral calculation.  For the focusing, we assume all the
+poles are full strength (i.e., a pure sinusoidal variation).  If the
+number of poles is an even integer, no special end poles are required,
+but we make the unphysical assumption that the field at the entrance
+(exit) of the device jumps instantaneously from 0 (full field) to full
+field (0).
+
+The radiation integrals were computed analytically using Mathematica,
+including the variation of the horizontal beta function and dispersion. 
+For an odd number of poles, half-strength end-poles are assumed in order
+to match the dispersion of the wiggler.  For an even number of poles,
+half-length end poles are assumed (i.e., we start and end in 
+the middle of a pole), for the same reason.
+
+The vertical focusing is implemented as a distributed quadrupole-like
+term (affecting ony the vertical, unlike a true quadrupole).  The
+strength of the quadrupole is (see Wiedemann, {\em Particle Accelerator
+Physics II}, section 2.3.2)
+\begin{equation}
+K_1 = \frac{1}{2\rho^2},
+\end{equation}
+where $\rho$ is the bending radius at the center of a pole.  The
+undulator is focusing in the vertical plane.
+
+The wiggler field strength may be specified either as a peak bending 
+radius $\rho$ (RADIUS parameter) or using the dimensionless strength parameter
+K (K parameter).  These are related by
+\begin{equation}
+K = \frac{\gamma \lambda_u}{2 \pi \rho},
+\end{equation}
+where $\gamma$ is the relativistic factor for the beam and $\lambda_u$ is
+the period length.
+

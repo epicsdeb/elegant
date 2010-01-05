@@ -1,0 +1,15 @@
+This element allows changing the  emittance of a beam during tracking.
+It  is intended to  be used  to modify  the emittance  ``slightly'' to
+agree  with,  for   example,  experimental  measurements.   
+
+The LCLS provides an example application: we track a beam from a
+photo-injector simulation through a laser/undulator beam heater and
+then through the entire linac.  The beam emittance and twiss
+parameters are measured at a diagnostic downstream of the laser
+heater.  We can insert an EMITTANCE element and a TWISS element at the
+location of the diagnostic to force the beam properties to the exact
+values that are measured.  This compensates for imperfect modeling of
+the photo-injector while allowing us to conveniently model the system
+between the photo-injector and the point at which the emittance is
+measured.
+

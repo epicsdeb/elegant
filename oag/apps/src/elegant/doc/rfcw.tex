@@ -1,0 +1,19 @@
+This element is a combination of the {\tt RFCA}, {\tt WAKE}, and {\tt
+TRWAKE} elements.  As such, it provides combined simulation of an rf
+cavity with longitudinal and transverse wakes, as well as longitudinal
+space charge.
+
+For the wakes, the input files and their interpretation are identical
+to {\tt WAKE} and {\tt TRWAKE}, except that the transverse and
+longitudinal wakes are interpreted as the wakes for a single cell of
+length given by the {\tt CELL\_LENGTH} parameter.
+
+Users should read the entries for {\tt WAKE}, {\tt TRWAKE}, and {\tt RFCA}
+for more details on this element.
+
+This element simulates longitudinal space charge using the
+method described in \cite{Huang2004}.  This is based on the 
+longitudinal space charge impedance per unit length
+\begin{equation}
+  Z_{lsc}(k) = \frac{i Z_0}{\pi k r_b^2} \left[ 1 - \frac{kr_b}{\gamma}K_1 \left(\frac{kr_b}{\gamma}\right)\right]
+\end{equation}

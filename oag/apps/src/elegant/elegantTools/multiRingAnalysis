@@ -1,0 +1,211 @@
+#!/bin/sh
+# \
+exec oagwish "$0" "$@"
+
+#
+# $Log: multiRingAnalysis,v $
+# Revision 1.1  2007/11/16 18:01:35  borland
+# Moved from level above.
+#
+# Revision 1.4  2005/11/04 16:27:06  borland
+# Added Xiao's code for space charge element SCMULT.
+#
+# Revision 1.2  2005/08/12 15:53:14  shang
+# use lattice and calculation description as the name of exec log window
+#
+# Revision 1.1  2005/08/03 18:23:27  shang
+# first version
+#
+#
+
+set auto_path [linsert $auto_path 0  /usr/local/oag/apps/lib/$env(HOST_ARCH)]
+set auto_path [linsert $auto_path 0  /usr/local/oag/lib_patch/$env(HOST_ARCH)]
+APSDebugPath
+
+set CVSRevisionAuthor "\$Author: borland $"
+
+APSApplication . -name multiRingAnalysis \
+  -overview "Performs various elegant simulations for a ring."
+.menu.file.menu insert 1 command -label "Save as..." -command SaveConfiguration
+.menu.file.menu insert 1 command -label "Read..." -command ReadConfiguration
+
+set status "Working..."
+APSScrolledStatus .status -parent .userFrame -textVariable status -height 10 -width 80 
+
+
+proc setStatus {text} {
+    APSSetVarAndUpdate status $text
+    update
+}
+APSSetElegantGlobals
+
+set momentum 7.0e3
+set matrixLatticeFile ""
+set matrixBeamline RING
+set matrixOffsetElement MALIN
+set kickLatticeFile ""
+set kickBeamline RING
+set kickOffsetElement MALIN
+set mainParameterFile(1) ""
+set mainParameterFile(2) ""
+set mainParameterFile(3) ""
+set mainParameterFile(4) ""
+set forceOccurence 0
+set mainDirectory [pwd]
+set mainPrefix ""
+set gridEngine 0
+set makePngFiles 0
+set sourceDir $OAGGlobal(OAGAppConfigDataDirectory)/elegant/ringAnalysisTemplates
+
+proc SaveConfiguration {} {
+    global elegantSaveVarList
+    eval global $elegantSaveVarList
+    set configFile [APSFileSelectDialog .saveDialog -listDir $mainDirectory \
+                     -checkValidity 0]
+    if ![string length $configFile] return
+    if [file exists $configFile] {
+        if {[APSMultipleChoice [APSUniqueName .] \
+               -question "$configFile exists already.  What do you want to do?" \
+               -returnList {0 1} \
+               -labelList {Overwrite Cancel}]} {
+            return
+        }
+    }
+    APSElegantSaveJobConfiguration -filename $configFile \
+	-statusCallback setStatus -momentum $momentum \
+	-matrixLatticeFile  $matrixLatticeFile -matrixBeamline $matrixBeamline \
+	-matrixOffsetElement $matrixOffsetElement -kickLatticeFile $kickLatticeFile \
+	-kickBeamline $kickBeamline -kickOffsetElement $kickOffsetElement \
+	-forceOccurence $forceOccurence -mainDirectory $mainDirectory \
+	-mainPrefix $mainPrefix -gridEngine $gridEngine -makePngFiles $makePngFiles
+}
+
+
+proc ReadConfiguration {} {
+    global mainDirectory saveVarList
+    eval global $saveVarList
+    set configFile [APSFileSelectDialog .saveDialog -listDir $mainDirectory \
+                     -checkValidity 1]
+    if ![string length $configFile] return
+    if ![file exists $configFile] return
+    source $configFile
+    setStatus "Configuration $configFile read."
+}
+
+
+proc RUN {args} {
+    set noPlots 1
+    set plotOnly 0
+    APSStrictParseArguments {noPlots plotOnly}
+    global elegantSaveVarList makePngFiles latticeDir sourceDir 
+    global latticeList calculationList calculationDir kickBeamlineList shortDescriptionList
+    eval global $elegantSaveVarList
+    eval global $latticeList
+    eval global $calculationList
+    
+    if !$plotOnly {
+	APSDisableButton .userFrame.run.button
+    }
+    
+    foreach lattice $latticeList {
+	if [set $lattice] {
+	    foreach  calculation $calculationList kickBeamline $kickBeamlineList desc $shortDescriptionList {
+		if [set $calculation] {
+		    APSExecLog .l${lattice}_$calculation -width 80 -name "$lattice $desc" \
+			-unixCommand "$calculationDir/$calculation/runScript -mainDirectory $mainDirectory -mainPrefix \"$mainPrefix\" \
+			-lattice $lattice -makePngFiles $makePngFiles -sourceDir $sourceDir -noPlots $noPlots -plotOnly $plotOnly -kickBeamline $kickBeamline "
+		}
+	    }
+	}
+	after 1000
+    }
+    APSEnableButton .userFrame.run.button
+}
+
+proc PLOT {args} {
+    global elegantSaveVarList makePngFiles latticeDir sourceDir 
+    global latticeList calculationList calculationDir kickBeamlineList
+    eval global $elegantSaveVarList
+    eval global $latticeList
+    eval global $calculationList
+    foreach lattice $latticeList {
+	set dir $mainDirectory/$lattice
+	if [set $lattice] {
+	    foreach  calculation $calculationList {
+		if [set $calculation] {
+		    source $latticeDir/$lattice/${calculation}.config
+		    switch $calculation {
+			FMA {
+			}
+		    }
+		    
+		}
+	    }
+	}
+    }
+}
+
+set latticeDir /share/ilcdr/lattices
+set calculationDir /share/ilcdr/calculations
+set latticeList ""
+set oldDir [pwd]
+cd $latticeDir
+set fileList [lsort [glob *?]] 
+foreach file $fileList {
+    if {[file isdirectory $file] && [string compare $file "CVS"]} {
+	lappend latticeList $file
+    }
+}
+cd $oldDir
+set calculationConfig $calculationDir/calculations.sdds
+set shortDescriptionList [split [exec sdds2stream $calculationConfig -col=ShortDescription] "\n"]
+set descriptionList [split [exec sdds2stream $calculationConfig -col=Description] "\n"]
+set calculationList [split [exec sdds2stream $calculationConfig -col=Directory] "\n"]
+set labelList [split [exec sdds2stream $calculationConfig -col=Label] "\n"]
+set kickBeamlineList [split [exec sdds2stream $calculationConfig -col=KickBeamline] "\n"]
+
+APSFrameGrid .gd -parent .userFrame -xList {x1 x2}
+set w1 .userFrame.gd.x1
+set w2 .userFrame.gd.x2
+APSCheckButtonFrame .lattice -parent $w1 -label "Lattices" \
+    -buttonList $latticeList -variableList $latticeList -allNone 1 \
+    -contextHelp "choose lattices."
+APSCheckButtonFrame .cal -parent $w2 -label "Calculations" \
+    -buttonList $shortDescriptionList -variableList $calculationList \
+    -allNone 1 \
+    -contextHelp "choose calculation methods:        \nFMA  -- Freqquency Map.\nDA   --- Dynamic Aperture\n\MP   --- Multipole\nNL   --- Nonlinear\n\PA   --- Physical Aperture\nOC   --- Orbit Correction\nLOCO --- Linear optics closed orbit\n"
+
+
+APSLabeledEntry .dir -parent .userFrame -label "Output Directory:" -textVariable "mainDirectory" \
+    -width 60 -textVariable mainDirectory \
+    -fileSelectButton 1 -buttonsOnLeft 1 -fileSelectDirectory 1 \
+    -contextHelp \
+    "Enter the directory in which to place calculation results." 
+APSLabeledEntry .le6 -parent .userFrame  -label "Output file prefix (optional): " \
+    -width 60 -textVariable mainPrefix \
+    -contextHelp "Enter an optional prefix to use in creating output filenames."
+APSRadioButtonFrame .png -parent .userFrame -label "Make PNG files? " \
+    -orientation horizontal \
+    -variable makePngFiles -buttonList "Yes No" -valueList "1 0" \
+    -contextHelp "Select whether or not to automatically make PNG plot files for each plot generated."   
+APSButton .run -parent .userFrame -text "RUN" -command "RUN -noPlots 1"
+APSButton .plot -parent .userFrame -text "PLOT" -command "RUN -plotOnly 1"
+set args $argv
+set configuration ""
+set templateDirectory ""
+if {[APSStrictParseArguments {configuration templateDirectory}]} {
+    return -code error "usage: $argv0 \[-configuration <filename>\] \[-templateDirectory <path>\]"
+}
+if {[string length $configuration]} {
+    if ![file exists $configuration] {
+        setStatus "not found: $configuration"
+    } else {
+        source $configuration
+    }    
+}
+if [string length $templateDirectory] {
+    set sourceDir $templateDirectory
+}
+setStatus "Ready."
+update
+ 

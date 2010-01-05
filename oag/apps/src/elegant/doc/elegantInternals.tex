@@ -1,0 +1,73 @@
+% How to create this document on UNIX systems:
+%   latex elegant
+%   dvi2ps elegant | lpr [-P<postscript-printer-name>]
+%
+\documentclass[11pt]{article}
+\usepackage{html}
+\pagestyle{plain}
+%\voffset=-0.75in
+\newenvironment{req}{\begin{equation} \rm}{\end{equation}}
+\setlength{\topmargin}{0.15 in}
+\setlength{\oddsidemargin}{0 in}
+\setlength{\evensidemargin}{0 in} % not applicable anyway
+\setlength{\textwidth}{6.5 in}
+\setlength{\headheight}{-0.5 in} % for 11pt font size
+%\setlength{\footheight}{0 in}
+\setlength{\textheight}{9 in}
+\begin{document}
+
+\title{Developer's Guide to the Internals of {\tt elegant}}
+\author{Advanced Photon Source\\Michael Borland\\ \date{\today}}
+\maketitle
+
+This guide is an on-going effort to document the internals of {\tt elegant}
+in order to make it easier for developers to understand the code and
+make changes.
+
+\section{Particle Arrays}
+
+Particles are stored in a two-dimensional array, the first index being
+the particle index, and the second being the coordinate index.  The
+coordinates are stored in the following order:
+\begin{itemize}
+\item x --- horizontal position.
+\item x$^\prime$ --- horizontal slope.
+\item y --- vertical position.
+\item y$^\prime$ ---  vertical slope.
+\item s --- Total equivalent distance traveled at the present velocity.  For
+  particles that don't change energy, this is just the total path length.
+\item $\delta$ --- The fractional momentum offset, $(p-p_0)/p_0$, where
+  $p_0$ is the defined central momentum of the beamline.
+\item particle identification number --- This is an integer value supplied by
+  the user or generated internally.
+\end{itemize}
+
+There are several arrays used by {\tt elegant} to keep store information about
+particles.  These are collected in the BEAM structure:
+\begin{itemize}
+  \item {\tt original} --- This stores the original particle coordinates.  These are
+    needed in the event that they need to be reused in a subsequent tracking step.
+    In some cases (where a new beam is used each time and the user asks to reduce
+    memory usage), the array is NULL.  This array is not used in tracking (e.g.,
+    by the {\tt do\_tracking} routine.  It is used only by the routines that
+    prepare beam for tracking.
+  \item {\tt particle} --- This stores the current particle coordinates.  I.e.,
+    just before tracking it has the original coordinates, but as tracking proceeds,
+    the values are updated. In addition, as particles are lost, they are swapped
+    to the top of the array and the coordinate slots are used to store information
+    about the particle at the time of loss.   This avoids having to use another
+    array for lost particle information.  Note that in some subroutines, this array
+    is called {\tt coord}.
+  \item {\tt accepted} --- This array is optional.  It is used only if the user asks
+    for acceptance output in the {\tt run\_setup} namelist.  Just before tracking,
+    it will contain the initial coordinates of all particles.  When particles are
+    lost, they are swapped to the top of the array, just as done for the {\tt particle}
+    array.  In this way, the initial coordinates of both lost and surviving particles
+    are kept.  Only the later are provided to the user.
+  \item {\tt lostOnPass} --- Records the turn on which particles are lost.  This array
+    is parallel to the {\tt particle} and  {\tt accepted} arrays.  It is filled from
+    the top as lost particles are swapped up to the top of the list of surviving particles.
+\end{itemize}
+
+
+\end{document}

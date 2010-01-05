@@ -1,0 +1,48 @@
+The output filename may be an incomplete filename.  In the case of the
+\verb|WATCH| point element, this means it may contain one instance of
+the string format specification ``\%s'' and one occurence of an
+integer format specification (e.g., ``\%ld'').  {\tt elegant} will
+replace the format with the rootname (see
+\verb|run_setup|) and the latter with the element's occurrence
+number.  For example, suppose you had a repetitive lattice defined as
+follows:
+\begin{verbatim}
+W1: WATCH,FILENAME=''%s-%03ld.w1''
+Q1: QUAD,L=0.1,K1=1
+D: DRIFT,L=1
+Q2: QUAD,L=0.1,K1=-1
+CELL: LINE=(W1,Q1,D,2*Q2,D,Q1)
+BL: LINE=(100*CELL)
+\end{verbatim}
+The element \verb|W1| appears 100 times.  Each instance will result in
+a new file being produced.  Successive instances have names like
+``{\em rootname}-001.w1'', ``{\em rootname}-002.w1'', ``{\em
+rootname}-003.w1'', and so on up to ``{\em rootname}-100.w1''.  (If
+instead of ``\%03ld'' you used ``\%ld'', the names would be ``{\em
+rootname}-1.w1'', ``{\em rootname}-2.w1'', etc. up to ``{\em
+rootname}-100.w1''.  This is generally not as convenient as the names
+don't sort into occurrence order.)
+
+The files can easily be plotted together, as in 
+\begin{verbatim}
+% sddsplot -column=t,p *-???.w1 -graph=dot -separate 
+\end{verbatim}
+They may also be combined into a single file, as in
+\begin{verbatim}
+% sddscombine *-???.w1 all.w1 
+\end{verbatim}
+
+In passing, note that if \verb|W1| was defined as
+\begin{verbatim}
+W1: WATCH,FILENAME=''%s.w1''
+\end{verbatim}
+or 
+\begin{verbatim}
+W1: WATCH,FILENAME=''output.w1''
+\end{verbatim}
+only a single file would be produced, containing output from the last instance
+only.
+
+N.B.: confusion sometimes occurs about some of the quantities related
+to the {\tt s} coordinate in this file when in parameter mode.  Please
+see Section \ref{sec:longitCoord} above.

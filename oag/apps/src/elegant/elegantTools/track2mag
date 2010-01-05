@@ -1,0 +1,126 @@
+#!/bin/sh  
+# \
+exec oagtclsh "$0" "$@"
+
+set auto_path [linsert $auto_path 0  /usr/local/oag/apps/lib/$env(HOST_ARCH)]
+set auto_path [linsert $auto_path 0 /usr/local/oag/lib_patch/$env(HOST_ARCH)]
+APSStandardSetup
+
+set usage {usage: track2mag -input <filename> -output <filename> }
+set input ""
+set output ""
+set args $argv
+if {[APSStrictParseArguments {input output }] || ![string length $input] || ![string  length $output]} {
+    return -code error "$usage"
+}
+
+if ![file exists $input] {
+    return -code error "not found: $input"
+}
+if [catch {sdds load $input inputData} result] {
+    return -code error "$result"
+}
+
+if [file exists $output] {
+    return -code error "in use: $output"
+}
+
+set elementInputData [lindex $inputData(Column.ElementName) 0]
+set sInputData [lindex $inputData(Column.s) 0]
+
+set elementOutputData ""
+set sOutputData ""
+set profileData ""
+set segmentData ""
+
+set sLast 0.0
+set segment 0
+set index 0
+set number [llength $elementInputData]
+
+foreach element $elementInputData s $sInputData {
+    switch -glob $element {
+        drift {
+            lappend profileData 0.0
+            lappend elementOutputData $element
+            lappend sOutputData $s
+            lappend segmentData $segment
+        }
+        sol* {
+            eval lappend elementOutputData [APSReplicateItem -item $element -number 5]
+            lappend profileData 1.0 -1.0 -1.0 1.0 0.0
+            set s1 [expr 1.*($s-$sLast)/3.+$sLast]
+            set s2 [expr 2.*($s-$sLast)/3.+$sLast]
+            lappend sOutputData $s1 $s2 $s1 $s2 $s
+            lappend segmentData $segment $segment $segment $segment $segment
+        }
+        bmag {
+            eval lappend elementOutputData [APSReplicateItem -item $element -number 3]
+            lappend profileData 0.5 0.5 0.0
+            lappend sOutputData $sLast $s $s
+            lappend segmentData $segment $segment $segment
+        }
+        quad {
+            eval lappend elementOutputData [APSReplicateItem -item $element -number 3]
+            lappend profileData 1.0 1.0 0
+            lappend sOutputData $sLast $s $s
+            lappend segmentData $segment $segment $segment
+        }
+        cav {
+            eval lappend elementOutputData [APSReplicateItem -item $element -number 3]
+            lappend profileData 1.0 -1.0 0
+            set s1 [expr 1.*($s-$sLast)/3.+$sLast]
+            set s2 [expr 2.*($s-$sLast)/3.+$sLast]
+            lappend sOutputData $s1 $s2 $s
+            lappend segmentData $segment $segment $segment
+        }
+        slit {
+            incr segment
+            eval lappend elementOutputData [APSReplicateItem -item $element -number 2]
+            lappend profileData 0.5 1.0
+            lappend sOutputData $s [expr $s+1e-10]
+            lappend segmentData $segment $segment
+            incr segment
+            eval lappend elementOutputData [APSReplicateItem -item $element -number 2]
+            lappend profileData -0.5 -1.0
+            lappend sOutputData $s [expr $s+1e-10]
+            lappend segmentData $segment $segment
+            incr segment
+            lappend elementOutputData $element
+            lappend profileData 0
+            lappend sOutputData $s
+            lappend segmentData $segment
+        }
+        rfgap {
+            if {[expr $index!=($number-1)] && [string compare drift [lindex $elementInputData [expr $index+1]]]==0} {
+                set sNext [lindex $sInputData [expr $index+1]]
+                eval lappend elementOutputData [APSReplicateItem -item $element -number 4]
+                lappend profileData 1.0 -1.0 0 0
+                set s1 [expr 1.*($sNext-$s)/3.+$s]
+                set s2 [expr 2.*($sNext-$s)/3.+$s]
+                lappend sOutputData $s1 $s2 $sNext $s
+                lappend segmentData $segment $segment $segment $segment
+            }
+        }
+    }
+    set sLast $s
+    incr index
+}
+
+set outputData(ColumnNames) [list ElementName s Profile Segment]
+set outputData(ColumnInfo.ElementName) "type SDDS_STRING"
+set outputData(ColumnInfo.s) "type SDDS_DOUBLE units m"
+set outputData(ColumnInfo.Profile) "type SDDS_FLOAT"
+set outputData(ColumnInfo.Segment) "type SDDS_SHORT"
+set outputData(Column.ElementName) [list $elementOutputData]
+set outputData(Column.s) [list $sOutputData]
+set outputData(Column.Profile) [list $profileData]
+set outputData(Column.Segment) [list $segmentData]
+if [catch {sdds save $output outputData} result] {
+    puts stderr "$result"
+    exit 1
+}
+
+# Local Variables:
+# mode: tcl
+# End:

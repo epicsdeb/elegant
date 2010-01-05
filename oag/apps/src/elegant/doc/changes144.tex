@@ -1,0 +1,208 @@
+\documentclass[11pt]{article}
+\usepackage{html}
+\pagestyle{plain}
+%\voffset=-0.75in
+\newenvironment{req}{\begin{equation} \rm}{\end{equation}}
+\setlength{\topmargin}{0.15 in}
+\setlength{\oddsidemargin}{0 in}
+\setlength{\evensidemargin}{0 in} % not applicable anyway
+\setlength{\textwidth}{6.5 in}
+\setlength{\headheight}{-0.5 in} % for 11pt font size
+%\setlength{\footheight}{0 in}
+\setlength{\textheight}{9 in}
+\begin{document}
+
+\title{Change Notes for Version 14.4 of elegant}
+\author{Advanced Photon Source\\Michael Borland\\ \date{\today}}
+\maketitle
+
+Version 14.4 of elegant is now available.  The most significant
+enhancement is to the CSRDRIFT element, which now provides more
+rigorous simulation of CSR in drift spaces.  There is also support for
+body focusing in RFCA and RFCW elements, and two new elements for
+simulating RF cavities and solenoids from field maps.
+
+\begin{enumerate}
+\item The CSRDRIFT element has a number of new features.  In order of
+increasing significance, these are:
+\begin{enumerate}
+\item  Added the OL\_MULTIPLIER parameter, which defaults to 1.  If you
+give \\ USE\_OVERTAKING\_LENGTH=1, then elegant uses the overtaking length
+as the attenuation length for the CSR wake.  This parameter permits
+you to increase or decrease that attenuation length by the specified
+factor.
+
+\item  Added the BUNCHLENGTH\_MODE parameter, so that the user can choose
+how the bunch length is computed for computation of the attenuation
+length.  Nominally, one should use the true RMS, but when the beam has
+temporal spikes, it isn't always clear that this is the best choice.
+The choices are ``rms'', ``68-percentile'', and ``90-percentile''.  The last
+two imply using half the length determined from the given percentile
+in place of the rms bunch length.  I usually use 68-percentile, which
+is the default.
+\item  Added the USE\_SALDIN54 parameter, which invokes use of a more
+rigorous method of computing the fall-off of the CSR wake in the
+drift.  As the name suggests, it is based on equation 54 (and 53) from
+Saldin et al. (NIM A 398 (1997)).  I no longer use any other mode for
+this element.  Using USE\_OVERTAKING\_LENGTH tends to give similar
+results, however.  I also added the SALDIN54\_OUTPUT parameter, which
+allows one to specify a file into which the wake intensity vs z will
+be written.  These equations are for a rectangular bunch; the length 
+of this rectangular bunch is taken to be twice the bunch length
+computed according to the BUNCHLENGTH\_MODE parameter.  If your 
+bunch is nearly rectangular, then you probably want BUNCHLENGTH\_MODE
+of ``90-percentile''.
+\end{enumerate}
+
+\item It's now possible to assign multiple errors to one item and get a
+"final" output file at the same time.  In previous versions, this
+would cause the program to terminate.
+
+\item Added the "string\_value" parameter to alter\_elements command,
+allowing alteration of string parameters of elements.
+
+\item A bug was introduced in version 14.3 for the beam generation
+with bunched\_beam.  In particular, pair-wise randomization of the
+generated coordinates was performed by default.  This has been fixed.
+The randomize\_order parameter of the bunched\_beam namelist takes
+three possible values: 0 means no randomization; 1 means randomize (x,
+x', y, y', t, p) values independently, which destroys any x-x', y-y',
+and t-p correlations; 2 means randomize (x, x'), (y, y'), and (t, p)
+in pair-wise fashion, which retains correlations between x-x' etc but
+destroys those between x-y, x-p, etc.  This is used with Halton
+sequences to remove banding.  Be aware that if you provide values for
+the dispersion or its slope in the beam definition, that these will be
+nulled out by use of either type of randomization.
+
+\item The bunched\_beam command now allows specifying the longitudinal
+Twiss parameters, emit\_z, beta\_z, and alpha\_z, instead of the
+energy spread, bunch length, and normalized correlation.  You may also
+specify the energy spread, bunch length, and alpha\_z together,
+avoiding the use of the troublesome dp\_s\_coupling parameter.
+Basically, which values {\tt elegant} uses depends what you set to
+nonzero values.  If you set emit\_z, then sigma\_dp, sigma\_s, and
+dp\_s\_coupling are ignored.  If you don't set emit\_z, then {\tt
+elegant} uses sigma\_dp and sigma\_s; it additionally uses alpha\_z if
+it is nonzero, otherwise it uses dp\_s\_coupling.  Paul Emma pointed out
+that using alpha\_z is easier than dp\_s\_coupling some time ago and I
+just got around to adding it.  For reference, the relationship between
+them is $ C = \frac{\Sigma_{56}}{\sqrt{\Sigma_{55}\Sigma_{66}}} =
+-\frac{\alpha}{\sqrt{1+\alpha^2}}$.  Note that to impart a
+chirp that results in compression for $R_{56}<0$, you must have
+$\alpha_z<0$ or $C>0$.
+
+\item The MAPSOLENOID element was added.  It provides numerical integration 
+through solenoid fields specified as Br(z,r) and Bz(z,r).  Parameters
+are as follows:
+\begin{enumerate}
+\item L               length in meters
+\item DX, DY          misalignment in meters
+\item N\_STEPS         number of steps for nonadaptive integration
+\item INPUTFILE       name of SDDS file containing (Br, Bz) vs (r, z).  
+                Each page should have values for a fixed r.
+\item RCOLUMN         name of column containing r values
+\item ZCOLUMN         name of column containing z values
+\item BRCOLUMN        name of column containing Br values
+\item BZCOLUMN        name of column containing Bz values
+\item FACTOR          factor by which to multiply fields to get applied fields in Tesla
+\item ACCURACY        integration accuracy for adaptive integration (not recommended)
+\item METHOD          integration method (runge-kutta, bulirsch-stoer, non-adaptive 
+                runge-kutta, modified midpoint).  Recommend non-adaptive runge-kutta.
+\end{enumerate}
+
+\item The RFTMEZ0 element was added.  This element provides numerical integration
+through a TM-mode RF cavity, where the fields are specified by Ez(r=0) and an
+off-axis expansion.  Parameters are as follows:
+\begin{enumerate}
+\item L               length in meters
+\item FREQUENCY       frequency in Hz
+\item PHASE           in radians
+\item EZ\_PEAK         Peak on-axis longitudinal electric field at crest (V/m)
+\item TIME\_OFFSET     time offset (adds to phase)
+\item PHASE\_REFERENCE phase reference number (to link to other time-dependent elements)
+\item DX, DY          misalignment in meters
+\item N\_STEPS         number of steps for nonadaptive integration
+\item RADIAL\_ORDER    highest order in off-axis expansion
+\item CHANGE\_P0       does element change central momentum?
+\item INPUTFILE       name of SDDS file containing Ez vs z at r=0
+\item ZCOLUMN         name of column containing z values
+\item EZCOLUMN        name of column containing Ez values
+\item SOLENOID\_FILE   Name of SDDS file containing map of Bz and Br vs z and r.  
+                Each page contains values for a single r.  This is the same
+                organization as the file used by MAPSOLENOID.
+\item SOLENOID\_ZCOLUMN, SOLENOID\_RCOLUMN, SOLENOID\_BZCOLUMN, \\
+SOLENOID\_BRCOLUMN, SOLENOID\_FACTOR
+                These all correspond to the similarly-named parameters of
+                MAPSOLENOID.
+\item ACCURACY        integration accuracy for adaptive integration
+\item METHOD          integration method (runge-kutta, bulirsch-stoer, non-adaptive 
+                runge-kutta, modified midpoint).  Recommend non-adaptive runge-kutta.
+\item FIDUCIAL  Specifies how to determine the fidicual particle.  Syntax is
+                \verb|<coord>,<method>|, where coord is either 't' or 'p'
+                and method is one of median, min, max, ave, first, or light.  E.g., 
+                \verb|t,median| means
+                that the fiducial particle has the same arrival time as the
+                       median arrival time of the bunch.
+\end{enumerate}
+
+The RFTMEZ0 and MAPSOLENOID elements were requested by Eliane Lessner, who
+helped in the testing.
+
+\item  Added the BEAMCENTERED parameter (flag) to the PFILTER element. If set to
+a nonzero value, then momentum filtering is done relative to the average beam
+momentum, rather than relative to the nominal central momentum of the beamline.
+
+\item Added the CSR parameter (flag) to CSRCSBEND.  If set to 0, then CSR is turned
+off in that element.
+
+\item Fixed a bug in computation of the Twiss phase advance for elements
+that have negative drift length.  This bug was discovered by Paul Emma.
+
+\item The RFCA and RFCW elements now support rf focusing in the body
+of the element (i.e., not end focusing) using a simplification of
+Rosenzweig and Serafini's results (Phys. Rev. E 49 (2), 1599).  The
+simplification is to assume that the field is due to a "pure pi-mode
+standing-wave".  This was suggested by N. Towne (NSLS), and I used his
+results in checking the new feature.  To activate this feature, set
+the BODY\_FOCUS\_MODEL parameter to "SRS" (Simplfied Rosenzweig
+Serafini).  The default value of this parameter is "none."  I'm
+willing to add other models using the Rosenzweig/Serafini formulation
+if people supply me with the parameters.  Please note that this
+feature is independent of the existing end-focusing control through
+the END1\_FOCUS and END2\_FOCUS flags.  This addition was suggested by
+Nathan Towne, and I used his note on the subject to help debug the new
+code.
+
+\item A bug was fixed in the link\_elements feature that resulted in
+double-counting of incremental changes implemented via links.  As the
+manual states, the prior value of any linked-to quantity is on the
+stack when the equation is executed.  Unforunately, links must be
+executed twice, so if you used that prior value you'd end up with
+unexpected results.  This bug was discovered by Mark Woodley.
+
+\item A bug was fixed in the load\_parameters feature that resulted in
+failure to load the parameter values on the last step of a run with
+errors.
+
+\item {\tt elegant} now supports macro substitution in the input file.
+This permits making runs with altered parameters without editing the input
+file.  Macros inside the input file have one of two forms: \verb|<tag>|
+or \verb|$tag|.  To perform substitution, use the syntax
+\begin{flushleft}{\tt
+elegant {\em inputfile} -macro={\em tag1}={\em value1}[,{\em tag2}={\em value2}...]
+}\end{flushleft}
+When using this feature, it is important to substitute the rootname
+(in run\_setup) so that you can get a new set of output files (assuming
+you use the suggested ``\%s'' field in all the output file names).
+
+\item A number of changes were made to the program sddsmatchtwiss: The
+-xPlane and -yPlane options now permit changing the emittances of the
+beam.  I also added the -zPlane option, which permits matching the
+parameters of the longitudinal phase space. The new -oneTransform
+option allows computing the transform only for the first page, and
+using it for all pages; this is useful if you want to simulate
+correction of the beam properties with jitter about the correction.
+
+\end{enumerate}
+\end{document}
+

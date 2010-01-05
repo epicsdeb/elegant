@@ -1,0 +1,56 @@
+This elements allows transformation of the twiss parameters of 
+a beam with a first-order matrix.  The matrix is computed in 
+various ways based on initial and final twiss parameters.  Depending on 
+how you set it up, the final twiss parameters for your
+beam may not be the twiss parameters you specify.  
+
+The twiss parameter values \verb|BETAX|, \verb|BETAY|, etc. specified in the
+element definition specify the target values of the transformation.
+To completely specify the transformation, one must know the initial
+values as well.  
+
+{\bf Lattice-Function-Based Transformation}
+
+If \verb|FROM_BEAM| is zero, which is the default, then the initial
+values are taken from the incoming lattice functions computed by
+\verb|twiss_output|.  This provides a way to transform the lattice
+functions between two parts of a transport line without designing
+intervening optics.  A beam that is matched at the beginning of the
+transport line will remain matched.  A beam that is mismatched at the
+beginning of the transport line {\em will not} be matched after
+the \verb|TWISS| element.
+
+By default, each time the twiss parameters are recomputed, the
+transformation is updated to maintain the desired lattice functions at
+the exit of the \verb|TWISS| element. Setting \verb|COMPUTE_ONCE| to a
+non-zero value specifies that {\tt elegant} should compute the
+transformation matrix only once, i.e., for the first set of computed
+lattice functions.
+
+By default, the transformation is applied to the beam only the first
+time it passes the element.  Setting \verb|APPLY_ONCE| to a zero
+will result in application of the transformation at each pass.
+
+{\bf Beam-Ellipse-Based Transformation}
+
+If \verb|FROM_BEAM| is non-zero, the the initial values for the transformation
+are computed from a beam.  This provides a way to transform the beam ellipse
+to the desired twiss parameters irrespective of the lattice.  The results
+from \verb|twiss_output| will not necessarily be matched downstream of this
+element.  Only if the beam ellipse and lattice ellipse are the same will this
+occur.
+
+By default, each time a new beam is generated, the transformation will
+be updated to maintain the desired beam ellipse at the exit of the
+\verb|TWISS| element.  Setting \verb|COMPUTE_ONCE| to a non-zero value
+specifies that {\tt elegant} should compute the transformation matrix
+only once, i.e., for the first beam it sees.
+
+By default, the transformation is applied to the beam only the first
+time it passes the element.  Setting \verb|APPLY_ONCE| to a zero
+will result in application of the transformation at each pass.  This
+would make sense, for example, if the \verb|TWISS| element was
+filling in for a section of a ring.  It wouldn't make sense if
+the \verb|TWISS| element was being used to match the beam from
+a transport line to a ring.
+

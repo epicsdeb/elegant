@@ -1,0 +1,36 @@
+This element sets the aperture for itself and all subsequent elements.
+The settings are in force until another {\tt MAXAMP} element is seen.
+
+This can introduce unexpected behavior when beamlines are reflected.
+For example, consider the beamline
+\begin{verbatim}
+...
+L1:  LINE=( ... )
+L2:  LINE=( ... )
+MA1: MAXAMP,X_MAX=0.01,Y_MAX=0.005
+MA2: MAXAMP,X_MAX=0.01,Y_MAX=0.002
+BL1: LINE=(MA1,L1,MA2,L2)
+BL:  LINE=(BL1,-BL1)
+\end{verbatim}
+
+This is equivalent to
+\begin{verbatim}
+BL:  LINE=(MA1,L1,MA2,L2,-L2,MA2,-L1,MA1)
+\end{verbatim}
+Note that the aperture {\tt MA1} is the aperture for all of the first
+instance of beamline {\tt L1}, but that {\tt MA2} is the aperture for
+the second instance, {\tt -L1}.  This is probably not what was
+intended.  To prevent this, it is recommended to always use {\tt
+MAXAMP} elements in pairs:
+\begin{verbatim}
+BL1: LINE=(MA2,MA1,L1,MA1,MA2,L2)
+BL:  LINE=(BL1,-BL1)
+\end{verbatim}
+which is equivalent to
+\begin{verbatim}
+BL:  LINE=(MA2,MA1,L1,MA1,MA2,L2,-L2,MA2,MA1,-L1,MA1,MA2)
+\end{verbatim}
+Now, both instances of {\tt L1} have the aperture defined by 
+{\tt MA1} and both instances of {\tt L2} have the aperture defined
+by {\tt MA2}.
+

@@ -1,0 +1,134 @@
+#!/bin/bash
+
+# Script to convert TRACK output files to SDDS
+# M. Borland, 2009.
+# Works with ASCII-output version of TRACK39
+
+if [ ! -e .trackOutputFiles ] ; then
+    mkdir .trackOutputFiles
+fi
+
+plaindata2sdds beam.out -pipe=out \
+  -norowcount \
+  -inputMode=ascii -outputMode=binary \
+  "-separator= " \
+  -skipLines=1 \
+  -column=ElementNumber,short \
+  -column=ElementName,string \
+  -column=s,double,units=m \
+  -column=Energy,double,units=MeV \
+  -column=WDeviation,double,units=% \
+  -column=Sx,double,units=cm,symbol='$gs$r$bx$n' \
+  -column=Sy,double,units=cm,symbol='$gs$r$by$n' \
+  -column=xMax,double,units=cm \
+  -column=yMax,double,units=cm \
+  -column=Sphi,double,units=deg,symbol='$gs$bf$n$r' \
+  -column=phiMax,double,units=deg \
+  -column=Sdelta,double,symbol='$gs$bd$n$r' \
+  -column=enx4,double,units=cm*mrad,symbol='4$ge$r$bnx\\,rms$n' \
+  -column=enx80,double,units=cm*mrad,symbol='$ge$r$bnx\\,80$n' \
+  -column=enxMax,double,units=cm*mrad,symbol='$ge$r$bnx\\,max$n' \
+  -column=eny4,double,units=cm*mrad,symbol='4$ge$r$bny\\,rms$n' \
+  -column=eny80,double,units=cm*mrad,symbol='$ge$r$bny\\,80$n' \
+  -column=enyMax,double,units=cm*mrad,symbol='$ge$r$bny\\,max$n' \
+  -column=enz4,double,units=keV*ns,symbol='4$ge$r$bnz\\,rms$n' \
+  -column=enz80,double,units=keV*ns,symbol='$ge$r$bnz\\,80$n' \
+  -column=enzMax,double,units=keV*ns,symbol='$ge$r$bnz\\,max$n' \
+  -column=Cx,double,units=cm,symbol='<x>' \
+  -column=Cxp,double,units=mrad,symbol='<xp>' \
+  -column=Cy,double,units=cm,symbol='<y>' \
+  -column=Cyp,double,units=mrad,symbol='<yp>' \
+  -column=btgm,double \
+  -column=Zc,double,units=deg \
+  -column=ax,double,symbol='a$bx$n' \
+  -column=bx,double,units=cm/mrad,symbol='b$bx$n' \
+  -column=ay,double,symbol='a$by$n' \
+  -column=by,double,units=cm/mrad,symbol='b$by$n' \
+  -column=az,double,symbol='a$bz$n' \
+  -column=bz,double,units='deg/(%dW/W)',symbol='b$bz$n' \
+  -column=NumberLost,long \
+  -column=Particles,long \
+    | sddsprocess -pipe=in beam.sdds \
+    -convert=column,[CS][xy],m,cm,.01 \
+    -convert=column,[xy]Max,m,cm,.01 \
+    -convert=column,en[xy]*,m,cm*mrad,1e-5 \
+    -define=column,enx,"enx4 4 /",units=m,symbol='$ge$r$bnx$n' \
+    -define=column,eny,"eny4 4 /",units=m,symbol='$ge$r$bny$n' \
+    -define=column,enz,"enz4 4 /",units=keV*ns,symbol='$ge$r$bz$n' 
+mv beam.out .trackOutputFiles/
+
+W=`sddsprocess beam.sdds -pipe=out -clip=0,1,invert | sdds2stream -pipe -column=Energy`
+dWoW=`sddsprocess beam.sdds -pipe=out -clip=0,1,invert | sdds2stream -pipe -column=WDeviation`
+W=`rpnl $W 1 $dWoW 100 / - mult`
+echo "Energy: $W"
+
+plaindata2sdds coord.out -pipe=out \
+  -norowcount \
+  -inputMode=ascii -outputMode=binary \
+  "-separator= " \
+  -skipLines=1 \
+  -column=Nseed,long \
+  -column=iq,long \
+  -column=dt,double,units=ns,symbol='$gD$rt' \
+  -column=dW,double,units=MeV \
+  -column=x,double,units=cm \
+  -column=xp,double,units=mrad \
+  -column=y,double,units=cm \
+  -column=yp,double,units=mrad \
+    | sddsprocess -pipe=in coord.sdds \
+    -convert=column,[xy],m,cm,0.01 \
+    -convert=column,[xy]p,,mrad,0.001 \
+    "-define=column,t,dt 1e9 /,units=s" \
+    "-define=column,p,$W dW + mev / 1 + sqr 1 - sqrt" 
+mv coord.out .trackOutputFiles/
+    
+filesPresent=0
+for file in coord.out.???? ; do
+    filesPresent=1
+    n=`editstring $file -edit=2Z.x/0/`
+    n0=`editstring $file -edit=2Z.`
+    sddsprocess beam.sdds -pipe=out \
+        -filter=column,ElementNumber,$n,$n \
+        | sddsexpand -pipe=in  beam.sdds.$n 
+    W=`sdds2stream beam.sdds.$n -parameter=Energy`
+    dWoW=`sdds2stream beam.sdds.$n -parameter=WDeviation`
+    W=`rpnl $W 1 $dWoW 100 / - mult`
+    echo "$file: Energy $W MeV"
+    plaindata2sdds $file -pipe=out \
+        -norowcount \
+        -inputMode=ascii -outputMode=binary \
+        "-separator= " \
+        -skipLines=1 \
+        -column=Nseed,long \
+        -column=iq,long \
+        -column=dt,double,units=ns,symbol='$gD$rt' \
+        -column=dW,double,units=MeV \
+        -column=x,double,units=cm \
+        -column=xp,double,units=mrad \
+        -column=y,double,units=cm \
+        -column=yp,double,units=mrad \
+    | sddsprocess -pipe \
+        -convert=column,[xy],m,cm,0.01 \
+        -convert=column,[xy]p,,mrad,0.001 \
+        "-define=column,t,dt 1e9 /,units=s" \
+        "-define=column,p,$W dW + mev / 1 + sqr 1 - sqrt" \
+    | sddsxref -pipe=in beam.sdds.$n -leave=* -transfer=parameter,s,Energy,NumberLost,Particles,enz,Element*,e*80,e*Max coord-$n0.sdds
+    \rm beam.sdds.$n 
+    mv $file .trackOutputFiles/
+done
+
+if [ $filesPresent != 0 ] ; then        
+sddscombine coord-????.sdds -pipe=out -delete=param,* -retain=col,x,xp,y,yp,t,p \
+    | sddsanalyzebeam -pipe -correctedOnly \
+    | sddsexpand -pipe=in coord-all.ana
+
+sddscombine coord-????.sdds -pipe=out \
+    | sddsxref coord-all.ana -pipe -leave=* -transfer=parameter,* -nowarning \
+    | sddsprocess -pipe=in coord-all.sdds \
+    '-print=param,xLabel,%s: %.3g%s   %s: %.3g%s  %s: %.3g%s  %s: %.3g%s,enx.symbol,enx,enx.units,Sx.symbol,Sx,Sx.units,betax.symbol,betax,betax.units,alphax.symbol,alphax,alphax.units' \
+    '-print=param,Label1,%s(#%ld)  %.3gm  %ld Particles  %.2lf MeV,ElementName,ElementNumber,s,Particles,Energy' \
+    '-print=param,yLabel,%s: %.3g%s  %s: %.3g%s  %s: %.3g%s  %s: %.3g%s,eny.symbol,eny,eny.units,Sy.symbol,Sy,Sy.units,betay.symbol,betay,betay.units,alphay.symbol,alphay,alphay.units' \
+    '-print=param,zLabel,%s: %.3g%s  %s: %.3g%s  %s: %.3g%s,enz.symbol,enz,enz.units,St.symbol,St,St.units,Sdelta.symbol,Sdelta,Sdelta.units' \
+    '-print=param,dxLabel,%s: %.3g%s  %s: %.3g  %s: %.3g%s  %s: %.3g,etax.symbol,etax,etax.units,etaxp.symbol,etaxp,etay.symbol,etay,etay.units,etayp.symbol,etayp' 
+
+fi

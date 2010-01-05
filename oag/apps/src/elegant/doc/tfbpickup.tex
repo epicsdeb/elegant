@@ -1,0 +1,16 @@
+This element is used together with the {\tt TFBDRIVER} element to
+simulate a digital transverse feedback system.  Each {\tt TFBPICKUP}
+element must have a unique identification string assigned to it using
+the {\tt ID} parameter.  This is used to identify which drivers get
+signals from the pickup.
+
+A 15-term FIR filter can be defined using the {\tt A0} through {\tt
+A14} parameters.  The input to the filter is the turn-by-turn beam
+centroid at the pickup location.  The output of the filter is simply
+$\sum_{i=0}^{14} a_i C_i$, where $C_i$ is the position from $i$ turns
+ago.  Note that $\sum_{i=0}^{14} a_i$ must be zero. Otherwise, the
+system will attempt to correct the DC orbit.  The output of the filter
+is the input to the driver element(s).
+
+See Section 7.2.14 of {\em Handbook of Accelerator Physics and Engineering}
+(Chao and Tigner, eds.) for a discussion of feedback systems.

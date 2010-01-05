@@ -1,0 +1,78 @@
+#!/bin/csh  -f
+set nonomatch
+
+#
+# elegant2astra
+# converts elegant phase-space output file to ASTRA format
+# M. Borland, ANL/APS
+#
+
+if ($#argv != 2) then
+        echo "Usage: elegant2astra <input> <output>"
+        exit 1
+endif
+
+set input = $1
+set output = $2
+
+if ( ! -e $input ) then
+    echo "Not found: $input"
+    exit 1
+endif
+if ( -e $output ) then
+    echo "In use: $output"
+    exit 1
+endif
+
+set tmpRoot = `tmpname`
+
+# Define momentum columns and z column. 
+sddsconvert $input -pipe=out -retain=column,t,p,x,xp,y,yp \
+    | sddsprocess -pipe=in $tmpRoot.1 \
+    "-define=column,pz,p xp sqr yp sqr + 1 + sqrt / mev * 1e6 *,units=eV" \
+    "-define=column,px,pz xp *,units=eV" \
+    "-define=column,py,pz yp *,units=eV" \
+    "-define=column,s,t c_mks * p = sqr 1 + sqrt / *,units=m" \
+    "-redefine=column,t,0,units=ns" 
+
+# Process to find the average pz and s coordinates, then subtract from all coordinates.
+sddsprocess $tmpRoot.1 $tmpRoot.3 -delete=parameter,* \
+    -process=*,ave,%s0 \
+    "-redefine=column,pz,pz pz0 -,units=eV" \
+    "-define=column,dz,s0 s -,units=m" \
+    "-redefine=col,x,x dz xp * +,units=m" \
+    "-redefine=col,y,y dz yp * +,units=m" 
+
+# Create row for the reference particle
+sddsprocess $tmpRoot.1 -pipe=out -process=pz,ave,%s \
+    | sddscollapse -pipe \
+    | sddsprocess -pipe=in $tmpRoot.2 -process=Charge,first,Charge \
+    "-redefine=column,px,0,units=eV" \
+    "-redefine=column,py,0,units=eV" \
+    "-redefine=column,x,0,units=m" \
+    "-redefine=column,y,0,units=m" \
+    "-redefine=column,t,0,units=ns" \
+    "-redefine=column,dz,0,units=m" 
+
+# Combine the reference data and the particle-by-particle offset data
+sddscombine $tmpRoot.2 $tmpRoot.3 -merge -pipe=out \
+    -retain=column,x,y,dz,t,px,py,pz \
+  | sddsprocess -pipe \
+    "-redefine=column,q,Charge n_rows / 1e9 *,units=nC" \
+    "-redefine=column,particleIndex,1,type=long" \
+    "-redefine=column,statusFlag,5,type=long" \
+  | tee $output.sdds \
+  | sdds2plaindata -pipe=in $output \
+    -outputMode=ascii -noRowCount \
+    -column=x,format=%12.4e \
+    -column=y,format=%12.4e \
+    -column=dz,format=%12.4e \
+    -column=px,format=%12.4e \
+    -column=py,format=%12.4e \
+    -column=pz,format=%12.4e \
+    -column=t,format=%12.4e \
+    -column=q,format=%12.4e \
+    -column=particleIndex,format=%4ld \
+    -column=statusFlag,format=%4ld 
+
+\rm $tmpRoot.1 $tmpRoot.2 $tmpRoot.3

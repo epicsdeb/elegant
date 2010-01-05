@@ -1,0 +1,34 @@
+#!/bin/sh  
+# \
+exec oagtclsh "$0" "$@"
+
+set auto_path [linsert $auto_path 0  /usr/local/oag/apps/lib/$env(HOST_ARCH)]
+set auto_path [linsert $auto_path 0 /usr/local/oag/lib_patch/$env(HOST_ARCH)]
+APSStandardSetup
+
+set usage "usage: fin2param <input> <output>\n\
+Converts an elegant final output file from an optimization\n\
+to a file that can be loaded with load_parameters.\n\
+Used if you forgot to ask for a parameter output or if the\n\
+job is running and hasn't written a parameter output yet.\n"
+
+if [llength $argv]!=2 {
+    return -code error "$usage"
+}
+set input [lindex $argv 0]
+set output [lindex $argv 1]
+
+if ![file exists $input] {
+    return -code error "not found: $input"
+}
+if [file exists $output] {
+    return -code error "exists: $output"
+}
+
+exec sddscollapse $input -pipe=out | sddssort -pipe -column=optimizationFunction,incr \
+  | sddsprocess -pipe -clip=1,0,invert \
+  | sddsconvert -pipe -retain=column,*.* \
+  | sddstranspose -pipe -oldColumnNames=NameString -root=ParameterValue \
+  | sddsprocess -pipe=in $output \
+    "-edit=column,ElementName,NameString,S/./100D" \
+    "-edit=column,ElementParameter,NameString,Z." \

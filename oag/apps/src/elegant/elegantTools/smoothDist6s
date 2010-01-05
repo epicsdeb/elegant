@@ -1,0 +1,272 @@
+#!/bin/sh  
+# \
+exec tclsh "$0" "$@"
+
+#
+# replaces the transverse distribution with an idealized distribution 
+# reflecting the median slice properties.  
+#
+
+proc APSSetVarsFromList {args} {
+    set valueList ""
+    set variableList ""
+    if {[APSStrictParseArguments {valueList variableList}] || \
+          ![llength $valueList] || [llength $valueList]!=[llength $variableList]} {
+        return -code error "APSSetVarsFromList: invalid arguments/values"
+    }
+    foreach value $valueList variable $variableList {
+        uplevel 1 "set $variable \"$value\""
+    }
+}
+
+proc APSStrictParseArguments {optlist} {
+    upvar args arguments
+    set length [llength $arguments]
+    set index 0
+    set leftovers {}
+    while {$index<$length} {
+        set arg [lindex $arguments $index]
+        if {[string index $arg 0]=="-"} {
+            set keywordName [string range $arg 1 end]
+            if {[lsearch -exact $optlist $keywordName]!=-1} {
+                incr index
+                if {$index==$length} {
+                    lappend leftovers $arg
+                } else {
+                    set valueString [lindex $arguments $index]
+                    uplevel "set $keywordName {$valueString}"
+                    incr index
+                }
+            } else {
+                incr index
+                lappend leftovers $arg
+            }
+        } else {
+            lappend leftovers $arg
+            incr index
+        }
+    }
+    set arguments [concat $leftovers]
+    if {$arguments != ""} {
+        set procName [lindex [info level [expr {[info level] - 1}]] 0]
+        puts stderr "Unknown option(s) given to $procName \"$arguments\""
+        return -1
+    } else {
+        return 0
+    }
+}
+
+
+set usage {usage: smoothDist6 -input <name> -output <name> -factor <number> -rippleAmplitude <%> -rippleWavelength <um> -smoothPasses <num(500)> -energyMod <%> -betaSlices <n>}
+set debug 0
+set args $argv
+set output ""
+set input ""
+set rippleAmplitude 0
+set rippleWavelength 100
+set smoothPasses 500
+set factor 0
+set betaSlices 1
+set energyMod 0
+if {[APSStrictParseArguments {input output factor rippleAmplitude rippleWavelength smoothPasses energyMod betaSlices debug}] \
+      || ![string length $input] || ![string length $output] || $factor<1 \
+      || $rippleAmplitude<0 || $rippleWavelength<=0 || $smoothPasses<=0 || $betaSlices<=0} {
+    return -code error "$usage"
+}
+
+if ![file exists $input] {
+    return -code error "$input: not found"
+}
+if [file exists $output] {
+    return -code error "$output: already exists"
+}
+set factor [expr int($factor)]
+
+# fit a polynomial to the (t,p) data to make a table for computing p(t)
+exec sddspfit $input $input.fit -terms=12 -evaluate=$input.eval,number=10000 -column=t,p
+if $debug {
+    exec sddsplot -col=t,p $input -graph=dot -col=t,p $input.eval -graph=line,type=1 "-title=momentum fit"
+}
+
+# find the StDev(pResidual) and make a table for computing pStDev(t)
+exec sddssort $input.fit -col=t,incr -pipe=out \
+  | sddsbreak -rowlimit=1000 -pipe \
+  | sddsprocess -pipe "-test=parameter,n_rows 10 >" -process=t,ave,tAve -process=pResidual,stand,pStDev \
+  | sddscollapse -pipe \
+  | sddspfit -pipe=in $input.tmp -terms=12 \
+  -evaluate=$input.pStDev,number=10000 -column=tAve,pStDev
+file delete $input.tmp
+if $debug {
+    exec sddsplot -col=tAve,pStDev $input.pStDev "-title=momentum spread"
+}
+
+# compute number of particles that we'll generate
+set samples [expr [exec sdds2stream -rows=bare $input]*$factor]
+if $debug {
+    puts stdout "Will generate $samples particles"
+    flush stdout
+}
+
+# find average momentum
+set pAve [exec sddsprocess $input -pipe=out -process=p,ave,pAve \
+            | sdds2stream -pipe -param=pAve]
+if $debug {
+    puts stdout "Average momentum from input beam: $pAve"
+    flush stdout
+}
+
+# smooth the longitudinal density to get a function for generating
+# the distribution, and apply the modulation
+exec sddshist $input -pipe=out -bins=1000 -data=t -expand=1.2 \
+  | sddssmooth -pipe -column=t -savit=2,2,1 -column=frequency -pass=50 -newcolumns \
+  | sddsprocess -pipe=in $input.this \
+    "-define=parameter,rippleOmega,c_mks $rippleWavelength 1e6 / / 2 * pi *,units=Hz" \
+    "-define=parameter,rippleAmplitude,$rippleAmplitude 100 /" \
+    "-redefine=column,frequency,frequency 0 > ? frequencySmoothed : 0 $ " \
+    "-redefine=column,frequency,frequency 1 t rippleOmega * cos rippleAmplitude * + *"
+if $debug {
+    exec sddsplot -column=t,frequency $input.this "-title=time distribution"
+}
+
+# slice the beam up and compute slice emittances
+if [catch {exec sddssort $input -pipe=out -column=t \
+                    | sddsbreak -rowlimit=1000 -pipe \
+                    | sddsprocess -pipe "-test=parameter,n_rows 10 >" "-test=parameter,i_page 10 > i_page 90 < &&" \
+                    | sddsanalyzebeam -pipe \
+                    | sddsprocess -pipe -process=en?,median,%sMedian \
+                    | sdds2stream -pipe -parameter=enxMedian,enyMedian} emitList] {
+    return -code error "$emitList"
+}
+if $debug {
+    puts stdout "Mean slice emittances: $emitList"
+    flush stdout
+}
+APSSetVarsFromList -variableList "enx eny" -valueList $emitList
+
+# find the projected twiss parameters (which LCLS is matched to)
+set betaList [exec sddsanalyzebeam $input -pipe=out \
+                | sdds2stream -pipe -column=betax,betay,alphax,alphay]
+if $debug {
+    puts stdout "Twiss parameters: $betaList"
+    flush stdout
+}
+APSSetVarsFromList -variableList "betax betay alphax alphay" -valueList $betaList
+
+# make a gaussian distribution function (3 sigma)
+exec sddssequence -pipe=out -defi=z,type=double -sequence=begin=-3,end=3,delta=0.01 \
+  | sddsprocess -pipe=in gdf.sdds  \
+  "-define=column,gaussianDF,z sqr -2 / exp"
+
+# Generate quiet samples from the longitudinal DF (for t) and the
+# gaussian DF for (x, xp, y, yp).
+# Set p = pAve for now.
+# Match beam to the right emittance and twiss parameters.
+exec sddssampledist -pipe=out -samples=$samples \
+  -column=indep=t,df=frequency,output=t,units=s,haltonRadix=2,datafile=$input.this \
+  -column=indep=z,df=gaussianDF,output=x,units=m,haltonRadix=3,datafile=gdf.sdds,factor=1e-4 \
+  -column=indep=z,df=gaussianDF,output=xp,haltonRadix=5,datafile=gdf.sdds,factor=1e-4 \
+  -column=indep=z,df=gaussianDF,output=y,units=m,haltonRadix=7,datafile=gdf.sdds,factor=1e-4 \
+  -column=indep=z,df=gaussianDF,output=yp,haltonRadix=11,datafile=gdf.sdds,factor=1e-4 \
+  -column=indep=z,df=gaussianDF,output=delta1,haltonRadix=13,datafile=gdf.sdds \
+  | sddsprocess -pipe -define=col,p,$pAve \
+  | sddssort -pipe=in -column=t $input.partial0
+if $debug {
+    exec sddsplot -column=t,p -graph=dot $input.partial0 "-title=longitudinal phase space step 1"
+}
+
+if $betaSlices<=1 {
+    exec  sddsmatchtwiss $input.partial0 $input.partial \
+     -xplane=beta=$betax,alpha=$alphax,nemit=$enx \
+     -yplane=beta=$betay,alpha=$alphay,nemit=$eny
+    file delete $input.partial0
+} else {
+    catch {file delete $input.partial}
+    file rename $input.partial0 $input.partial
+}
+if $debug {
+    exec sddsplot -column=t,p -graph=dot $input.partial "-title=longitudinal phase space step 2"
+}
+
+# Generate value for standard deviation of p for each particle location.
+exec sddsinterp $input.pStDev $input.pStDevP \
+  -column=tAve,pStDev -fileValues=$input.partial,column=t -order=2
+if $debug {
+    exec sddsplot -column=tAve,pStDev -graph=dot $input.pStDevP "-title=longitudinal phase space step 3 (stand. dev. of p)"
+}
+
+# Interpolate <p>(t) at each particle location.
+# Xref in the standard deviation of p, plus (x, xp, y, yp).
+# Add the energy spread.
+
+exec sddsinterp $input.eval -pipe=out \
+    -column=t,p -fileValues=$input.partial,column=t -order=2 \
+    | sddsxref $input.pStDevP -pipe -take=pStDev \
+    | sddsxref $input.partial -pipe -take=* \
+    | sddsprocess -pipe \
+    "-define=parameter,rippleAmplitude,$rippleAmplitude,units=%" \
+    "-define=parameter,rippleWavelength,$rippleWavelength,units=\$gm\$rm" \
+    "-define=parameter,energyMod,$energyMod 100 /" \
+    "-define=parameter,energyModOmega,2 pi * c_mks * 1e-6 /,units=s" \
+    "-redefine=column,p,p pStDev delta1 * + energyModOmega t * sin energyMod * 1 + *" \
+    "-define=column,particleID,i_row,type=long" \
+    | sddsconvert -pipe=in $output \
+    -delete=column,pStDevP,delta1
+if $debug {
+    exec sddsplot $output -column=t,p -graph=dot "-title=output longitudinal phase space"
+}
+
+if $betaSlices>1 {
+    # quick-and-dirty implementation of beta, alpha variation along the bunch
+    puts stdout "Adding slice-to-slice Twiss parameter variation..."
+    set rootname [file root $output]
+
+    # split the output file into many parts 
+    set np [exec sdds2stream -rows=bare $output]
+    set sliceNp [expr $np/$betaSlices]
+    exec sddssort $output -column=t -pipe=out \
+      | sddsbreak -rowlimit=$sliceNp -pipe \
+      | sddsprocess -pipe=in "-test=param,n_rows 10 >" $rootname-grouped.sdds
+    exec sddssplit $rootname-grouped.sdds -rootname=$rootname-split- -extension=sdds
+
+    # compute and retriev slice parameters from input file
+    set np [exec sdds2stream -rows=bare $input]
+    set sliceNp [expr $np/$betaSlices]
+    exec sddssort $input -column=t -pipe=out \
+        | sddsbreak -rowlimit=$sliceNp -pipe \
+        | sddsprocess -pipe "-test=param,n_rows 10 >" \
+        | sddsanalyzebeam -pipe=in $rootname.sliceTwiss
+    set betaxList [exec sdds2stream -column=betax $rootname.sliceTwiss]
+    set alphaxList [exec sdds2stream -column=alphax $rootname.sliceTwiss]
+    set betayList [exec sdds2stream -column=betay $rootname.sliceTwiss]
+    set alphayList [exec sdds2stream -column=alphay $rootname.sliceTwiss]
+    set enxList [exec sdds2stream -column=enx $rootname.sliceTwiss]
+    set enyList [exec sdds2stream -column=eny $rootname.sliceTwiss]
+    file delete $rootname.sliceTwiss
+    file delete $rootname-grouped.sdds
+
+    # Loop over all slices and transform beam transverse phase space
+    set fileList [lsort [glob $rootname-split-???.sdds]]
+    set newList ""
+    foreach betax $betaxList alphax $alphaxList betay $betayList alphay $alphayList \
+      enx $enxList eny $enyList filename $fileList {
+          puts stdout "Working on $filename -xplane=beta=$betax,alpha=$alphax,nemit=$enx -yplane=beta=$betay,alpha=$alphay,nemit=$eny"
+          flush stdout
+          exec sddsmatchtwiss $filename [file rootname $filename].matched \
+          -xplane=beta=$betax,alpha=$alphax,nemit=$enx \
+          -yplane=beta=$betay,alpha=$alphay,nemit=$eny
+          lappend newList [file rootname $filename].matched 
+          file delete $filename
+    }
+
+    # combine everything and clean up
+    eval exec sddscombine $newList -merge -overwrite $rootname.new
+    eval file delete -force $newList
+    # replace the old output file
+    file delete $output
+    file rename $rootname.new $output
+}
+
+# exec sddsplot -sparse=10 -col=t,p $input $input.mult $output -graph=dot,vary -separate -same &
+eval file delete -force $input.pStDevP $input.partial gdf.sdds $input.fit $input.eval $input.pStDev $input.this
+
+exit 0

@@ -1,0 +1,76 @@
+&divide_elements
+        name = *, type = *DRIF*, divisions = <driftDivisions>,
+&end
+&divide_elements
+        name = *, type = *SBEN*, divisions = <dipoleDivisions>,
+&end
+&divide_elements
+        name = *, type = *QUAD*, divisions = <quadDivisions>,
+&end
+&divide_elements
+        name = *, type = *SEXT*, divisions = <sextDivisions>,
+&end
+
+&run_setup
+	lattice = <matrixLatticeFile>,
+	use_beamline = <matrixBeamline>
+	p_central = "{rpnl <momentum> mev /}",
+	default_order = <order>,
+        magnets = %s.mag,
+        rootname = <mainDirectory>/<mainPrefix>Basic<suffix>,
+	random_number_seed = <seed>,
+        final = %s.fin,
+        semaphore_file = %s.done,
+&end
+
+&load_parameters
+        filename_list = " <parameterFileList>",
+	force_occurence_data = <forceOccurence>,
+        change_defined_values = 1,
+        allow_missing_elements = 1,
+        allow_missing_parameters = 1,
+        allow_missing_files = 1,
+&end
+sinclude(<ERRORPARAM>)
+
+&alter_elements name=*, type=*SBEN*, item=ORDER, value=<bodyOrder>, allow_missing_parameters=1,
+	allow_missing_elements=1 &end
+&alter_elements name=*, type=*SBEN*, item=EDGE_ORDER, value=<edgeOrder>, allow_missing_parameters=1,
+	allow_missing_elements=1 &end
+&alter_elements name=*, type=*SEXT*, item=ORDER, value=<order>, allow_missing_parameters=1, 
+	allow_missing_elements=1 &end
+&alter_elements name=*, type=*QUAD*, item=ORDER, value=<order>, allow_missing_parameters=1, 
+	allow_missing_elements=1 &end
+
+&closed_orbit
+	output = %s.clo,
+	closed_orbit_iterations = 500,
+	iteration_fraction = 0.1,
+&end
+
+
+
+&twiss_output
+        filename = "%s.twi",
+        concat_order = <order>,
+        radiation_integrals = <doRadiationIntegrals>,
+        higher_order_chromaticity = <doHigherOrderChromaticity>,
+        chromatic_tune_spread_half_range = <chromaticTuneSpreadMomentumSpread>,
+        output_at_each_step = 1
+        compute_driving_terms = <doDrivingTerms>
+&end
+
+&floor_coordinates
+	filename = %s.flr,
+&end
+
+&run_control 
+	n_steps = <numberOfSeeds>,
+&end
+
+sinclude(<ERROR>)
+
+&bunched_beam &end
+
+&track &end
+

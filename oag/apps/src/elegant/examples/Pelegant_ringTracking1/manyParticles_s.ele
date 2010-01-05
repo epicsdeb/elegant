@@ -1,0 +1,30 @@
+&run_setup
+	lattice = parKick.lte,
+	use_beamline = PARC,
+	p_central_mev = 450,
+!        acceptance = %s.acc,
+        output  = %s.out, 
+!        losses  = %s.lost
+!        print_statistics = 1
+
+&end
+
+&alter_elements name=MAL, item=ON_PASS, value=0 &end
+&alter_elements name=MAL, item=DX, value=1e-3 &end
+&alter_elements name=MAL, item=DY, value=1e-3 &end
+
+&run_control
+        n_passes = 12,
+&end
+
+&bunched_beam
+        bunch = %s.bun,
+	n_particles_per_bunch = 100000,
+	emit_x = 0.37e-6,
+	emit_y = 0.037e-6,
+	matched_to_cell = PAR,
+&end
+
+&track
+&end
+

@@ -1,0 +1,73 @@
+{\bf NB:} Although this element is correct insofar as it uses the
+fields for a pure TM110 mode, it is recommended that the {\tt RFDF}
+element be used instead.  In a real deflecting cavity with entrance
+and exit tubes, the deflecting mode is a hybrid TE/TM mode, in which
+the deflection has no dependence on the radial coordinate.
+
+To derive the field expansion, we start with some results from
+Jackson\cite{Jackson}, section 8.7.  The longitudinal electric field
+for a TM mode is just
+\begin{equation}
+E_z = - 2 i E_0 \Psi(\rho, \phi) \cos \left(\frac{p \pi z}{d}\right) e^{-i\omega t},
+\end{equation}
+where $p$ is an integer, $d$ is the length of the cavity, and we use
+cylindrical coordinates $(\rho, \phi, z)$.  The factor of $-2i$ represents a
+choice of sign and phase convention.  We are interested in the
+TM110 mode, so we set $p=0$.  In this case, we have
+\begin{equation}
+E_x = E_y = 0 
+\end{equation}
+and (using CGS units)
+\begin{equation}
+\vec{H} = - 2 i E_0 \frac{i \epsilon \omega}{c k^2} \hat{z} \times \nabla \Psi e^{-i \omega t}.
+\end{equation}
+For a cylindrical cavity, the function $\Psi$ for the $m=1$ aximuthal mode is 
+\begin{equation}
+\Psi(\rho, \phi) = J_1 (k \rho) \cos \phi,
+\end{equation}
+where $k = x_{11}/R$, $x_{11}$ is the first zero of $J_1(x)$, and $R$ is the cavity radius.
+We don't need to know the cavity radius, since $k = \omega/c$, where $\omega$ is the
+resonant frequency.  By choosing $\cos\phi$ for the aximuthal dependence, we'll get 
+a magnetic field primarily in the vertical direction.
+
+In MKS units, the magnetic field is
+\begin{equation}
+\vec{B} = \frac{2 E_0}{k c} e^{-i \omega t} \left( \hat{\rho} \frac{J_1(k\rho)}{\rho} \sin \phi
+        + \hat{\phi} \cos\phi \frac{\partial J_1(k\rho)}{\partial \rho}\right).
+\end{equation}
+
+Using {\tt mathematica}, we expanded these expressions to sixth order
+in $k*\rho$.  Here, we present only the expressions to second
+order. Taking the real parts only, we now have
+\begin{eqnarray}
+E_z & \approx & E_0 k \rho \cos \phi \sin \omega t \\
+c B_\rho  & \approx & E_0 \left(1 - \frac{k^2 \rho^2}{8}\right)\sin\phi \cos\omega t \\
+c B_\phi  & \approx & E_0 \left(1 - \frac{3 k^2 \rho^2}{8}\right)\cos\phi \cos\omega t 
+\end{eqnarray}
+The Cartesian components of $\vec{B}$ can be computed easily
+\begin{eqnarray}
+c B_x & = & c B_\rho\cos\phi - c B_\phi\sin\phi \\
+      & = & \frac{E_0}{4} \rho^2 k^2 \cos\phi \sin\phi \cos\omega t \\
+c B_y & = & c B_\rho\sin\phi + c B_\phi\cos\phi \\
+      & = & E_0 \left(1 - \frac{k^2\rho^2 (2 \cos^2\phi + 1)}{8}\right) \cos\omega t 
+\end{eqnarray}
+
+The Lorentz force on an electron is $F = -e E_z \hat{z} - e c \vec{\beta} \times \vec{B}$,
+giving
+\begin{eqnarray}
+F_x/e & = & \beta_z c B_y \\
+F_y/e & = & -\beta_z c B_x \\
+F_z/e & = & -E_z - \beta_x c B_y + \beta_y c B_x 
+\end{eqnarray}
+We see that for $\rho \rightarrow 0$, we have $E_z = 0$, $B_x = 0$, and
+\begin{equation}
+c B_y = E_0 \cos \omega t.
+\end{equation}
+Hence, for $\omega t=0$ and $E_0>0$ we have $F_x>0$.  This explains
+our choice of sign and phase convention above.  Indeed, owing to the
+factor of $2$, we have a peak deflection of $e E_0 L/E$, where $L$ is
+the cavity length and $E$ the beam energy.  Thus, if $V = E_0 L$ is
+specified in volts, and the beam energy expressed in electron volts,
+the deflection is simply the ratio of the two.  As a result, we've
+chosen to parametrize the deflection strength simply by referring to
+the ``deflecting voltage,'' $V$.

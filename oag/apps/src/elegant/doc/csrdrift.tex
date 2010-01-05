@@ -1,0 +1,77 @@
+This element has a number of models for simulation of CSR in drift
+spaces following CSRCSBEND elements.  Note that all models allow
+support splitting the drift into multiple CSRDRIFT elements.
+One can also have intervening elements like quadrupoles,
+as often happens in chicanes.  The CSR effects inside such
+intervening elements are applied in the CSRDRIFT downstream of
+the element.
+
+For a discussion of some of the methods behind this element, see
+M. Borland, ``Simple method for particle tracking with coherent
+synchrotron radiation,'' Phys. Rev. ST Accel. Beams 4, 070701 (2001).
+
+{\bf N.B.}: by default, this element uses 1 CSR kick (N\_KICKS=1) at the
+center of the drift.  This is usually not a good choice.  I usually
+use the DZ parameter instead of N\_KICKS, and set it to something
+like 0.01 (meters).  The user should vary this parameter to assess
+how small it needs to be.
+
+The models are as following, in order of decreasing sophistication and accuracy:
+\begin{itemize}
+\item G. Stupakov's extension of Saldin et al.  Set USE\_STUPAKOV=1.
+The most advanced model at present is based on a private communication
+from G. Stupakov (SLAC), which extends equation 87 of the one-dimensional
+treatment of Saldin et al. (NIM A 398 (1997) 373-394) to include the
+post-dipole region.  This model includes not only the attenuation of the
+CSR as one proceeds along the drift, but also the change in the shape of
+the ``wake.''
+
+This model has the most sophisticated treatment for intervening
+elements of any of the models.  For example, if you have a sequence
+{\tt CSRCSBEND}-{\tt CSRDRIFT}-{\tt CSRDRIFT} and compare it with the
+sequence {\tt CSRCSBEND}-{\tt CSRDRIFT}-{\tt DRIFT} -{\tt CSRDRIFT},
+keeping the total drift length constant, you'll find no change in the
+CSR-induced energy modulation.  The model back-propagates to the
+beginning of the intervening element and performs the CSR computations
+starting from there.
+
+This is the slowest model to run.  It uses the same binning and
+smoothing parameters as the upstream CSRCSBEND.  If run time is a
+problem, compare it to the other models and use only if you get
+different answers.
+
+\item M. Borland's model based on Saldin et al. equations 53 and 54.
+Set USE\_SALDIN54=1.  This model computes the fall-off of the CSR wake
+from the work of Saldin and coworkers, as described in the reference
+above.  It does not compute the change in the shape of the wake.  The
+fall-off is computed approximately as well, based on the fall-off for
+a rectangular current distribution.  The length of this rectangular
+bunch is taken to be twice the bunch length computed according to the
+BUNCHLENGTH\_MODE parameter (see below).  If your bunch is nearly
+rectangular, then you probably want BUNCHLENGTH\_MODE of
+``90-percentile''.
+
+\item Exponential attenuation of a CSR wake with unchanging shape.
+There are two options here.  First, you can provide the attenuation
+length yourself, using the ATTENUATION\_LENGTH parameter.  Second, you
+can set USE\_OVERTAKING\_LENGTH=1 and let {\tt elegant} compute the
+overtaking length for use as the attenuation length.  In addition, you
+can multiply this result by a factor if you wish, using the
+OL\_MULTIPLIER parameter.
+
+\item Beam-spreading model.  This model is not recommended.  It is
+based on the seemingly plausible idea that CSR spreads out just like
+any synchrotron radiation, thus decreasing the intensity.  The model
+doesn't reproduce experiments.
+
+\end{itemize}
+
+The ``Saldin 54'' and ``overtaking-length'' models rely on computation
+of the bunch length, which is controlled with the BUNCHLENGTH\_MODE
+parameter.  Nominally, one should use the true RMS, but when the beam
+has temporal spikes, it isn't always clear that this is the best
+choice.  The choices are ``rms'', ``68-percentile'', and
+``90-percentile''.  The last two imply using half the length
+determined from the given percentile in place of the rms bunch length.
+I usually use 68-percentile, which is the default.
+

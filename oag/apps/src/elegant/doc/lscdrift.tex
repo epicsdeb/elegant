@@ -1,0 +1,13 @@
+This element simulates longitudinal space charge in a drift space using the
+method described in \cite{Huang2004}.  This is based on the 
+longitudinal space charge impedance per unit length
+\begin{equation}
+  Z_{lsc}(k) = \frac{i Z_0}{\pi k r_b^2} \left[ 1 - \frac{kr_b}{\gamma}K_1 \left(\frac{kr_b}{\gamma}\right)\right]
+\end{equation}
+
+If {\tt L} is 0 and {\tt LEFFECTIVE} is not, then the element provides a
+LSC kick with impedance given by $Z_{lsc} L_{effective}$. This can be used
+to insert an LSC kick that integrates the longitudinal space charge effect
+of a section of a lattice.  This should be used only for cases 
+where there is very little relative longitudinal motion of particles.
+

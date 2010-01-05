@@ -1,0 +1,42 @@
+#!/bin/sh  
+# \
+exec oagtclsh "$0" "$@"
+
+set auto_path [linsert $auto_path 0  /usr/local/oag/apps/lib/$env(HOST_ARCH)]
+set auto_path [linsert $auto_path 0 /usr/local/oag/lib_patch/$env(HOST_ARCH)]
+APSStandardSetup
+
+set usage {usage: elegant2shower <input> <output> [-reference "x y xp yp"]}
+if {[llength $argv]!=2 && [llength $argv]!=4} {
+    return -code error "$usage (1)"
+}
+set input  [lindex $argv 0]
+set output [lindex $argv 1]
+if ![file exists $input] {
+    return -code error "not found: $input"
+}
+if [file exists $output] {
+    return -code error "exists: $output"
+}
+
+set reference "0 0 0 0"
+set args [lrange $argv 2 end]
+if {[APSStrictParseArguments {reference}]} {
+	return -code error "$usage (2)"
+}
+set xref [lindex [split $reference] 0]
+set yref [lindex [split $reference] 1]
+set xpref [lindex [split $reference] 2]
+set ypref [lindex [split $reference] 3]
+
+exec sddsprocess $input -pipe=out \
+	"-define=column,w,xp sqr yp sqr + 1 + sqrt rec" \
+	"-define=column,u,xp $xpref - w *" \
+	"-define=column,v,yp $ypref - w *" \
+	"-define=column,Energy,p sqr 1 + sqrt mev *,units=MeV" \
+	"-define=column,z,0,units=m" \
+	"-redefine=column,x,x $xref -,units=m" \
+	"-redefine=column,y,y $yref -,units=m" \
+	"-reprint=parameter,Type,electrons" \
+	| sddsconvert -pipe=in $output -retain=column,u,v,w,x,y,z,Energy,t
+

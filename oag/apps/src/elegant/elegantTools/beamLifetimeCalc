@@ -1,0 +1,1260 @@
+#!/bin/sh  
+# \
+exec oagwish "$0" "$@"
+
+#
+# $Log: beamLifetimeCalc,v $
+# Revision 1.2  2007/08/07 19:15:17  shang
+# fixed bugs that referenceValue(dampingTimeH), referenceValue(damppingTimeV) are not being computed before recompute the lifetime and these caused the error when a recomputing request was issused.
+#
+# Revision 1.1  2007/03/30 16:50:28  soliday
+# Moved from directory above.
+#
+# Revision 1.18  2007/03/16 02:13:42  borland
+# Corrected the calculation of the bunch length to include the effect of the
+# centroid motion.
+#
+# Revision 1.17  2006/11/09 19:20:58  emery
+# For Haissinski equation solving, the momentum compaction
+# entered will override the value in the file of the lattice input tab.
+#
+# Revision 1.16  2006/01/11 20:23:23  emery
+# Added resistive part of broadband impedance.
+# Default value is R=3 kOhm, corresponding to
+# PAC 2001 publication result. Indented
+# Haissinski section.
+#
+# Revision 1.15  2005/11/04 16:27:06  borland
+# Added Xiao's code for space charge element SCMULT.
+#
+# Revision 1.13  2005/07/25 16:54:55  borland
+# Fixed problems with BunchLength read in from variation file.
+#
+# Revision 1.12  2005/06/10 15:52:34  borland
+# Quantum lifetime now includes the transverse aperture limit.
+#
+# Revision 1.11  2005/02/04 15:26:14  emery
+# Changed default number of bunches from 23 to 24, which will
+# change the default value of bunch current.
+#
+# Revision 1.10  2004/12/09 20:25:53  borland
+# Added selection of the aperture-limiting plane.
+#
+# Revision 1.9  2004/11/10 20:51:35  borland
+# Decreased tolerance on Haissinski evaluation.
+#
+# Revision 1.8  2004/10/26 16:41:36  borland
+# Added command buttons to file entry boxes.
+#
+# Revision 1.7  2004/09/23 21:27:40  borland
+# Added optional variation of Energy, EnergySpread, and RfVoltage from file.
+# Haissinski equation now uses script value of energy spread.
+#
+# Revision 1.6  2004/07/22 20:33:29  borland
+# Now recalculates lifetimes when the bunch current is changed.
+#
+# Revision 1.5  2004/06/23 22:26:24  borland
+# Default values now give approximately the right Touschek lifetime for APS.
+# Added control of iteration parameters for Haissinski equation.
+#
+# Revision 1.4  2004/06/23 19:49:49  borland
+# Added option for computing the bunch length using the haissinski program.
+#
+# Revision 1.3  2004/04/19 22:42:29  borland
+# First an errors in the location of some widgets (wrong tab frame).
+#
+# Revision 1.2  2004/04/06 22:04:19  borland
+# Uses the DTouschek.sdds file from /usr/local/oag/apps/configData/elegant.
+# No longer has a default lattice in the oagData area.
+# Reorganized some of the tab widgets and entry items to be more logical.
+#
+# Revision 1.1  2004/04/01 16:28:46  borland
+# Moved from tcltkapp/oagapp area.
+#
+# Revision 1.32  2004/02/18 00:54:27  borland
+# Fixed spelling of Touschek in scan output file.
+#
+# Revision 1.31  2002/09/10 16:39:35  borland
+# Made some widgets wider and taller.  Added commandline options for
+# specifying application directory and twiss input file.
+#
+# Revision 1.30  2002/06/27 22:34:58  emery
+# Added synchrotron frequency calculation.
+#
+# Revision 1.29  2002/05/28 23:12:46  emery
+# Changed some default beam parameters.
+#
+# Revision 1.28  2002/05/28 23:03:37  emery
+# Added tab widgets for pressure tab.
+#
+# Revision 1.27  2002/05/28 00:25:10  emery
+# Put the various frames in tab widgets so that
+# the whole window can be seen in a smaller PC display.
+#
+# Revision 1.26  2001/01/02 20:24:31  borland
+# Computes average beta from the lattice file.
+#
+# Revision 1.25  2000/03/17 19:54:16  emery
+# Updated gas species list. Changed defaults of touschek flag,
+# bunch pattern, energy aperture, emittance, coupling, rf voltage.
+#
+# Revision 1.24  1999/10/16 19:06:59  borland
+# Now detects insufficient rf voltage.
+#
+# Revision 1.23  1999/10/11 20:29:31  borland
+# Increased width of some numeric fields.
+#
+# Revision 1.22  1999/04/16 20:53:36  borland
+# Accepts superperiodicity for lattice.  Also allows choosing ZAP "convention"
+# for adding Touschek rate into other rates.
+#
+# Revision 1.21  1999/04/16 19:58:30  borland
+# Now loads parameters of lattice (e.g., alpha, emittance) from lattice
+# file.
+#
+# Revision 1.20  1999/04/16 18:46:07  borland
+# After discussion with Shaukat Kahn, removed the log(2) from the Touschek lifetime.
+# The standard formula gives the halflife, which is added reciprocally to the
+# exponential lifetimes from other sources in order to combine the scattering
+# rates.
+#
+# Revision 1.19  1999/01/12 18:59:17  borland
+# Now use logarithmic interpolation of the Touschek integral (D).
+# Also, reverted to tau = half-life/log(2); can't see why I ever
+# changed this in the first place.
+#
+# Revision 1.18  1998/09/03 16:03:54  borland
+# Fixed ln(2) factor in Touschek lifetime computation.  Was dividing by
+# this factor when I should have multiplied.
+#
+# Revision 1.17  1997/08/13 15:11:24  borland
+# Added a simple user-specified bunch length increase factor.
+#
+# Revision 1.16  1997/08/13 14:15:21  borland
+# Made some widgets smaller and rearranged others to make the screen smaller.
+#
+# Revision 1.15  1997/08/12 23:02:04  borland
+# Added more variables, including rf voltage and computation of rf acceptance.
+#
+# Revision 1.14  1997/08/11 22:42:05  borland
+# Fixed bugs in file output introduced during last change.
+#
+# Revision 1.13  1997/08/11 22:30:24  borland
+# Added more gas species, changed defaults to give reasonable agreement with
+# real results in SR.
+#
+# Revision 1.12  1996/11/11 19:21:55  borland
+# Added "Run w/File..." button to allow variation using data from an SDDS
+# file.  Shortened some labels to make the screen smaller.
+#
+# Revision 1.11  1996/11/08 21:26:27  borland
+# Removed control for "screening" terms and set screening=0 as default.
+# Believe these terms duplicate the electron scattering terms...
+#
+# Revision 1.10  1996/11/08 20:58:52  borland
+# Added context help to many widgets.  Also added button to launch
+# quickSDDSplot with data file as argument.
+#
+# Revision 1.9  1996/11/08 20:42:47  borland
+# Now allows selection of up to 3 specific molecular gas components and
+# their relative partial pressure.
+#
+# Revision 1.8  1996/11/08 19:12:41  borland
+# Corrected Z and default atoms/molecule again.  Need to rewrite code to
+# do this right.
+#
+# Revision 1.7  1996/11/08 19:04:04  borland
+# Corrected default Z and "atoms"/molecule.
+#
+# Revision 1.6  1996/11/08 17:07:45  borland
+# Added multiple gas species.  Changed default values to correspond
+# to nominal 100mA with 1nT and gas species as per J. Noonan.
+#
+# Revision 1.5  1996/10/30 19:24:25  borland
+# Clear file button leaves directory name intact.
+#
+# Revision 1.4  1996/10/30 19:21:37  borland
+# Added more output to files (includes parameters involved in Touschek calc).
+#
+# Revision 1.3  1996/10/30 18:49:56  borland
+# Allow disabling of electron scattering terms.
+#
+# Revision 1.2  1996/10/30 18:29:03  borland
+# Fixed problem with lattice file reference.  Now remove all temporary files
+# after Touschek calculation.
+#
+# Revision 1.1  1996/10/30 17:54:55  borland
+# First version.  Derived from gasScatLifetime (now obsolete).
+#
+#
+
+set auto_path [linsert $auto_path 0  /usr/local/oag/apps/lib/$env(HOST_ARCH)]
+set auto_path [linsert $auto_path 0 /usr/local/oag/lib_patch/$env(HOST_ARCH)]
+APSDebugPath
+
+set CVSRevisionAuthor "\$Revision: 1.2 $ \$Author: shang $"
+
+APSApplication . -name beamLifetimeCalc -version $CVSRevisionAuthor -overview \
+  "Calculates the gas scattering lifetime due to single Coulomb scattering and
+brehmstrahlung, plus the Touschek lifetime."
+
+set applicationDir $OAGGlobal(OAGAppConfigDataDirectory)/elegant
+set latticeFile ""
+set args $argv
+if [llength $args]>1 {
+    if {[APSStrictParseArguments {applicationDir latticeFile}]} {
+        return -code error {usage: beamLifetimeCalc [-applicationDir <directoryName>] [-latticeFile <filename>]}
+    }
+}
+
+set status Working.
+APSScrolledStatus .status -parent .userFrame -textVariable status -width 90 \
+  -height 10
+update
+
+proc setStatus {text} {
+    APSSetVarAndUpdate status "[clock format [clock seconds] -format %H:%M:%S:] $text"
+}
+
+proc SetGasDefaults {} {
+    global component pressureFrac pressure temperature
+    set component(1) H2O
+    set pressureFrac(1) 0.02
+    set component(2) CO
+    set pressureFrac(2) 0.21
+    set component(3) H2
+    set pressureFrac(3) 0.66
+    set component(4) CO2
+    set pressureFrac(4) 0.04
+    set component(5) CH4
+    set pressureFrac(5) 0.07
+    set pressure 0.5
+    set temperature 300
+}
+
+SetGasDefaults
+set NGas [llength [array names component]]
+set betaAve 13.5
+set aperturePlane y
+set acceptance 1.55e-6
+set energyAperture 0.022
+set effectiveEnergyAperture 0
+set energy 7
+set referenceEnergy 7
+set screening 0
+set electrons 1
+set emittance 8.5e-9
+set dampingTime 4.73
+set alpha 2.28e-4
+set Uo 5.45
+set harmonic 1296
+set rfVoltage 9.5
+set coupling 0.01
+set energySpread 9.6e-4
+set bunchCurrent [expr 102.0/(24.0)]
+set bunchLength 7.0
+set bunchLengthFactor [expr 10.0/7.0]
+set useHaissinski 0
+set haissinskiSteps 100
+set haissinskiPoints 4000
+set haissinskiFraction 0.01
+set haissinskiDivisor 100.0
+set haissinskiIterations 1000
+set haissinskiTolerance 0.0001
+# Defaults for APS. From PAC 2001,
+# "Measurement of the Longitudinal Microwave Instability in the APS Storage Ring"
+# Y. Chae, L. Emery, et al.
+set broadBandImpedanceZn 0.5
+set broadBandImpedanceR 3e3
+set revolutionFrequency 271.55e3
+# default area for lattice.
+set touschekIntegralFile $applicationDir/DTouschek.sdds 
+set touschek 1
+set ZAPTouschek 0
+
+set widgetList [APSTabFrame .parameters -parent .userFrame -label "" \
+                          -labelList {"Gas Input" "Calc. Options" \
+                                        "Lattice Input" \
+                                        "Beam Inputs" \
+                                        "Variation" \
+                                        "Loss Rates and Lifetimes" } \
+                          -width 900 -height 400 \
+                          -tabPosition n]
+
+set widget [lindex $widgetList 0]
+
+APSFrame .input -parent $widget -label "Inputs"
+set w $widget.input.frame
+frame $w.pt
+pack $w.pt
+APSLabeledEntry .pres -parent $w.pt -label "Pressure (nT):" \
+  -textVariable pressure -width 8 \
+  -contextHelp "Enter the total gas pressure." -packOption "-side left"
+APSLabeledEntry .temperature -parent $w.pt -label "Temperature (K):" \
+  -textVariable temperature -width 4 \
+  -contextHelp "Enter the temperature of the gas." -packOption "-side left" 
+
+set variableList ""
+for {set gas 1} {$gas<=$NGas} {incr gas} {
+    APSRadioButtonFrame .component$gas -parent $w -label "Gas $gas:" \
+      -orientation horizontal -variable component($gas) \
+      -buttonList {H2O CO H2 CO2 CH4 None} \
+      -valueList {H2O CO H2 CO2 CH4 None} \
+      -commandList {RecomputeOutputs RecomputeOutputs RecomputeOutputs \
+                      RecomputeOutputs RecomputeOutputs RecomputeOutputs} -contextHelp \
+      "Choose the molecule for gas component $gas."
+    lappend variableList pressureFrac($gas)
+}
+
+APSLabeledEntryFrame .presFrac -parent $w -label "Pres. frac.:  " \
+  -variableList $variableList -width 7 -orientation horizontal -contextHelp \
+  "Enter the fraction of the gas pressure due to each of the $NGas components."
+bind $w.presFrac.frame.entry1 <Return> "AdjustPressureFraction 1"
+bind $w.presFrac.frame.entry2 <Return> "AdjustPressureFraction 2"
+bind $w.presFrac.frame.entry3 <Return> "AdjustPressureFraction 3"
+bind $w.presFrac.frame.entry4 <Return> "AdjustPressureFraction 4"
+bind $w.presFrac.frame.entry5 <Return> "AdjustPressureFraction 5"
+APSButton .presDefaults -parent $w -text "Revert to gas defaults" -packOption "-side top" \
+    -command {SetGasDefaults;RecomputeOutputs} \
+    -contextHelp "Sets gas component and pressure fraction values back to defaults."
+
+foreach widget {.pt.pres .pt.temperature} {
+    bind $w$widget.entry <Return> RecomputeOutputs
+}
+
+set widget [lindex $widgetList 1]
+APSFrame .calc -parent $widget -label ""
+set w $widget.calc.frame
+APSRadioButtonFrame .electrons -parent $w -label "Electron scattering?:" -variable electrons \
+  -buttonList {Yes No} -valueList {1 0} -orientation horizontal \
+  -commandList {RecomputeOutputs RecomputeOutputs} -contextHelp \
+  "Select whether or not to include the effects of scattering on electrons of the gas atoms."
+
+APSRadioButtonFrame .touschek -parent $w -label "Touschek?:" -variable touschek \
+  -buttonList {Yes No} -valueList {1 0} -orientation horizontal \
+  -commandList {RecomputeOutputs RecomputeOutputs} -contextHelp \
+  "Select whether to calculate and include the Touschek effect."
+
+APSRadioButtonFrame .touschekZAP -parent $w -label "ZAP-convention Touschek?:" -variable ZAPTouschek \
+    -buttonList {Yes No} -valueList {1 0} -orientation horizontal \
+  -commandList {RecomputeOutputs RecomputeOutputs} -contextHelp \
+  "Select whether to multiply the Touschek rate by log(2) when combining with other rates.  ZAP does this."
+
+#APSRadioButtonFrame .screening -parent $w -label "Include screening:" -variable screening \
+#  -buttonList {Yes No} -valueList {1 0} -orientation horizontal \
+#  -commandList {RecomputeOutputs RecomputeOutputs} -contextHelp \
+#  "Select whether or not to include the effects of screening of the nucleus by atomic electrons."
+
+set widget [lindex $widgetList 2] 
+APSFrame .lattice -parent $widget -label ""
+set w $widget.lattice.frame
+set superperiods 40
+
+APSLabeledEntry .lattice -parent $w -label "Lattice file:" -commandButton 1 -textVariable latticeFile -width 75 \
+    -fileSelectButton 1 -fileSelectPattern "*.twi" \
+  -contextHelp "Give the name of an elegant twiss output file.  Required for Touschek lifetime calculations."
+
+APSLabeledEntry .superperiods -parent $w -label "Superperiods:" -textVariable superperiods -width 10 \
+    -contextHelp "Give the number of superperiods.  If the lattice file has the whole ring, set to 1."
+
+APSRadioButtonFrame .plane -parent $w -label "Aperture-limiting plane: " -variable aperturePlane \
+    -buttonList "x y" -valueList "x y" -orientation horizontal -contextHelp \
+    "Select the plane for which the aperture is most limited."
+
+APSLabeledEntry .betaAve -parent $w -label "Average beta (m):" -textVariable betaAve -width 22 \
+  -contextHelp "Enter the average beta function in the aperture limiting plane."
+
+APSLabeledEntry .acceptance -parent $w -label "Betatron acceptance (m):" -textVariable \
+  acceptance -width 22 -contextHelp \
+  "Enter the betatron acceptance in the aperture limiting plane."
+
+APSLabeledEntry .energy -parent $w -label "Energy (GeV):" -textVariable energy -width 22 \
+  -contextHelp "Enter the beam energy."
+
+foreach widget {.betaAve .acceptance .energy } {
+    bind $w$widget.entry <Return> RecomputeOutputs
+}
+
+
+APSButton .loadlattice -parent $w -text "Load parameters from lattice file" \
+    -command "LoadLatticeParameters" -packOption "-side bottom" -contextHelp \
+    "Loads lattice parameters from the lattice file."
+
+set widget [lindex $widgetList 3]
+APSFrame .inputl -parent $widget -label "Inputs" -packOption "-side left -anchor n"
+set w $widget.inputl.frame
+APSLabeledEntry .emit -parent $w -label "Emittance (m-rad):" -textVariable emittance -width 22 \
+  -contextHelp "Enter the emittance of the beam."
+APSLabeledEntry .coupling -parent $w -label "Coupling:" -textVariable coupling -width 22 \
+  -contextHelp "Enter the emittance coupling."
+APSLabeledEntry .energySpread -parent $w -label "Energy spread:" -textVariable energySpread  -width 22 \
+  -contextHelp "Enter the RMS fractional energy spread."
+APSLabeledEntry .enAperture -parent $w -label "Energy acceptance (+/-):" -textVariable energyAperture -width 22 \
+  -contextHelp "Enter the fractional energy acceptance, e.g., the rf bucket half-height."
+APSLabeledOutput .effEnAperture -parent $w -label "Effective en. accept.:" \
+  -textVariable effectiveEnergyAperture -width 22 \
+  -contextHelp "Shows the computed effective energy aperture."
+APSLabeledEntry .alpha -parent $w -label "Momentum compaction:" -textVariable alpha -width 22 \
+  -contextHelp "Enter the momentum compaction factor."
+APSLabeledEntry .uo -parent $w -label "Energy loss (MV/turn):" -textVariable Uo -width 22 \
+  -contextHelp "Enter the energy loss per turn."
+APSLabeledEntry .harmonic -parent $w -label "Harmonic number:" -textVariable harmonic -width 22 \
+  -contextHelp "Enter the harmonic number."
+foreach widget1 {emit coupling energySpread enAperture effEnAperture alpha uo harmonic } {
+    bind $w.$widget1.entry <Return> RecomputeOutputs
+}
+
+APSFrame .inputr -parent $widget -label "Inputs" -packOption "-side right -anchor n"
+set w $widget.inputr.frame
+APSLabeledEntry .rfvoltage -parent $w -label "Rf Voltage (MV):" -textVariable rfVoltage -width 22 \
+  -contextHelp "Enter the rf voltage."
+APSLabeledEntry .syncFrequency -parent $w -label "Synchrotron frequency (kHz):" -textVariable syncFrequency -width 22 \
+  -contextHelp "Shows the synchrotron frequency."
+APSLabeledEntry .dtime -parent $w -label "Long. damping time (ms):" -textVariable dampingTime -width 22 \
+  -contextHelp "Enter the longitudinal damping time."
+APSLabeledEntry .xdtime -parent $w -label "H damping time (ms):" -textVariable dampingTimeH -width 22 \
+  -contextHelp "Enter the horizontal damping time."
+APSLabeledEntry .ydtime -parent $w -label "V damping time (ms):" -textVariable dampingTimeV -width 22 \
+  -contextHelp "Enter the vertical damping time."
+APSLabeledEntry .bunchCurrent -parent $w -label "Bunch current (mA):" -textVariable bunchCurrent -width 22 \
+  -contextHelp "Enter the current per bunch."
+APSLabeledEntry .bunchLengthFactor -parent $w -label "Bunch length factor:" \
+  -textVariable bunchLengthFactor -width 22 \
+  -contextHelp "Enter a factor by which to multiply the bunch length."
+APSRadioButtonFrame .useHaissinski -parent $w -label "Haissinski eqn? " \
+    -orientation horizontal -variable useHaissinski -buttonList "Yes Yes(verbose) No" -valueList "1 2 0" \
+    -contextHelp "If Yes, then the bunch length is computed by solving the Haissinski equation with Emery's haissinski program.  If No, then the user-supplied bunch length factor is applied."
+APSButton .setHaissinski -parent $w -text "Set solver parameters..." \
+    -command HaissinskiParameterDialog -packOption "-side top" \
+    -contextHelp "Pops up a dialog box for parameters of the Haissinski equation solver"
+APSLabeledEntry .impedanceZn -parent $w -label "Z/n (Ohms): " \
+  -textVariable broadBandImpedanceZn -width 22 -contextHelp \
+  "Enter the inductive part (Z/n) broad-band impedance for use in Haissinski equation."
+APSLabeledEntry .impedanceR -parent $w -label "R (Ohms): " \
+  -textVariable broadBandImpedanceR -width 22 -contextHelp \
+  "Enter the resistive part (R) of the broad-band impedance for use in Haissinski equation."
+APSLabeledOutput .bunchLength -parent $w -label "Bunch length (mm):" -textVariable bunchLength -width 22 \
+  -contextHelp "Shows the RMS bunch length."
+APSLabeledEntry .revolutionFrequency -parent $w -label "Rev. freq. (Hz):" -textVariable revolutionFrequency \
+        -width 22 -contextHelp "Enter the revolution frequency."
+foreach widget1 {dtime bunchLengthFactor revolutionFrequency rfvoltage syncFrequency \
+               impedanceZn impedanceR bunchCurrent} {
+    bind $w.$widget1.entry <Return> RecomputeOutputs
+}
+bind $w.useHaissinski.frame.button1 <ButtonRelease> RecomputeOutputs
+bind $w.useHaissinski.frame.button2 <ButtonRelease> RecomputeOutputs
+
+
+set widget [lindex $widgetList 4] 
+APSFrame .vary -parent $widget -label "Automatic variation"
+set w $widget.vary.frame
+set varyChoice None
+set varyPoints 0
+set varyStart 0
+set varyEnd 0
+set mergeAfterVariation 1
+APSRadioButtonFrame .vlist -parent $w -label "Variable:" \
+  -orientation horizontal \
+  -limitPerRow 4 \
+  -buttonList {Pressure "Average beta" "Acceptance" "Energy acceptance" "User lifetime" Coupling "Bunch current" "rf Voltage" "Energy"} \
+  -valueList {pressure betaAve acceptance energyAperture tauUser coupling bunchCurrent rfVoltage energy}  \
+  -variable varyChoice -contextHelp \
+  "Select a quantity to vary."
+APSLabeledEntry .vstart -parent $w -label "Start:" -width 8 \
+  -textVariable varyStart -contextHelp "Enter the start value for variation."
+APSLabeledEntry .vend -parent $w -label "End:" -width 8 \
+  -textVariable varyEnd  -contextHelp "Enter the end value for variation."
+APSLabeledEntry .vpoints -parent $w -label "Points:" -width 8 \
+  -textVariable varyPoints -contextHelp "Enter the number of points to compute."
+APSButton .run -parent $w -text Run -command \
+  RunVariation -contextHelp "Run the variation specified by the above settings.  You must give a file under Output."
+APSButton .runread -parent $w -text "Run w/file..." -command \
+  RunVariationFromFile -contextHelp "Varies lifetime parameters using data from an SDDS file.  The quantities must have the same names as appear in the output files from this application."
+APSCheckButtonFrame .merge -parent $w -label ""  -orientation horizontal -contextHelp \
+  "Select options for variation.  Merge means merge the variation input file into the output file when done." \
+  -variableList {mergeAfterVariation} -buttonList {Merge} 
+
+set widget [lindex $widgetList 4] 
+APSFrame .output -parent $widget -label "Output" \
+  -contextHelp "Controls output of computations to an SDDS file."
+set w $widget.output.frame
+set outputWidget $widget.output.frame
+set outputFile ""
+set outputFID ""
+APSLabeledEntry .file -parent $w -width 80 -label "File:" -commandButton 1 \
+  -textVariable outputFile -contextHelp \
+  "Enter the name of an SDDS file to which computations will be written."
+APSButton .clearfile -parent $w -text "Clear file" -command ClearOutputFile \
+  -contextHelp "Clears the filename, closing any existing file."
+APSButton .startfile -parent $w -text "Start file" -command StartOutputFile \
+  -contextHelp "Begins logging of data to the named file."
+APSButton .quickPlot -parent $w -text "quickSDDSplot" -command {RunQuickSDDSPlot $outputFile} \
+  -contextHelp "Launches quickSDDSplot utility to plot the named file."
+
+
+set widget [lindex $widgetList 5] 
+APSFrame .xsection -parent $widget -label "Loss Rates (1/h)" \
+  -packOption "-side left -anchor n" \
+  -contextHelp "Lists the loss rates due to individual types of scattering, along with the total loss rate."
+set w $widget.xsection.frame
+set rateEN 0
+set rateEE 0
+set rateIN 0
+set rateIE 0
+set rateTouschek 0
+set rateQuantum 0
+APSLabeledOutput .rateEN -parent $w -label  "Elastic nuclear:   " \
+  -textVariable rateEN -width 25
+APSLabeledOutput .rateEE -parent $w -label  "Elastic electron:  " \
+  -textVariable rateEE  -width 25
+APSLabeledOutput .rateIN -parent $w -label  "Inelastic nuclear: " \
+  -textVariable rateIN  -width 25
+APSLabeledOutput .rateIE -parent $w -label  "Inelastic electron:" \
+  -textVariable rateIE -width 25
+APSLabeledOutput .rateT  -parent $w -label  "Touschek:          " \
+  -textVariable rateTouschek -width 25
+APSLabeledOutput .rateQ -parent $w -label   "Quantum:           " \
+  -textVariable rateQuantum -width 25
+APSLabeledOutput .rateUser -parent $w -label "Other:             " \
+  -textVariable rateUser -width 25
+APSLabeledOutput .rate -parent $w -label     "Total:             " \
+  -textVariable rate -width 25
+
+set widget [lindex $widgetList 5]
+APSFrame .lifetimes -parent $widget -label "Lifetimes (hours)" \
+  -packOption "-side left -anchor n" \
+  -contextHelp \
+  "Lists the lifetime for individual types of scattering taken by themselves.  Also gives the total lifetime.  You may also enter a lifetime value from some other effect besides those treated here, in the Other entry box."
+set w $widget.lifetimes.frame
+set tauEN 0
+set tauEE 0
+set tauIN 0
+set tauIE 0
+set tauTouschek 0
+set tauQuantum 0
+set tau 0
+set tauUser 1e10
+APSLabeledOutput .tauEN -parent $w -label "Elastic nuclear:   " \
+  -textVariable tauEN  -width 25
+APSLabeledOutput .tauEE -parent $w -label "Elastic electron:  " \
+  -textVariable tauEE  -width 25
+APSLabeledOutput .tauIN -parent $w -label "Inelastic nuclear: " \
+  -textVariable tauIN  -width 25
+APSLabeledOutput .tauIE -parent $w -label "Inelastic electron:" \
+  -textVariable tauIE -width 25
+APSLabeledOutput .tauT  -parent $w -label  "Touschek:          " \
+  -textVariable tauTouschek -width 25
+APSLabeledOutput .tauQ  -parent $w -label  "Quantum:           " \
+  -textVariable tauQuantum -width 25
+APSLabeledEntry .tauUser -parent $w -label "Other (user input):" \
+  -textVariable tauUser -width 25
+bind $w.tauUser.entry <Return> RecomputeOutputs
+APSLabeledOutput .tau -parent $w   -label   "Total:             " \
+   -textVariable tau -width 25
+
+proc RunQuickSDDSPlot {filename} {
+    if [string length $filename] {
+        exec quickSDDSplot -dataDirectory [file dirname $filename] \
+          -dataFileList [file tail $filename] \
+          -message "Plotting results from beamLifetimeCalc in file $filename" &
+        setStatus "Launched quickSDDSplot"
+    } else {
+        setStatus "No filename."
+    }
+}
+
+
+proc StartOutputFile {} {
+    global outputFile outputFID status outputWidget
+    
+    if ![string length $outputFile] {
+        setStatus "No filename."
+        return
+    }
+    if [file exists $outputFile] {
+        if ![APSMultipleChoice [APSUniqueName .] -question "$outputFile exists---overwrite?" \
+               -labelList {Yes No} -returnList {1 0}] {
+                   return
+               }
+    }
+    if [string length $outputFID] {
+        close $outputFID
+    }
+    set outputFID [open $outputFile w]
+    puts $outputFID SDDS1
+    putsColumnHeader $outputFID Pressure nT  double
+    global component
+    foreach gas [array names component] {
+        putsColumnHeader $outputFID Component$gas "" string
+    }
+    foreach gas [array names component] {
+        putsColumnHeader $outputFID PressureFraction$gas "" double
+    }
+    putsColumnHeader $outputFID betaAve m double
+    putsColumnHeader $outputFID Acceptance m double
+    putsColumnHeader $outputFID alpha "" double
+    putsColumnHeader $outputFID dampingTime ms double
+    putsColumnHeader $outputFID Uo MeV double
+    putsColumnHeader $outputFID Harmonic "" double
+    putsColumnHeader $outputFID rfVoltage MV double
+    putsColumnHeader $outputFID EnergyAperture "" double
+    putsColumnHeader $outputFID EffectiveEnergyAperture "" double
+    putsColumnHeader $outputFID Energy GeV double
+    putsColumnHeader $outputFID Screening "" long
+    putsColumnHeader $outputFID ElectronScattering "" double
+    putsColumnHeader $outputFID Temperature K double
+    putsColumnHeader $outputFID Emittance m-rad double
+    putsColumnHeader $outputFID Coupling "" double
+    putsColumnHeader $outputFID EnergySpread "" double
+    putsColumnHeader $outputFID BunchLength mm double
+    putsColumnHeader $outputFID BunchLengthFactor "" double
+    putsColumnHeader $outputFID BunchCurrent mA double
+    putsColumnHeader $outputFID RevFrequency Hz double
+    putsColumnHeader $outputFID Touschek "" long
+    putsColumnHeader $outputFID ZAPTouschek "" long
+    set typeList [list EN EE IN IE Touschek Quantum Other ""]
+    foreach type $typeList {
+        putsColumnHeader $outputFID Rate$type 1/h double
+    }
+    foreach type $typeList {
+        putsColumnHeader $outputFID tau$type h double
+    }
+    puts $outputFID "&data mode=ascii no_row_counts=1 &end"
+    flush $outputFID
+    $outputWidget.file.entry configure -state disabled
+    setStatus "Data being saved to $outputFile."
+}
+
+proc ClearOutputFile {} {
+    global outputFile outputFID outputWidget
+    set outputFile [file dirname $outputFile]
+    if [string compare $outputFile .]==0 {
+        set outputFile ""
+    }
+    catch {close $outputFID}
+    set outputFID ""
+    $outputWidget.file.entry configure -state normal
+    setStatus "Data not being saved to a file."
+}
+
+proc putsColumnHeader {fid name units type} {
+    if [string length $units] {
+        puts $fid "&column name=$name units=$units type=$type &end"
+    } else {
+        puts $fid "&column name=$name type=$type &end"
+    }
+}
+
+proc AdjustPressureFraction {changed} {
+    global pressureFrac component
+    set left [expr 1-$pressureFrac($changed)]
+    set sum 0
+    set count 0
+    foreach index [array names pressureFrac] {
+        if $pressureFrac($index)<=0 {
+            set pressureFrac($index) 0
+            set component($index) None
+        }
+        if $index==$changed continue
+        if $pressureFrac($index)>0 {
+            set sum [expr $sum+$pressureFrac($index)]
+            incr count
+        }
+    }
+    if $count {
+        foreach index [array names pressureFrac] {
+            if $index==$changed continue
+            set pressureFrac($index) [expr (1.0*$pressureFrac($index)*$left)/$sum]
+        }
+    }
+    RecomputeOutputs
+}
+
+proc NormalizePressureFractions {} {
+    global pressureFrac component 
+    set sum 0
+    set count 0
+    foreach index [array names pressureFrac] {
+        if [string compare $component($index) None]==0 {
+            set pressureFrac($index) 0
+        } elseif $pressureFrac($index) {
+            set sum [expr $sum+$pressureFrac($index)]
+            incr count
+        }
+    }
+    if !$count {
+        foreach index [array names pressureFrac] { 
+            if [string compare $component($index) None] {
+                incr count
+            }
+        }
+        if $count {
+            foreach index [array names pressureFrac] {
+                if [string compare $component($index) None] {
+                    set pressureFrac($index) [expr 1./$count]
+                }
+            } 
+        } else {
+            setStatus "No components/zero pressure"
+            return 0
+        }
+    }
+
+    foreach index [array names pressureFrac] {
+        if {!$pressureFrac($index) && [string compare $component($index) None]} {
+            set pressureFrac($index) [expr $sum/$count]
+        }
+    }
+    return 1
+}
+
+proc LoadLatticeParameters {} {
+    global referenceValue aperturePlane
+    global betaAve acceptance energyAperture energy screening temperature electrons
+    global pressure pressureFrac component
+    global tauEN tauEE tauIN tauIE tauUser tauTouschek tau tauQuantum
+    global rateEN rateEE rateIN rateIE rateUser rateTouschek rate rateQuantum
+    global outputFile outputFID touschek
+    global emittance coupling energySpread bunchLength bunchCurrent revolutionFrequency latticeFile
+    global dampingTime bunchLengthFactor dampingTimeH dampingTimeV
+    global effectiveEnergyAperture Uo rfVoltage alpha harmonic 
+    global superperiods
+
+    if {![string length $latticeFile] || ![file exists $latticeFile]} {
+        setStatus "Lattice file not given or nonexistent"
+        return 0
+    }
+    lappend twiParameterList \
+      alphac pCentral ex0 taudelta Sdelta0 U0 sLast beta${aperturePlane}First taux tauy
+    lappend tclVarList \
+      alpha pCentral emittance dampingTime energySpread Uo sLast beta${aperturePlane}First \
+	dampingTimeH dampingTimeV
+    if [catch {exec sddsprocess $latticeFile -pipe=out \
+                 -process=s,last,sLast -process=beta${aperturePlane},first,beta${aperturePlane}First \
+                 | sdds2stream -pipe=in -parameter=[join $twiParameterList ,] } dataList] {
+        setStatus "$dataList"
+        return 0
+    }
+    set index -1
+    foreach tclVar $tclVarList {
+        incr index
+        set $tclVar [format %.12g [lindex $dataList $index]]
+    }
+    global tcl_precision
+    set tcl_precision 12
+
+    if [catch {exec sddsinteg $latticeFile -pipe=out -integrate=beta${aperturePlane} -versus=s \
+                 |  sddsconvert -pipe -delete=parameter,beta* \
+                 | sddsprocess -pipe -process=s,last,sLast \
+                 -process=beta${aperturePlane}Integ,last,beta${aperturePlane}IntegLast \
+                 "-define=parameter,beta${aperturePlane}Ave,beta${aperturePlane}IntegLast sLast /,units=m" \
+                 | sdds2stream -pipe -param=beta${aperturePlane}Ave} result] {
+        return -code error "$result"
+    }
+    set betaAve $result
+    set dampingTime [expr $dampingTime*1e3]
+    set dampingTimeH [expr $dampingTimeH*1e3]
+    set dampingTimeV [expr $dampingTimeV*1e3]
+    set energy [expr $pCentral*0.51099906e-3]
+    set revolutionFrequency [expr 2.9979825e8/($superperiods*$sLast)]
+    set Uo [expr $Uo*$superperiods]
+    foreach item {energy emittance energySpread dampingTime dampingTimeH dampingTimeV Uo} {
+        set referenceValue($item) [expr 1.0*[set $item]]
+    }
+    set tcl_precision 17
+    RecomputeOutputs
+}
+
+proc RecomputeOutputs {args} {
+    global referenceValue
+    global betaAve acceptance energyAperture energy screening temperature electrons
+    global pressure pressureFrac component
+    global tauEN tauEE tauIN tauIE tauUser tauTouschek tau tauQuantum
+    global rateEN rateEE rateIN rateIE rateUser rateTouschek rate rateQuantum
+    global outputFile outputFID touschek
+    global emittance coupling energySpread bunchLength bunchCurrent revolutionFrequency latticeFile
+    global dampingTime bunchLengthFactor dampingTimeH dampingTimeV aperturePlane
+    global effectiveEnergyAperture Uo rfVoltage alpha harmonic syncFrequency
+    global touschekIntegralFile ZAPTouschek
+    global useHaissinski broadBandImpedanceZn broadBandImpedanceR
+
+    if ![string length $latticeFile] {
+        setStatus "No lattice file given."
+        return
+    }
+    
+    set statusCallback setStatus
+    set variableList ""
+    APSStrictParseArguments {statusCallback variableList}
+    if [string length $statusCallback] {
+        eval $statusCallback {"Working."}
+    }
+    set rce 2.81794e-15
+    set kblt 1.38066e-23
+    set c 2.99792458e8 
+    set cmks $c
+    
+    if [expr $energy!=$referenceValue(energy)] {
+        # do energy scaling 
+        eval $statusCallback {"Doing energy scaling from $referenceValue(energy) to $energy GeV"}
+        set ERatio [expr $energy/$referenceValue(energy)]
+        set emittance [expr $referenceValue(emittance)*pow($ERatio, 2)]
+        set energySpread [expr $referenceValue(energySpread)*$ERatio]
+        set dampingTime [expr $referenceValue(dampingTime)/pow($ERatio, 3)]
+        set dampingTimeH [expr $referenceValue(dampingTimeH)/pow($ERatio, 3)]
+        set dampingTimeV [expr $referenceValue(dampingTimeV)/pow($ERatio, 3)]
+        set Uo [expr $referenceValue(Uo)*pow($ERatio, 4)]
+    }
+    
+    if ![NormalizePressureFractions] return
+    
+    set q [expr $rfVoltage/(1.0*$Uo)]
+    if [catch {expr sqrt((2.0*$Uo*1e-3)/(3.1415926*$alpha*$harmonic*$energy)*\
+                           (sqrt($q*$q-1) - acos(1.0/$q)))} eRF] {
+        eval $statusCallback {"RF voltage too low.  Energy acceptance is zero."}
+        bell
+        bell
+        bell
+        return
+    }
+    if {$eRF>$energyAperture} {
+        set effectiveEnergyAperture $energyAperture
+    } else {
+        set effectiveEnergyAperture $eRF
+    }
+    
+    if [lsearch -exact $variableList BunchLength]==-1 {
+        # compute zero-current rms equilbrium bunch length in mm
+        set bunchLength [expr 1e3*$energySpread*$cmks* \
+                           sqrt($alpha/(2*3.1415926*$harmonic*$revolutionFrequency*$revolutionFrequency))* \
+                           sqrt($energy*1.0e3/sqrt($rfVoltage*$rfVoltage-$Uo*$Uo))]
+        if {!$useHaissinski} {
+            set bunchLength [expr $bunchLength*$bunchLengthFactor]
+        } else {
+            if [expr $broadBandImpedanceZn<=0] {
+                eval $statusCallback {"Broad-band impedance Z/n <= 0!"}
+            }
+            if [expr $broadBandImpedanceR<=0] {
+                eval $statusCallback {"Resistive part of broad-band impedance (R) <= 0!"}
+            }
+            global haissinskiDone superperiods haissinskiIterations haissinskiTolerance
+            global haissinskiSteps haissinskiPoints haissinskiFraction haissinskiDivisor
+            set Q [expr $bunchCurrent/1000.0/$revolutionFrequency]
+            set tmpRoot /tmp/[APSTmpString]
+            APSAddToTempFileList $tmpRoot.0 $tmpRoot.1
+            set haissinskiDone 0
+            set extraOption -outputLastStepOnly
+            if $useHaissinski==2 {
+                set extraOption -verbose
+            }
+            exec sddsprocess $latticeFile $tmpRoot.0 \
+              -redefine=parameter,Sdelta0,$energySpread \
+              -redef=para,alphac,$alpha
+            set unixCommand \
+              "haissinski $tmpRoot.0 $tmpRoot.1 -model=Zn=$broadBandImpedanceZn,R=$broadBandImpedanceR \
+            -charge=$Q -rf=voltage=[expr $rfVoltage*1e6],harmonic=$harmonic \
+            -steps=$haissinskiSteps \
+            $extraOption -superPeriods=$superperiods -energy=$energy \
+            -integration=deltaTime=[expr $bunchLength/1e3/$haissinskiDivisor/$cmks],points=$haissinskiPoints,fraction=$haissinskiFraction,iterations=$haissinskiIterations,tolerance=$haissinskiTolerance" 
+            if $useHaissinski==2 {
+                APSExecLog .haissinskiExec -unixCommand $unixCommand \
+                  -width 80 -height 20 -callback "set haissinskiDone 1"
+            } else {
+                APSExec -unixCommand $unixCommand -callback "set haissinskiDone 1"
+            }
+            APSWaitWithUpdate -waitSeconds 120 -updateInterval 5 -abortVariable haissinskiDone \
+              -updateCommand "eval $statusCallback {\"Waiting for Haissinski run...\"}"
+            if !$haissinskiDone {
+                eval $statusCallback {"Error: Haissinski run didn't complete in 120s."}
+                return
+            }
+            if [catch {exec sddsprocess $tmpRoot.1 -pipe=out \
+                         "-define=column,TimeDensity,Time Density *" \
+                         -process=Density,integ,DensityInteg,functionOf=Time \
+                         -process=TimeDensity,integ,TimeDensityInteg,functionOf=Time \
+                         "-define=parameter,meanTime,TimeDensityInteg DensityInteg /,units=s" \
+                         "-define=column,Time2Density,Time meanTime - sqr Density *" \
+                         -process=Time2Density,integ,Time2DensityInteg,functionOf=Time \
+                         "-define=parameter,bunchLength,Time2DensityInteg DensityInteg / sqrt c_mks * 1e3 *,units=mm" \
+                         | sddscollapse -pipe=in $tmpRoot.2} result] {
+                eval $statusCallback {"Error: Haissinski postprocessing error: $result"}
+                return
+            }
+            if $useHaissinski==2 {
+                exec sddsplot -column=Time,Density $tmpRoot.1 -split=page -separate=page &
+                exec sddsplot -column=Charge,bunchLength $tmpRoot.2 -graph=sym,scale=2,connect &
+            }           
+            set bunchLength [exec sddsprocess $tmpRoot.2 -pipe=out -clip=0,1,invert \
+                               | sdds2stream -pipe=in -column=bunchLength]
+            eval $statusCallback {"Bunch length is $bunchLength mm"}
+        }
+    }
+    
+    set syncFrequency [expr 1e-3 * $revolutionFrequency * \
+                         sqrt($alpha*$harmonic/(2*3.1415926)) * \
+                         sqrt(sqrt($rfVoltage*$rfVoltage-$Uo*$Uo)/($energy*1.0e3))]
+    
+    set pressureFracSum 0
+    foreach index [array names pressureFrac] {
+        set pressureFracSum [expr $pressureFracSum+$pressureFrac($index)]
+    }
+    if {$pressureFracSum<=0 || $pressure<=0} {
+        if [string length $statusCallback] {
+            eval $statusCallback {"No components/zero pressure"}
+        }
+        return
+    }
+
+    if [expr abs($pressureFracSum-1)>0.001] {
+        foreach index [array names pressureFrac] {
+            set pressureFrac($index) [expr $pressureFrac($index)/$pressureFracSum]
+        }
+    }
+
+    foreach type {IN IE EN EE} {
+        set rate$type 0
+    }
+
+    foreach index [array names pressureFrac] {
+        if [string compare $component($index) None]==0 {
+            continue
+        }
+        switch $component($index) {
+            H2O { 
+                set ZList [list 1 8]
+                set nList [list 2 1]
+            }
+            CO {
+                set ZList [list 6 8]
+                set nList [list 1 1]
+            }
+            H2 {
+                set ZList 1
+                set nList 2
+            }
+            N2 {
+                set ZList 7
+                set nList 2
+            }
+            CO2 {
+                set ZList [list 6 8]
+                set nList [list 1 2]
+            }
+            CH4 {
+                set ZList [list 6 1]
+                set nList [list 1 4]
+            }
+        }
+        
+            
+        set pindex 0
+        foreach part $ZList {
+            set Z0 [lindex $ZList $pindex]
+            set n0 [lindex $nList $pindex]
+            incr pindex 
+
+            set Zr3 [expr pow($Z0, 1./3.)]
+            if $screening {
+                set csi [expr log(1440/($Zr3*$Zr3))/log(183/$Zr3)]
+            } else {
+                set csi 0
+            }
+
+            set c0 [expr 16.0*$rce*$rce/411.0]
+            set gamma [expr $energy/0.511e-3]
+            set sigmaIN \
+              [expr $c0*$Z0*($Z0+$csi)*(log(1./$effectiveEnergyAperture)-5./8.)*log(183/$Zr3)]
+            set sigmaIE \
+              [expr $c0*$Z0*(log(2.5*$gamma/$effectiveEnergyAperture)-1.4)*(log(1./$effectiveEnergyAperture)-5./8.)]
+            set sigmaEN \
+              [expr 2*3.1415926*pow($rce/$gamma, 2)*$betaAve/$acceptance*$Z0*($Z0+$screening)]
+            set sigmaEE \
+              [expr 2*3.1415926*pow($rce, 2)/$gamma*$Z0/$effectiveEnergyAperture]
+
+            set c1 [expr $n0*$pressure*$pressureFrac($index)*133.3e-9/($kblt*$temperature)*$c*3600.0]
+            foreach type {IN IE EN EE} {
+                set rate$type [expr [subst \$rate$type] + ($c1*[subst \$sigma$type])]
+            }
+        }
+    }
+    foreach type {IN IE EN EE} {
+        set tau$type [expr 1./[subst \$rate$type]]
+    }
+    if !$electrons {
+        set tauIE 1e10
+        set rateIE 1e-10
+        set tauEE 1e10
+        set rateEE 1e-10
+    }
+    if $touschek {
+        set tauTouschek [APSTouschekLifetime -latticeFile $latticeFile \
+                           -touschekIntegralFile $touschekIntegralFile \
+                           -emittance $emittance -coupling $coupling \
+                           -energySpread $energySpread \
+                           -energyAperture $effectiveEnergyAperture \
+                           -energy $energy -bunchLength $bunchLength \
+                           -bunchmA $bunchCurrent -revolutionFrequency $revolutionFrequency]
+    } else {
+        set tauTouschek 1e10
+    }
+    set rateTouschek [expr 1./$tauTouschek]
+    set rateUser [expr 1./$tauUser]
+
+    set x [expr pow((1.0*$effectiveEnergyAperture)/$energySpread, 2)/2.0]
+    if [expr $x>700] {
+        set x 700.0
+    }
+    set tauQuantum [expr ($dampingTime*0.001)/(2*3600)*exp($x)/$x]
+    if [expr $tauQuantum>1e10] {
+        set tauQuantum 1e10
+    }
+    set rateQuantum [expr 1./$tauQuantum]
+
+    if [string compare $aperturePlane "x"]==0 {
+	set x [expr $acceptance/(2*$emittance/(1+$coupling))]
+	set dtime $dampingTimeH
+    } else {
+	set x [expr $acceptance/(2*$emittance*$coupling/(1+$coupling))]
+	set dtime $dampingTimeV
+    }
+    if {[catch {set tauQT [expr ($dtime*0.001)/(2*3600)*exp($x)/$x]} result] || \
+	    [expr $tauQT>1e10]} {
+	set tauQT 1e10
+    }
+    set rateQuantum [expr $rateQuantum+1./$tauQT]
+    set tauQuantum [expr 1./$rateQuantum]
+
+    if $ZAPTouschek {
+        set TouschekFactor [expr log(2.0)]
+    } else {
+        set TouschekFactor 1
+    }
+    set rate [expr 1./$tauIN + 1./$tauIE + 1./$tauEN + 1./$tauEE + 1./$tauUser + $TouschekFactor/$tauTouschek \
+               + 1./$tauQuantum]
+    set tau [expr 1./$rate]
+
+    if [string length $outputFID] {
+        puts -nonewline $outputFID $pressure 
+        foreach gas [array names pressureFrac] {
+            puts -nonewline $outputFID " $component($gas) "
+        }
+        foreach gas [array names pressureFrac] {
+            puts -nonewline $outputFID " $pressureFrac($gas) "
+        }
+        puts -nonewline $outputFID "$betaAve $acceptance $alpha $dampingTime $Uo $harmonic "
+        puts -nonewline $outputFID "$rfVoltage $energyAperture $effectiveEnergyAperture "
+        puts -nonewline $outputFID "$energy $screening $electrons $temperature "
+        puts -nonewline $outputFID "$emittance $coupling $energySpread $bunchLength $bunchLengthFactor $bunchCurrent $revolutionFrequency $touschek $ZAPTouschek "
+        puts -nonewline $outputFID "$rateEN $rateEE $rateIN $rateIE $rateTouschek $rateQuantum $rateUser $rate "
+        puts $outputFID "$tauEN $tauEE $tauIN $tauIE $tauTouschek $tauQuantum $tauUser $tau"
+        flush $outputFID
+    }
+    if [string length $statusCallback] {
+        eval $statusCallback {"Ready."}
+    }
+}
+
+set variationFile ""
+proc RunVariationFromFile {} {
+    global variationFile outputFID
+    if [string length $outputFID]==0 {
+        setStatus "No file open---can't vary."
+        return
+    }
+    setStatus "Select file to take input from."
+    set filename [APSFileSelectDialog [APSUniqueName .] -title "Variation File Dialog"]
+    if [string length $filename]==0 {
+        return
+    }
+    if [catch {sdds open $filename} fid] {
+        setStatus "$fid"
+        return
+    }
+    if [catch {sdds getNames $fid} dataColumn] {
+        setStatus "$dataColumn"
+        return
+    }
+    lappend possibleName Pressure betaAve Acceptance EnergyAperture Coupling BunchLength BunchCurrent Emittance \
+      EnergySpread rfVoltage Energy
+    lappend internalName pressure betaAve acceptance energyAperture coupling bunchLength bunchCurrent emittance \
+      energySpread rfVoltage Energy
+    eval global $internalName
+    set variableColumn ""
+    set variableVariable ""
+    set index 0
+    foreach elem $possibleName {
+        if [lsearch -exact $dataColumn $elem]!=-1 {
+            lappend variableColumn $elem
+            lappend variableVariable [lindex $internalName $index]
+        }
+        incr index
+    }
+    if [llength $variableColumn]==0 {
+        setStatus "No valid columns found in $filename."
+        setStatus "This application looks for: [join $possibleName ,]"
+        return
+    }
+    setStatus "Will vary [join $variableColumn ,]"
+    foreach elem $variableColumn {
+        if [catch {sdds getColumn $fid $elem -page 0} ${elem}Data] {
+            setStatus "Problem reading $elem: [subst \$${elem}Data]"
+            return
+        }
+        set rows [llength [subst \$${elem}Data]]
+    }
+    setStatus "$rows rows in file."
+    for {set row 0} {$row<$rows} {incr row} {
+        setStatus "Working on row $row."
+        set index 0
+        foreach elem $variableColumn {
+            set [lindex $variableVariable $index] [expr [lindex [subst \$${elem}Data] $row]]
+            incr index
+        }
+        if [catch {RecomputeOutputs -statusCallback "setStatus" -variableList $variableColumn} result]  {
+	    setStatus "$result"
+	}
+    }
+    setStatus "Done with variation."
+    if [catch {sdds close $fid} result] {
+        setStatus "Problem closing file: $result"
+    }
+    global mergeAfterVariation outputFile
+    if $mergeAfterVariation {
+        set output $outputFile
+        ClearOutputFile
+        if [catch {exec sddsxref $output $filename -nowarning} result] {
+            setStatus "Problem merging files: $result"
+        }
+    }
+}
+
+
+proc RunVariation {} {
+    global pressure Z nAtoms fracPres betaAve acceptance energyAperture energy screening temperature
+    global varyChoice status varyPoints varyStart varyEnd outputFID
+    if [string compare $varyChoice None]==0 {
+        setStatus "No quantity chosen for variation."
+        return
+    }
+    if [string length $outputFID]==0 {
+        setStatus "No file open---can't vary."
+        return
+    }
+    if $varyPoints<1 {
+        setStatus "At least two points required for variation."
+        return
+    }
+    if $varyStart<0 {
+        setStatus "Starting point is less than 0."
+        return
+    }
+    set delta [expr ($varyEnd-1.0*$varyStart)/($varyPoints-1.0)]
+    global $varyChoice
+    for {set i 0} {$i<$varyPoints} {incr i} {
+        set $varyChoice [expr $varyStart+$i*$delta]
+        RecomputeOutputs
+    }
+    setStatus "Variation done."
+}
+
+proc APSTouschekLifetime {args} {
+    set latticeFile /home/helios/oagData/beamLifetimeCalc/apsSector1.twi
+    set touschekIntegralFile /home/helios/oagData/beamLifetimeCalc/DTouschek.sdds
+    set emittance 8.2e-9
+    set coupling 0.1
+    set energySpread 9.6e-4
+    set energyAperture 0.0146
+    set energy 7
+    set bunchLength 0.006
+    set bunchmA 12 
+    set revolutionFrequency 271.55e3
+    APSStrictParseArguments {latticeFile emittance coupling energySpread energyAperture \
+        energy bunchLength touschekIntegralFile \
+        bunchmA revolutionFrequency}
+
+    if $bunchmA<=0 {
+        return 1e10
+    }
+    set gamma [expr $energy/0.511e-3]
+    set tmpFile /tmp/[APSTmpString]
+    set rce 2.81794092e-15
+    exec sddsprocess $latticeFile $tmpFile.1 \
+      -defi=param,emit,$emittance,units=m \
+      -defi=param,coupling,$coupling \
+      -defi=param,sigmap,$energySpread \
+      -defi=param,gamma,$gamma \
+      -defi=param,enAper,$energyAperture \
+      -defi=param,rce,$rce,units=m "-defi=param,sigmal,$bunchLength 1e3 /,units=m" \
+      {-defi=param,epsx,emit 1 coupling + /} \
+      {-defi=param,epsy,epsx coupling *} \
+      {-defi=col,sigmax,betax epsx * etax sigmap * sqr + sqrt} \
+      {-defi=col,sigmaxp,etaxp alphax betax / etax * + betax * sigmap * sqr sigmax sqr + sigmax sqr / epsx * betax / sqrt} \
+      {-defi=col,sigmay,betay epsy * sqrt} \
+      {-defi=col,zeta,enAper gamma / sigmaxp / sqr}  \
+      -process=zeta,min,zetaMin -process=zeta,max,zetaMax 
+    #catch {exec sdds2stream -parameter=zetaMin,zetaMax  $tmpFile.1 } result
+    # setStatus "zeta range: [lindex $result 0] -> [lindex $result 1]"
+
+    exec sddsinterp $touschekIntegralFile \
+      -pipe=out -column=zeta,LnD \
+      -fileValues=$tmpFile.1,column=zeta \
+      | sddsxref -pipe $tmpFile.1 -transfer=param,* \
+      | sddsprocess -pipe {-define=column,factor,LnD exp sigmaxp / sigmax / sigmay /} \
+      | tee $tmpFile.2 \
+      | sddsinteg -integrate=factor -versus=s -pipe \
+      | sddsxref $tmpFile.2 -pipe -transfer=param,* \
+      | sddsprocess -pipe \
+      -process=s,spread,sSpread -process=factorInteg,last,factorIntegTotal \
+      {-defin=param,InvHalfLifeFactor,factorIntegTotal sSpread / rce sqr * c_mks * 8 / pi / gamma 3 pow / sigmal / enAper sqr /}  \
+      | sddscollapse -pipe=in $tmpFile.sdds 
+    #catch {exec sdds2stream $tmpFile.sdds -column=factorIntegTotal,sSpread } dataList
+    #setStatus "average of D: [expr [lindex $dataList 0]/[lindex $dataList 1]]"
+
+    catch {APSGetSDDSColumn -column InvHalfLifeFactor -fileName $tmpFile.sdds} InvHalfLifeFactor
+    catch {eval exec rm $tmpFile.1 $tmpFile.2 $tmpFile.sdds}
+    return [expr 1./(3600.0*$InvHalfLifeFactor*($bunchmA*1e-3/$revolutionFrequency/1.602e-19))]
+}
+
+proc HaissinskiParameterDialog {} {
+    global haissinskiDialogOk 
+    set haissinskiDialogOk 0
+    APSDialogBox .haissinski -okCommand "set haissinskiDialogOk 1" \
+        -name "Haissinski equation solver parameters"
+    set w .haissinski.userFrame
+    global haissinskiSteps haissinskiPoints haissinskiFraction haissinskiDivisor haissinskiIterations
+    APSLabeledEntry .le1 -parent $w \
+      -textVariable haissinskiSteps -label "Charge steps: " \
+       -type integer \
+      -contextHelp "The number of charge steps to take between zero and the desired charge.  More steps takes longer but gives improved numerical behavior."
+    
+    APSLabeledEntry .le2 -parent $w \
+      -textVariable haissinskiPoints -label "Profile points: " \
+       -type integer \
+      -contextHelp "The number of points on the density profile.  Too few points leads to inaccurate souations.  Too many points may increase convergence problems and running time."
+    
+    APSLabeledEntry .le3 -parent $w \
+      -textVariable haissinskiDivisor -label "Point-spacing divisor: " \
+      -contextHelp "Ratio of the zero-current rms bunch length to the point spacing in the profile."
+    
+    APSLabeledEntry .le4 -parent $w \
+      -textVariable haissinskiFraction -label "Iteration fraction: " \
+      -contextHelp "The gain factor for the iteration.  If you get unsmooth profiles, try decreasing this."
+    
+    APSLabeledEntry .le5 -parent $w \
+      -textVariable haissinskiIterations -label "Maximum iterations: " \
+      -contextHelp "Maximum number of iterations at each charge level.  If you get unsmooth profiles, try increasing this."
+    
+    APSLabeledEntry .le6 -parent $w \
+      -textVariable haissinskiTolerance -label "Convergence criterion: " \
+      -contextHelp "Convergence criterion, giving the maximum allowed fractional deviation. If you get unsmooth profiles, try decreasing this."
+    
+    update
+    tkwait window .haissinski
+}
+
+update
+if [string length $latticeFile] {
+    LoadLatticeParameters
+} else {
+    RecomputeOutputs
+}

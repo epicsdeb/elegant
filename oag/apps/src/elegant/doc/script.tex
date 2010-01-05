@@ -1,0 +1,74 @@
+This element allows expanding {\tt elegant} by using external scripts
+(or programs) as elements in a beamline.    Here are requirements for the 
+script:
+\begin{itemize}
+\item It must be executable from the commandline.
+\item It must read the initial particle distribution from an SDDS file.
+This file will have the usual columns that an {\tt elegant} phase-space
+output file  has, along with the parameter {\tt Charge} giving the 
+beam charge in Coulombs. The file will contain a single data page.
+\item It must write the final particle distribution to an SDDS file.
+This file should have all of the columns and parameters that appear in the
+initial distribution file.  Additional columns and parameters will be ignored,
+as will all pages but the first.
+\end{itemize}
+
+The {\tt SCRIPT} element works best if the script accepts commandline
+arguments.  In this case, the {\tt COMMAND} parameter is used to
+provide a template for creating a command to run the script.  The {\tt COMMAND}
+string may contain the following substitutable fields:
+\begin{enumerate}
+\item \verb|%i| --- Will be replaced by the name of the input file to the script.
+({\tt elegant} writes the initial particle distribution to this file.)
+\item \verb|%o| --- Will be replaced by the name of the output file from the script.
+({\tt elegant} expects the script to write the final particle distribution to this file.)
+\item \verb|%np0|, \verb|%np1|, ..., \verb|%np9| --- Will be replaced by the value of
+ Numerical Parameter 0, 1, ..., 9.  This can be used to pass to the script values that
+ are parameters of the element definition.  For example, if one wanted to vary parameters 
+ or add errors to the parameter, one would use this facility.
+\item \verb|%sp0|,  \verb|%sp1|, ..., \verb|%sp9| --- Will be replaced by the value of
+ String Parameter 0, 1, ..., 9.  This can be used to pass to the script values that
+ are parameters of the element definition. 
+\end{enumerate}
+
+Here's an example of a {\tt SCRIPT} {\tt COMMAND}:
+\begin{flushleft}
+\begin{verbatim}
+myScript -input %i -output %o -accuracy %np0 -type %sp0
+\end{verbatim}
+\end{flushleft}
+In this example, the script {\tt myScript} takes four commandline arguments, giving
+the names of the input and output files, an accuracy requirement, and a type specifier.
+By default, {\tt elegant} will choose unique, temporary filenames to use in communicating
+with the script.  The actual command when executed might be something like
+\begin{flushleft}
+\begin{verbatim}
+myScript -input tmp391929.1 -output tmp391929.2 -accuracy 1.5e-6 -type scraper
+\end{verbatim}
+\end{flushleft}
+where for this example I've assumed {\tt NP0=1.5e-6} and {\tt SP0=''scraper''}.
+
+If you have a program (e.g., a FORTRAN program) that does not accept
+commandline arguments, you can easily wrap it in a Tcl/Tk simple script to
+handle this.  Alternatively, you can force {\tt elegant} to use specified 
+files for communicating with the script.  This is done using the {\tt ROOTNAME},
+{\tt INPUT\_EXTENSION}, and {\tt OUTPUT\_EXTENSION} parameters.
+So if your program was {\tt crass} and it expected its input (output) in files
+{\tt crass.in} ({\tt crass.out}), then you'd use
+\begin{flushleft}
+\begin{verbatim}
+S1: script,command=''crass'',rootname=''crass'',input_extension=''in'',&
+output_extension=''out''
+\end{verbatim}
+\end{flushleft}
+
+For purposes of computing concatenated transport matrices, Twiss
+parameters, response matrices, etc., {\tt elegant} will perform
+initial tracking through the \verb|SCRIPT| element using an ensemble
+of 25 particles.  If this is not desirable, then set the parameter
+\verb|DRIFT_MATRIX| to a non-zero value.  This will force
+\verb|elegant| to treat the element as a drift space for any
+calculations that involve transport matrices.  Examples of where one
+might want to use this feature would be a \verb|SCRIPT| that involves
+randomization (e.g., scattering), particle loss, or particle creation.
+
