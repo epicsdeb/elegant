@@ -1,0 +1,18 @@
+Source: elegant
+Section: unknown
+Priority: extra
+Maintainer: guobao shen <shengb@bnl.gov>
+Build-Depends: debhelper (>= 7)
+Standards-Version: 3.7.3
+Homepage: <insert the upstream URL, if relevant>
+
+Package: elegant
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: <insert up to 60 chars description>
+ <insert long description, indented with spaces>
+
+Package: elegant-doc
+Architecture: all
+Description: Documentation for elegant
+ <insert long description, indented with spaces>

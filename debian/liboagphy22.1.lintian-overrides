@@ -1,0 +1,3 @@
+sdds-dev: file-in-unusual-dir
+sdds-dev: non-standard-dir-in-usr
+# EPICS lives in usr/epics

@@ -1,0 +1,10 @@
+elegant for Debian
+------------------
+ elegant stands for ``ELEctron Generation ANd Tracking,'' a somewhat out-of-date 
+ description of a fully 6D accelerator program that now does much more than generate 
+ particle distributions and track them. elegant, written entirely in the C programming 
+ language, uses a variant of the MAD input format to describe accelerators, which 
+ may be either transport lines, circular machines, or a combination thereof. Program
+ execution is driven by commands in a namelist format. 
+
+ -- guobao shen <shengb@bnl.gov>  Tue, 05 Jan 2010 11:23:52 -0500
