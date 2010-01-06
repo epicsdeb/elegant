@@ -18,7 +18,7 @@ brighte$(OBJ) :
 hunt$(OBJ) :
 	f77 /compile_only /threads /libs:dll /fast ..\\hunt.f
 else
-F77 = f77
+F77 = gfortran
 ifdef AIX
 F77 = g77
 endif
