@@ -42,7 +42,7 @@ urgent$(OBJ):
 us$(OBJ):
 	ifort /compile_only /threads /libs:dll ..\\us.f
 else
-F77 = gfortran
+F77 = g77
 ifdef AIX
 F77 = g77
 endif
