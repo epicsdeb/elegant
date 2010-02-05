@@ -1,5 +1,5 @@
 Source: elegant
-Section: admin
+Section: contrib/admin
 Priority: extra
 Maintainer: Guobao Shen <shengb@bnl.gov>
 Build-Depends: debhelper (>= 7), cdbs,
@@ -38,6 +38,7 @@ Description: ELEctron Generation ANd Tracking package
  OAG runtime libraries
 
 Package: elegant-doc
+Section: contrib/doc
 Architecture: all
 Description: Documentation for elegant
  Elegant stands for "ELEctron Generation ANd Tracking", a somewhat 
