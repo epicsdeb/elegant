@@ -5,7 +5,7 @@ include /usr/share/cdbs/1/rules/debhelper.mk
 include /usr/share/cdbs/1/class/makefile.mk
 include /usr/share/cdbs/1/rules/utils.mk
 
-EPICS_HOST_ARCH:=$(shell /usr/epics/base/startup/EpicsHostArch)
+EPICS_HOST_ARCH:=$(shell /usr/lib/epics/startup/EpicsHostArch)
 
 # chop out the source version from Changelog (ie 1.12.20)
 SOV=$(shell echo "$(DEB_NOEPOCH_VERSION)"| cut -f 1 -d '-')
@@ -16,7 +16,7 @@ DEB_MAKE_ENVVARS = PATH="$(CURDIR)/oag/apps/bin/$(EPICS_HOST_ARCH):$$PATH" \
 LD_LIBRARY_PATH="$(CURDIR)/oag/apps/lib/$(EPICS_HOST_ARCH):$$LD_LIBRARY_PATH"
 
 DEB_MAKE_MAKEVARS = EPICS_HOST_ARCH=$(EPICS_HOST_ARCH) USE_RPATH=NO \
-SHRLIB_VERSION=$(SOV) ABS_INSTALL_DIR=/usr/epics/base
+SHRLIB_VERSION=$(SOV) ABS_INSTALL_DIR=/usr/lib/epics
 
 # Prevent CFLAGS and similar from being passed to EPICS since
 # this will break cross-builds of things.
@@ -27,7 +27,7 @@ DEB_BUILDDIR=oag/apps/src/
 post-patches:: ./oag/apps/configure
 
 ./oag/apps/configure:
-	ln -s /usr/epics/extensions/configure ./oag/apps/
+	ln -s /usr/lib/epics/extensions/configure ./oag/apps/
 
 move-src: move-src-stamp
 
@@ -36,7 +36,7 @@ clean::
 
 DEB_MAKE_CLEAN_TARGET =
 DEB_MAKE_BUILD_TARGET = all
-DEB_MAKE_INSTALL_TARGET = all INSTALL_LOCATION=$(CURDIR)/debian/tmp/usr/epics/base
+DEB_MAKE_INSTALL_TARGET = all INSTALL_LOCATION=$(CURDIR)/debian/tmp/usr/lib/epics
 DEB_MAKE_CHECK_TARGET =
 
 # Build Rules
@@ -57,7 +57,7 @@ libdir=$(instroot)/usr/lib
 datadir=$(instroot)/usr/share/elegant
 docdir=$(instroot)/usr/share/doc/elegant
 
-epicsroot=$(instroot)/usr/epics/base
+epicsroot=$(instroot)/usr/lib/epics
 epicslibs=$(epicsroot)/lib/$(EPICS_HOST_ARCH)
 epicsbins=$(epicsroot)/bin/$(EPICS_HOST_ARCH)
 
@@ -67,7 +67,7 @@ install/liboagphy22.1::
 	install -d $(docdir)
 	install -d $(epicslibs)
 
-	# Basic libraries go in /usr/epics/base/lib
+	# Basic libraries go in /usr/lib/epics/lib
 	for ff in $(epicslibs)/*.so;do \
 		mv $$ff.$(SOV) $(libdir)/; \
 		rm -f $$ff; \
@@ -82,5 +82,5 @@ install/elegant-util::
 
 	# Basic commands go in /usr/bin
 	for ff in $(epicsbins)/*;do \
-		ln -s ../epics/base/bin/$(EPICS_HOST_ARCH)/`basename $$ff` $(bindir)/`basename $$ff`; \
+		ln -s ../lib/epics/bin/$(EPICS_HOST_ARCH)/`basename $$ff` $(bindir)/`basename $$ff`; \
 	done

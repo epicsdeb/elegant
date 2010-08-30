@@ -3,8 +3,8 @@ Section: contrib/admin
 Priority: extra
 Maintainer: Guobao Shen <shengb@bnl.gov>
 Build-Depends: debhelper (>= 7), cdbs,
-               epics-extensions-dev (>= 20091204),
-               sdds-util (>=2.7), sdds-dev (>=2.7),
+               epics-extensions-dev (>= 20091204.1),
+               sdds-util (>=2.7-2), sdds-dev (>=2.7),
                zlib1g-dev, liblapack-dev, gfortran, libgfortran3, 
 Standards-Version: 3.8.0
 Homepage: http://www.aps.anl.gov/Accelerator_Systems_Division/Operations_Analysis/software.shtml

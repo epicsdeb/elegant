@@ -1,2 +1,2 @@
 usr/lib/lib*.so.*
-usr/epics/base/lib/linux-*
+usr/lib/epics/lib/linux-*
