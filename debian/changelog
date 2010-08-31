@@ -1,3 +1,10 @@
+elegant (22.1-2) unstable; urgency=low
+
+  * Change sections to hint at packages which should be contrib
+  * Use EPICS from /usr/lib/epics
+
+ -- Michael Davidsaver <mdavidsaver@bnl.gov>  Mon, 30 Aug 2010 17:38:54 -0400
+
 elegant (22.1-1) unstable; urgency=low
 
   * Initial release
