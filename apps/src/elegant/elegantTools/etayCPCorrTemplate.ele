@@ -1,0 +1,72 @@
+&transmute_elements name=*, type=*MON*, exclude=<bpmPattern>  new_type=MARK &end
+&transmute_elements name=*, type=WATCH, new_type=MARK &end
+
+&run_setup
+	lattice = <lattice>,
+	use_beamline = <beamline>,
+	p_central_mev = 7e3,
+	default_order = <order>,
+        rootname = <rootname>
+        semaphore_file = %s.done,
+&end
+
+&load_parameters
+        filename = <inputParameters>
+        change_defined_values = 1
+        allow_missing_elements = 1
+	allow_missing_parameters = 1
+&end
+
+&alter_elements
+        name = *, type=CSBEND, item=SYNCH_RAD, value=1, allow_missing_elements=1 &end
+&alter_elements
+        name = *, type=CSBEND, item=ISR, value=1, allow_missing_elements=1 &end
+&alter_elements
+        name = *, type=CSBEND, item=ISR1PART, value=0, allow_missing_elements=1 &end
+&alter_elements
+        name = *, type=KQUAD, item=SYNCH_RAD, value=1, allow_missing_elements=1 &end
+&alter_elements
+        name = *, type=KQUAD, item=ISR, value=1, allow_missing_elements=1 &end
+&alter_elements
+        name = *, type=KQUAD, item=ISR1PART, value=0, allow_missing_elements=1 &end
+&alter_elements
+        name = *, type=KSEXT, item=SYNCH_RAD, value=1, allow_missing_elements=1 &end
+&alter_elements
+        name = *, type=KSEXT, item=ISR, value=1, allow_missing_elements=1 &end
+&alter_elements
+        name = *, type=KSEXT, item=ISR1PART, value=0, allow_missing_elements=1 &end
+
+&moments_output
+        filename = "%s.mom",
+        matched = 1,
+        equilibrium = 1,
+        radiation = 1,
+&end
+
+&twiss_output
+        matched = 1
+        filename = %s.twi
+        concat_order = <order>
+        radiation_integrals = 1
+&end
+
+&steering_element name = <hcPattern>, element_type = HKICK, item = KICK, tweek = 1e-6, plane = "h" &end
+&steering_element name = <vcPattern>, element_type = VKICK, item = KICK, tweek = 1e-6, plane = "v" &end
+
+&correct
+    mode = "orbit", method = "global",
+    verbose = 0, n_iterations = 0, n_xy_cycles = 1,
+    fixed_length = 1
+&end
+
+&correction_matrix_output
+	response[2] = <rootname>.vhrm, <rootname>.hvrm,
+        coupled = 1,
+        fixed_length = 1
+&end
+
+&run_control &end
+
+&bunched_beam &end
+
+&track &end

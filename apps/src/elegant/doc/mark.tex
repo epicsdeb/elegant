@@ -1,0 +1,46 @@
+If {\tt FITPOINT=0}, this element results only in generation of additional output rows in the various 
+files that contain output vs s.  For example, Twiss parameters, closed orbits, and matrices vs s will
+all contain a row for each occurrence of  each marker element.
+
+If {\tt FITPOINT=1}, the element has additional functionality in the context of optimizations.  In particular,
+for occurrence {\em N} of the defined element {\em Element}, a series of symbols are created of the
+form {\em Element}\#{\em N}.{\em quantity}, where {\em quantity} has the following values:
+\begin{itemize}
+\item The quantity {\tt pCentral} will be available, giving the reference value of $\beta\gamma$ at the marker location.
+\item The quantities {\tt Cx}, {\tt Cxp}, {\tt Cy}, {\tt Cyp}, {\tt Cs}, and {\tt Cdelta} will be available,
+ giving coordinate centroid values from tracking to the marker location.
+\item The quantity {\tt Particles} will be available, giving the number of particles tracked to the marker location.
+\item The quantities {\tt s{\em i}{\em j}} will be available, giving $\langle ( x_i -\langle x_i\rangle)( x_j - \langle x_j \rangle)\rangle$
+ at the marker location, where $1\leq i\leq 6$ and $i<j\leq 6$.
+\item The quantities {\tt betaxBeam}, {\tt alphaxBeam}, {\tt betayBeam}, and {\tt alphayBeam}, which are the twiss parameters computed
+      from the beam moments obtained by tracking, will be available.
+\item The quantities {\tt R{\em i}{\em j}} will be available, for $1\leq i \leq 6$ and $1\leq j \leq 6$,
+  giving the accumulated first-order transport matrix to the marker location.
+\item If the default matrix order (as set in {\tt run\_setup}) is 2 or greater, the quantities {\tt T{\em i}{\em j}{\em k}} 
+  will be available, for $1\leq i \leq 6$, $1\leq j \leq 6$, and $1\leq k \leq j$,
+  giving the accumulated second-order transport matrix to the marker location.
+\item If Twiss parameter calculations are being performed (via {\tt twiss\_output} with {\tt output\_at\_each\_step=1}), then the quantities
+  {\tt alphax}, {\tt betax}, {\tt nux}, {\tt etax}, {\tt etapx}, and {\tt etaxp}, along with similarly-named
+  quantities for the vertical plane, will be available, giving twiss parameter values at the marker location.
+  Note that {\tt etapx} and {\tt etaxp} are the same, being alternate names for $\eta_x^\prime$.  If radiation integrals are requested,
+  the values of the radiation integrals are available in the quantities {\tt I1}, {\tt I2}, etc.
+\item If coupled Twiss parameter calculations are being performed (via {\tt coupled\_twiss\_output} with {\tt output\_at\_each\_step=1}),
+  then the quantities  \verb|betax1|, \verb|betax2|, \verb|betay1|, \verb|betay2|, \verb|cetax|, \verb|cetay|, and \verb|tilt| will be available.
+  (These are the two beta functions for x and y, the coupled dispersion values for x and y, and the beam tilt). 
+\item If moments calculations are being performed (via {\tt moments\_output} with  {\tt output\_at\_each\_step=1}), then the quantities 
+ {\tt s{\em i}{\em j}m}, $1 \leq i\leq j\leq 6$, giving the 21 unique elements of the sigma matrix.  The quantities {\tt c{\em i}m}, $1\leq i \leq 6$,
+ are also created, giving the 6 centroids from the moments computation.  The
+ {\tt m} on the end of the symbols is to distinguish them from the moments computed from tracking.
+\item If closed orbit calculations are being performed (via {\tt correct} or {\tt closed\_orbit}), then
+  the quantities {\tt xco}, {\tt yco}, {\tt xpco}, and {\tt ypco} will be available, giving the
+  x and y closed orbits and their slopes, respectively, at the marker location.
+\item If floor coordinate calculations are begin performed (via {\tt floor\_coordinates}), then the quantities
+  {\tt X}, {\tt Y}, {\tt Z}, {\tt theta}, {\tt phi}, {\tt psi}, and {\tt s} will be available.  These are,
+  respectively, the three position coordinates, the three angle coordinates, and the total arc length
+  at the marker location.
+\end{itemize}
+
+The misalignment controls for this element are non-functional, in the sense that they do not affect the beam.
+However, when combined with external scripts and the \verb|GROUP| parameter, one can use this feature to
+implement girder misalignments using pairs of markers to indicate the ends of the girders.  A future version
+of {\tt elegant} will implement this internally.

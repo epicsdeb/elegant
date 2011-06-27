@@ -1,0 +1,120 @@
+&transmute_elements
+        name = *, type = WATCH, 
+        new_type = DRIF
+&end
+
+&transmute_elements
+        name = *, type = MAXAMP,
+        new_type = DRIF,
+	disable = <includeApertures>
+&end
+&transmute_elements
+        name = *, type = ?COL,
+        new_type = DRIF,
+	disable = <includeApertures>
+&end
+&transmute_elements
+        name = *, type = SCRAPER,
+        new_type = DRIF,
+	disable = <includeApertures>
+&end
+
+&run_setup
+	lattice = <kickLatticeFile>,
+	use_beamline = <kickBeamline>
+	p_central_mev = <momentum>,
+        rootname = <mainDirectory>/<mainPrefix>MomentumAperture<suffix>,
+        semaphore_file = %s.done,
+        magnets = %s.mag,
+	random_number_seed = <seed>,
+        default_order = <defaultOrder>,
+        tracking_updates = 0,
+&end
+
+&load_parameters
+        filename_list = " <parameterFileList>",
+	force_occurence_data = <forceOccurence>,
+        change_defined_values = 1,
+        allow_missing_elements = 1,
+        allow_missing_parameters = 1,
+        allow_missing_files = 1,
+&end
+sinclude(<ERRORPARAM>)
+
+&aperture_input
+        input = <apertureFile>,
+        periodic = 1,
+        disable = <apertureFileDisable>
+&end
+
+&twiss_output
+	final_values_only = 1,
+	statistics = 1,
+	radiation_integrals = 1
+&end
+
+&alter_elements name=*, type=*SBEN*, item=EDGE_ORDER, value=1, allow_missing_elements=1, allow_missing_parameters=1 &end
+&alter_elements name=*, type=*SBEN*, item=ORDER, value=1, allow_missing_elements=1, allow_missing_parameters=1 &end
+
+&run_control
+	n_steps = <numberOfSeeds>,
+        n_passes = <turns>,
+&end
+
+&twiss_output
+	filename = %s.twi,
+	final_values_only = 1,
+	statistics = 1,
+	output_at_each_step = 1,
+	radiation_integrals = 1
+&end
+
+sinclude(<ERROR>)
+
+&closed_orbit
+        output = %s.clo,
+	closed_orbit_iterations = 500,
+	iteration_fraction = 0.1,
+&end
+
+&correct
+        mode = "orbit", method = "global",
+        verbose = 1, n_iterations = 4, n_xy_cycles = 100,
+        correction_fraction[0] = 0.5, 0.5,
+        bpm_noise[0] = 0e-6, 0e-6,
+        correction_accuracy[0] = 1e-6, 1e-6,
+        trajectory_output = "%s.orb",
+        corrector_output = "%s.cor",
+        statistics = "%s.scor",
+        closed_orbit_iteration_fraction = 0.5,
+        closed_orbit_iterations = 20,
+        closed_orbit_accuracy = 1e-9,
+&end
+
+&momentum_aperture
+        output = %s.mmap,
+        x_initial = <xInitial>,
+        y_initial = <yInitial>,
+	delta_negative_start = <deltaNegativeStart>,
+	delta_positive_start = <deltaPositiveStart>,
+        delta_negative_limit = <deltaNegativeLimit>,
+        delta_positive_limit = <deltaPositiveLimit>,
+        delta_step_size = <initialDeltaStep>,
+        steps_back = <stepsBack>,
+        split_step_divisor = <stepDivisor>,
+        splits = <splits>,
+        s_start = <sStart>,
+        s_end = <sEnd>,
+        skip_elements = <elementsToSkip>,
+        process_elements = <elementsToProcess>,
+        include_name_pattern = <pattern>,
+        include_type_pattern = <typePattern>,
+        verbosity = 4
+	soft_failure = 1
+&end
+
+&stop &end
+
+
+
+    

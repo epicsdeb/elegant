@@ -1,0 +1,12 @@
+\vspace*{5mm}
+
+{\bf Explanation of $<$filename$>$=$<$x$>$+$<$y$>$ format:} Several elements in {\tt elegant} make use of data from external files to provide input waveforms.
+The external files are SDDS files, which may have many columns.  In order to provide a convenient
+way to specify both the filename and the columns to use, we frequently employ $<$filename$>$=$<$x$>$+$<$y$>$ format
+for the parameter value.  For example, if the parameter value is \verb|waveform.sdds=t+A|, then it
+means that columns \verb|t| and \verb|A| will be taken from file \verb|waveform.sdds|.  The first
+column is always the independent variable (e.g., time, position, or frequency), while the second
+column is the dependent quantity.
+
+
+

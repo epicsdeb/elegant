@@ -1,0 +1,80 @@
+This element simulates a planar undulator, together with an optional
+co-propagating laser beam that can be used as a beam heater or
+modulator.  The simulation is done by numerical integration of the
+Lorentz equation.  It is not symplectic, and hence this element is not
+recommended for long-term tracking simulation of undulators in storage
+rings.  
+
+The fields in the undulator can be expressed in one of three ways.
+The FIELD\_EXPANSION parameter is used to control which method is used.
+\begin{itemize}
+\item The exact field, given by (see section 3.1.5 of the {\em Handbook of
+Accelerator Physics and Engineering})
+\begin{equation}
+B_x = 0,
+\end{equation}
+\begin{equation}
+B_y = B_0 \cosh k_u y \cos k_u z,
+\end{equation}
+and
+\begin{equation}
+B_z = B_0 \sinh k_u y \cos k_u z ,
+\end{equation}
+where $k_u = 2\pi/\lambda_u$ and $\lambda_u$ is the undulator period.
+This is the most precise method, but also the slowest.  
+
+\item The field expanded to leading order in $y$:
+\begin{equation}
+B_y = B_0 ( 1 + \frac{1}{2}(k_u y)^2 ) \cos k_u z,
+\end{equation}
+and
+\begin{equation}
+B_z = B_0 k_u y \cos k_u z.
+\end{equation}
+In most cases, this gives results that are very close to the exact fields,
+at a savings of 10\% in computation time.
+
+\item The ``ideal'' field:
+\begin{equation}
+B_y = B_0 \cos k_u z,
+\end{equation}
+\begin{equation}
+B_z = 0.
+\end{equation}
+This is about 10\% faster than the leading-order mode, but less
+precise.  Small differences from results with the exact field may be
+seen.  Generally, these are too small to be a concern.  As a result,
+this is the default mode.
+\end{itemize}
+
+The expressions for the laser field used by this element are from
+A. Chao's article ``Laser Acceleration --- Focussed Laser,'' available
+on-line at \\
+http://www.slac.stanford.edu/$\sim$achao/LaserAccelerationFocussed.pdf .
+The implementation covers laser modes TEM{\em ij}, where
+$0\leq i \leq 4$ and $0 \leq j \leq 4$.
+
+By default, if the laser wavelength is not given, it is computed from the resonance
+condition:
+\begin{equation}
+\lambda_l = \frac{\lambda_u}{2 \gamma^2} \left( 1 + \frac{1}{2} K^2 \right),
+\end{equation}
+where $\gamma$ is the relativistic factor for the beam and $K$ is the
+undulator parameter.
+
+The adaptive integrator doesn't work well for this element, probably
+due to sudden changes in field derivatives in the first and last three
+poles (a result of the implementation of the undulator terminations).
+Hence, the default integrator is non-adaptive Runge-Kutta.  The
+integration accuracy is controlled via the N\_STEPS parameter.
+N\_STEPS should be about 100 times the number of undulator periods.
+
+The laser time profile can be specified using the \verb|TIME_PROFILE|
+parameter to specify the name of an SDDS file containing the
+profile.   If given, the electric and magnetic fields of the laser are
+multiplied by the profile $P(t)$.  Hence, the laser intensity is multiplied
+by $P^2(t)$. By default $t=0$ in the
+profile is lined up with $\langle t \rangle$ in the electron bunch.
+This can be changed with the \verb|TIME_OFFSET| parameter. A positive
+value of \verb|TIME_OFFSET| moves the laser profile forward in time (toward
+the head of the bunch).

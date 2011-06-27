@@ -1,0 +1,14 @@
+SDDS1
+&column name=TextFile, type=string,  &end
+&column name=InstallLocation, type=string,  &end
+&data mode=ascii, &end
+! page number 1
+                   8
+oag/apps/src/elegant/elegantTools/skewResponse0Template.ele /usr/local/oag/apps/configData/elegant/skewResponse0Template.ele 
+oag/apps/src/elegant/elegantTools/skewResponseCPTemplate.ele /usr/local/oag/apps/configData/elegant/skewResponseCPTemplate.ele 
+oag/apps/src/elegant/elegantTools/etayCPCorrTemplate.ele /usr/local/oag/apps/configData/elegant/etayCPCorrTemplate.ele 
+oag/apps/src/elegant/elegantTools/couplingCorrTemplate1.ele /usr/local/oag/apps/configData/elegant/couplingCorrTemplate1.ele 
+oag/apps/src/elegant/elegantTools/couplingCorrTemplate2.ele /usr/local/oag/apps/configData/elegant/couplingCorrTemplate2.ele 
+oag/apps/src/elegant/elegantTools/couplingCorrTemplate3.ele /usr/local/oag/apps/configData/elegant/couplingCorrTemplate3.ele 
+oag/apps/src/elegant/elegantTools/spiffe2elegant.lte /usr/local/oag/apps/configData/elegant/spiffe2elegant.lte 
+oag/apps/src/elegant/elegantTools/spiffe2elegant.ele /usr/local/oag/apps/configData/elegant/spiffe2elegant.ele 

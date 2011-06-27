@@ -1,0 +1,97 @@
+&transmute_elements
+        name = *, type = MAXAMP,
+        new_type = DRIF,
+	disable = <includeApertures>
+&end
+&transmute_elements
+        name = *, type = ?COL,
+        new_type = DRIF,
+	disable = <includeApertures>
+&end
+&transmute_elements
+        name = *, type = SCRAPER,
+        new_type = DRIF,
+	disable = <includeApertures>
+&end
+
+&run_setup
+	lattice = <kickLatticeFile>,
+	use_beamline = <kickBeamline>
+	p_central_mev = <momentum>,
+        magnets = %s.mag,
+        rootname = <mainDirectory>/<mainPrefix>KickApertureErrors<suffix>,
+	random_number_seed = <seed>,
+        semaphore_file = %s.done,
+        tracking_updates = 0
+        final = %s.fin
+&end
+
+&rpn_load
+        filename = <referenceTwiss>,
+        tag = ref
+&end
+&rpn_load
+        filename = <referenceTwiss>,
+        load_parameters = 1
+        tag = ref
+&end
+
+&load_parameters
+        filename_list = " <parameterFileList>",
+	force_occurence_data = <forceOccurence>,
+        change_defined_values = 1,
+        allow_missing_elements = 1,
+        allow_missing_parameters = 1,
+        allow_missing_files = 1,
+&end
+
+&aperture_input
+        input = <apertureFile>,
+        periodic = 1,
+        disable = <apertureFileDisable>
+&end
+
+&alter_elements name=*, type=*SBEN*, item=ORDER, value=1, allow_missing_parameters=1,
+	allow_missing_elements=1 &end
+&alter_elements name=*, type=*SBEN*, item=EDGE_ORDER, value=1, allow_missing_elements=1 &end
+
+&alter_elements name=<elementName>, item=FIRE_ON_PASS, value=1 &end
+&alter_elements name=<elementName>, item=ANGLE, value="(<kickValue> 1e3 /)" &end
+
+! May be needed if SREFFECTS elements are present
+&twiss_output
+        radiation_integrals = 1
+        matched = 1
+        output_at_each_step = 0
+&end
+
+&run_control
+        n_steps = 1,
+        n_passes = <turns>,
+&end
+
+&twiss_output filename = "%s.twi",  statistics=1, radiation_integrals=1, output_at_each_step=1, &end
+
+&bunched_beam
+        n_particles_per_bunch = <particles>,
+        bunch = %s.bun,
+        emit_x = "(ref.ex0)",
+        emit_y = "(ref.ex0 <emittanceRatio> *)",
+        beta_x = "(ref.betax)",
+        alpha_x = "(ref.alphax)",
+        eta_x = "(ref.etax)",
+        etap_x = "(ref.etaxp)",
+        beta_y = "(ref.betay)",
+        alpha_y = "(ref.alphay)",
+        eta_y = "(ref.etay)",
+        etap_y = "(ref.etayp)",
+        sigma_dp = "(ref.Sdelta0)",
+        sigma_s = <Ss>,
+        distribution_type[0] = 3*"gaussian",
+        distribution_cutoff[0] = 3*3
+&end
+
+&track
+        center_on_orbit = 1
+&end
+

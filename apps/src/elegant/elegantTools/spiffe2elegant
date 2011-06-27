@@ -1,0 +1,39 @@
+#!/bin/sh  
+# \
+exec oagtclsh "$0" "$@"
+
+set auto_path [linsert $auto_path 0  /usr/local/oag/apps/lib/$env(HOST_ARCH)]
+set auto_path [linsert $auto_path 0 /usr/local/oag/lib_patch/$env(HOST_ARCH)]
+APSStandardSetup
+
+set usage "usage: spiffe2elegant -input <filename> -output <filename> \[-drift <m>\]\nConverts spiffe output to elegant format.\nNote that elegant will read spiffe files directly."
+
+set input ""
+set output ""
+set drift 0.0
+set args $argv
+if {[APSStrictParseArguments {input output drift}] || ![string length $input] || ![string length $output]} {
+    return -code error "$usage"
+}
+
+if ![file exists $input] {
+    return -code error "not found: $input"
+}
+if [file exists $output] {
+    return -code error "exists: $output"
+}
+
+set dir [pwd]
+cd $OAGGlobal(OAGAppConfigDataDirectory)/elegant/
+if [catch {exec elegant spiffe2elegant.ele -macro=input=$dir/$input,output=$dir/$output,drift=$drift} result] {
+    return -code error "spiffe2elegant: $result"
+}
+cd $dir
+
+set tmpFile /tmp/[APSTmpString]
+APSAddToTempFileList $tmpFile
+exec sddscombine $input $tmpFile -merge
+exec sddsxref $output $tmpFile -pipe=out -nowarning -take=* \
+    | sddsprocess -pipe=in $output.1 "-define=parameter,driftDistance,$drift,units=m"
+file delete $output
+file rename $output.1 $output

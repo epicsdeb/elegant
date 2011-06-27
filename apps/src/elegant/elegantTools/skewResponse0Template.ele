@@ -1,0 +1,17 @@
+&transmute_elements name=S*, type=MONI, exclude=<bpmPattern>  new_type=MARK &end
+
+&run_setup
+	lattice = <lattice>,
+	use_beamline = <beamline>,
+	p_central_mev = 7e3,
+	default_order = <order>,
+        rootname = <rootname>
+        semaphore_file = %s.done,
+&end
+
+&twiss_output
+        filename = %s.twi
+	matched = 1
+	radiation_integrals = 1
+        concat_order = <order>
+&end
