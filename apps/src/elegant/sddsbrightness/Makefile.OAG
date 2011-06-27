@@ -1,0 +1,106 @@
+#*************************************************************************
+# Copyright (c) 2002 The University of Chicago, as Operator of Argonne
+# National Laboratory.
+# Copyright (c) 2002 The Regents of the University of California, as
+# Operator of Los Alamos National Laboratory.
+# This file is distributed subject to a Software License Agreement found
+# in the file LICENSE that is included with this distribution. 
+#*************************************************************************
+#
+# $Log: Makefile.OAG,v $
+# Revision 1.7  2010/06/28 21:34:13  soliday
+# One more change for purify on linux
+#
+# Revision 1.6  2010/06/28 21:29:54  soliday
+# Updated the code for purify on Linux.
+#
+# Revision 1.5  2009/04/21 15:22:37  shang
+# added sddsws
+#
+# Revision 1.4  2009/04/09 14:34:48  borland
+# Added sddsfluxcurve.
+#
+# Revision 1.3  2006/08/24 19:20:06  soliday
+# Updated so that it would compile on WIN32 again.
+#
+# Revision 1.2  2006/03/15 17:19:24  shang
+# added compilation for sddsurgent
+#
+# Revision 1.1  2004/04/08 16:10:28  soliday
+# Moved to subdirectory.
+#
+#
+#
+
+FFLAGS = -O4
+
+
+CMPLR = ANSI
+
+#RATIONAL = purify
+#RATIONAL = quantify
+#RATIONAL = purecov
+ifdef RATIONAL
+HOST_OPT = NO
+STATIC_BUILD=NO
+CC := $(RATIONAL) -best-effort $(CC)
+CCC := $(RATIONAL) -best-effort $(CCC)
+endif
+
+#TARGETS = sddsbrightness$(EXE)
+ifeq ($(EPICS_VERSION).$(EPICS_REVISION),3.13)
+PROD = sddsurgent sddsbrightness sddsfluxcurve sddsws
+else
+PROD_HOST = sddsurgent sddsbrightness sddsfluxcurve sddsws
+endif
+
+USR_CFLAGS = 	-I$(EPICS_EXTENSIONS_INCLUDE) \
+		-DIEEE_MATH -DzLib
+
+USR_CFLAGS_DEFAULT = 	-DUNIX 
+#USR_CFLAGS_Linux =	-Df2cFortran
+#USR_CFLAGS_WIN32 = 	-DpgiFortran
+
+ifdef WIN32
+USR_LIBS = oagphy mdbcommon matlib fftpack SDDS1 rpnlib mdbmth namelist mdblib z fftpack
+z_DIR = $(EPICS_EXTENSIONS_LIB)
+else
+USR_LIBS = oagphy mdbcommon matlib fftpack SDDS1 rpnlib mdbmth namelist mdblib
+SYS_PROD_LIBS_DEFAULT += z
+endif
+
+ifeq ($(HOST_ARCH),solaris)
+ACC_DEP_CFLAGS = -KPIC -v
+CCC_DEP_CFLAGS = -KPIC -v
+GCC_DEP_CFLAGS += -D__EXTENSIONS__
+endif
+
+SDDS1_DIR = $(EPICS_EXTENSIONS_LIB)
+namelist_DIR = $(EPICS_EXTENSIONS_LIB)
+fftpack_DIR = $(EPICS_EXTENSIONS_LIB)
+mdbmth_DIR = $(EPICS_EXTENSIONS_LIB)
+matlib_DIR = $(EPICS_EXTENSIONS_LIB)
+mdblib_DIR = $(EPICS_EXTENSIONS_LIB)
+mdbcommon_DIR = $(EPICS_EXTENSIONS_LIB)
+rpnlib_DIR = $(EPICS_EXTENSIONS_LIB)
+oagphy_DIR = $(OAG_APPS)/lib/$(EPICS_HOST_ARCH)
+
+USR_LDFLAGS += -L$(OAG_APPS)/lib/$(EPICS_HOST_ARCH)
+sddsbrightness$(EXE)_SRCS =	sddsbrightness.c		
+
+sddsfluxcurve$(EXE)_SRCS =	sddsfluxcurve.c		
+
+sddsurgent$(EXE)_SRCS = sddsurgent.c
+
+sddsws$(EXE)_SRCS = sddsws.c
+
+OBJNAMES = sddsbrightness$(OBJ) usb$(OBJ) brighte$(OBJ) hunt$(OBJ)
+
+URGENT_OBJNAMES = sddsurgent$(OBJ) urgent$(OBJ) us$(OBJ) brighte$(OBJ) hunt$(OBJ)
+
+FLUXCURVE_OBJNAMES = sddsfluxcurve$(OBJ) us$(OBJ) brighte$(OBJ) hunt$(OBJ)
+
+ifdef DEBUG
+		USR_CFLAGS += -DDEBUG
+endif
+

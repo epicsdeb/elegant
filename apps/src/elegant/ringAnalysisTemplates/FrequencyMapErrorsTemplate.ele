@@ -1,0 +1,100 @@
+&transmute_elements
+        name = *, type = WATCH, 
+        new_type = DRIF
+&end
+
+&transmute_elements
+        name = *, type = MAXAMP,
+        new_type = DRIF,
+	disable = <includeApertures>
+&end
+&transmute_elements
+        name = *, type = ?COL,
+        new_type = DRIF,
+	disable = <includeApertures>
+&end
+&transmute_elements
+        name = *, type = SCRAPER,
+        new_type = DRIF,
+	disable = <includeApertures>
+&end
+
+&run_setup
+	lattice = <kickLatticeFile>,
+	use_beamline = <kickBeamline>
+	p_central_mev = <momentum>,
+        rootname = <mainDirectory>/<mainPrefix>FrequencyMap<suffix>,
+	random_number_seed = <seed>,
+        semaphore_file = %s.done,
+	losses = %s.los,
+        tracking_updates = 0,
+&end
+
+&load_parameters
+        filename_list = " <parameterFileList>",
+	force_occurence_data = <forceOccurence>,
+        change_defined_values = 1,
+        allow_missing_elements = 1,
+        allow_missing_parameters = 1,
+        allow_missing_files = 1,
+&end
+sinclude(<ERRORPARAM>)
+
+&alter_elements name=*, type=*SBEN*, item=EDGE_ORDER, value=1, allow_missing_elements=1, allow_missing_parameters=1 &end
+&alter_elements name=*, type=*SBEN*, item=ORDER, value=1, allow_missing_elements=1, allow_missing_parameters=1 &end
+
+! May be needed if SREFFECTS elements are present
+&twiss_output
+        radiation_integrals = 1
+        matched = 1
+        output_at_each_step = 0
+&end
+
+&run_control
+	n_steps = 1,
+        n_passes = "(<turns> <includeChanges> 1 + *)",
+&end
+
+&alter_elements name=<kickOffsetElement>, item=ON_PASS, value=0 &end
+&alter_elements name=<kickOffsetElement>, item=DP, value=<delta> &end
+
+
+&twiss_output
+	filename = %s.twi,
+	final_values_only = 1,
+	statistics = 1,
+	output_at_each_step = 1,
+	radiation_integrals = 1
+&end
+
+sinclude(<ERROR>)
+
+&correct
+        mode = "orbit", method = "global",
+        verbose = 1, n_iterations = 4, n_xy_cycles = 100,
+        correction_fraction[0] = 0.5, 0.5,
+        bpm_noise[0] = 0e-6, 0e-6,
+        correction_accuracy[0] = 1e-6, 1e-6,
+        trajectory_output = "%s.orb",
+        corrector_output = "%s.cor",
+        statistics = "%s.scor",
+        closed_orbit_iteration_fraction = 0.5,
+        closed_orbit_iterations = 20,
+        closed_orbit_accuracy = 1e-9,
+&end
+
+&frequency_map
+        output = %s.fma,       
+        verbosity  = 1,
+        xmin = <xMinimum>
+        xmax = <xMaximum>
+        ymin = <yMinimum>,
+        ymax = <yMaximum>,
+        nx = <xPoints>,
+        ny = <yPoints>,
+        include_changes = <includeChanges>
+&end
+
+
+
+    

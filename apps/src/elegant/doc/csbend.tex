@@ -1,0 +1,76 @@
+This element provides a symplectic bending magnet with the exact
+Hamiltonian.  For example, it retains all orders in the momentum offset
+and curvature.  The field expansion is available to fourth order.
+
+One pitfall of symplectic integration is the possibility of orbit and
+path-length errors for the reference orbit if too few kicks are used.
+This may be an issue for rings.  Hence, one must verify that a
+sufficient number of kicks are being used by looking at the trajectory
+closure and length of an on-axis particle by tracking.  Using 
+{\tt INTEGRATION\_ORDER=4} is recommended to reduce the number of
+required kicks.
+
+Normally, one specifies the higher-order components of the field with
+the {\tt K1}, {\tt K2}, {\tt K3}, and {\tt K4} parameters. The field
+expansion in the midplane is $B_y(x) = B_o * (1 +
+\sum_{n=1}^4\frac{K_n\rho_o}{n!}x^n)$.  By setting the {\tt USE\_bN}
+flag to a nonzero value, one may instead specify the {\tt b1} through
+{\tt b4} parameters, which are defined by the expansion $B_y(x) = B_o
+* (1 + \sum_{n=1}^4\frac{b_n}{n!}x^n)$.  This is convenient if one is
+varying the dipole radius but wants to work in terms of constant field
+quality.  
+
+Setting {\tt NONLINEAR=0} turns off all the terms above {\tt K\_1} (or {\tt b\_1}) and
+also turns off effects due to curvature that would
+normally result in a gradient producing terms of higher order.
+
+Edge effects are included using a first- or second-order matrix.  The
+order is controlled using the {\tt EDGE\_ORDER} parameter, which has a
+default value of 1.  N.B.: if you choose the second-order matrix, it
+is not symplectic.
+
+Incoherent synchrotron radiation, when requested with {\tt ISR=1},
+normally uses gaussian distributions for the excitation of the electrons.
+Setting {\tt USE\_RAD\_DIST=1} invokes a more sophisticated algorithm that
+uses correct statistics for the photon energy and number distributions.
+In addition, if {\tt USE\_RAD\_DIST=1} one may also set {\tt ADD\_OPENING\_ANGLE=1},
+which includes the photon angular distribution when computing the effect on 
+the emitting electron.  
+
+Some confusion may exist about the edge angles, particularly the signs.
+For a sector magnet, we have of course \verb|E1=E2=0|.  For a symmetric rectangular
+magnet, \verb|E1=E2=ANGLE/2|.  If \verb|ANGLE| is negative, then so are
+\verb|E1| and \verb|E2|.  To understand this, imagine a rectangular magnet with positive \verb|ANGLE|.
+If the magnet is flipped over, then \verb|ANGLE| becomes negative, as does the bending
+radius $\rho$.    Hence, to keep the focal length
+of the edge $1/f = -\tan E_i /\rho$ constant, we must also change the sign of
+$E_i$.
+
+When adding errors, care should be taken to choose the right
+parameters.  The \verb|FSE| and \verb|ETILT| parameters are used for
+assigning errors to the strength and alignment relative to the ideal
+values given by \verb|ANGLE| and \verb|TILT|.  One can also assign 
+errors to \verb|ANGLE| and \verb|TILT|, but this has a different meaning:
+in this case, one is assigning errors to the survey itself.  The reference
+beam path changes, so there is no orbit/trajectory error. The most common
+thing is to assign errors to \verb|FSE| and \verb|ETILT|.  Note that when
+adding errors to \verb|FSE|, the error is assumed to come from the power
+supply, which means that multipole strengths also change.
+
+{\em Special note about splitting dipoles}: when dipoles are long, it is
+common to want to split them into several pieces, to get a better look
+at the interior optics.  When doing this, care must be exercised not
+to change the optics.  {\tt elegant} has some special features that
+are designed to reduce or manage potential problems. At issue is the
+need to turn off edge effects between the portions of the same dipole.
+
+First, one can simply use the \verb|divide_elements| command to set up
+the splitting.  Using this command, {\tt elegant} takes care of everything.
+
+Second, one can use a series of dipoles {\em with the same name}.  In this case,
+elegant automatically turns off interior edge effects.  This is true when the
+dipole elements directly follow one another or are separated by a MARK element.
+
+Third, one can use a series of dipoles with different names.  In this case, you
+must also use the \verb|EDGE1_EFFECTS| and \verb|EDGE2_EFFECTS| parameters to
+turn off interior edge effects.  

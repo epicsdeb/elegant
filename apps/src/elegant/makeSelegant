@@ -1,0 +1,41 @@
+#!/bin/sh
+# platform=`uname -i`
+platform=`echo $HOST_ARCH | cut -d\- -f2-100`
+linkname=`readlink O.linux-${platform}`
+
+if [ -n "$linkname" ]; then {
+  echo O.linux-${platform} is linked with "$linkname"
+
+  if [ "$linkname" != "O.linux-${platform}_S" ]; then {
+    if [ -d O.linux-${platform}_S ]; then
+      rm -f O.linux-${platform}
+      ln -sf O.linux-${platform}_S O.linux-${platform}
+    else
+      mkdir O.linux-${platform}_S
+      rm -f O.linux-${platform}
+      ln -sf O.linux-${platform}_S O.linux-${platform}
+    fi
+  }
+  fi 
+}
+else 
+  if [ ! -d O.linux-${platform}_S ]; then	
+    echo "This is the first time to call this script."
+    echo "An O.linux-${platform}_S directory will be created for serial elegant"
+  else #called make clean already 
+    echo "The O.linux-${platform}_S directory will be cleaned"
+    mv O.linux-${platform}_S O.linux-${platform}    
+  fi    
+  make clean
+  mkdir O.linux-${platform}_S
+  ln -sf O.linux-${platform}_S O.linux-${platform}
+fi
+
+if [ -f Makefile.TMP ]
+then
+  mv -f Makefile.TMP Makefile
+fi
+
+# Avoid start from every beginning if elegant is not built sucessfully
+touch ../../bin/linux-${platform}/elegant
+make Selegant

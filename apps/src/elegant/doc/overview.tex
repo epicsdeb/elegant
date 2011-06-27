@@ -1,0 +1,208 @@
+% How to create this document on UNIX systems:
+%   latex elegant
+%   dvi2ps elegant | lpr [-P<postscript-printer-name>]
+%
+\documentclass[11pt]{article}
+\usepackage{html}
+\usepackage{longtable}
+\pagestyle{plain}
+%\voffset=-0.75in
+\newenvironment{req}{\begin{equation} \rm}{\end{equation}}
+\setlength{\topmargin}{0.15 in}
+\setlength{\oddsidemargin}{0 in}
+\setlength{\evensidemargin}{0 in} % not applicable anyway
+\setlength{\textwidth}{6.5 in}
+\setlength{\headheight}{-0.5 in} % for 11pt font size
+%\setlength{\footheight}{0 in}
+\setlength{\textheight}{9 in}
+\begin{document}
+\author{Michael Borland}
+\title{Overview of {\tt elegant} and SDDS}
+\maketitle
+
+\section{Purpose of this document}
+
+The purpose of this document is to briefly summarize the capabilities
+available of {\tt elegant} and the SDDS toolkit for simulation of
+rings, linacs, and beam transport systems..  The description covers
+both the serial and parallel versions.  The intended audience is
+potential new users, who may want to know in general terms what {\tt
+elegant} can do without having to read the manual.  Hence, we will not
+show detailed examples.  For that, refer to the
+\htmladdnormallink{example
+files}{http://www.aps.anl.gov/asd/oag/cgi-bin/oagLog4.cgi?name=elegantExamples.tar.gz}
+available from our web site.
+
+{\tt elegant} is open source, with both \htmladdnormallink{source code
+and executables}{http://www.aps.anl.gov/asd/oag/software.shtml\#elegant} available.
+
+More detail as well as the most up-to-date information will be found in the 
+\htmladdnormallink{manual}{http://www.aps.anl.gov/Accelerator_Systems_Division/Operations_Analysis/manuals/elegant_latest/elegant.html},
+as well as the 
+\htmladdnormallink{forum}{https://www.aps.anl.gov/Accelerator_Systems_Division/Operations_Analysis/phpBB3}.  Users are encouraged
+to join and participate in the forum.  At minimum, users should subscribe to the ``Bugs'' topic,
+since this is where bug notifications are posted.
+
+The capabilities of {\tt elegant} for accelerator simulation will be broken down as follows:
+\begin{enumerate}
+\item Simulation capabilties, for example, the ability to simulate random errors.
+\item Physics capabilities, for example, the ability to simulate coherent synchrotron radiation effects.
+\item Cooperative capabilities, for example, the ability to read data produced by other programs.
+\end{enumerate}
+
+\section{Simulation Capabilities}
+
+The simulation capabilities of {\tt elegant} at the highest level, irrespective of any particular physics, are
+listed here.  Generally speaking, these capabilities map into the commands that appear in the main input file.
+\begin{enumerate}
+\item Tracking of rings, linacs, and transport lines
+\item Computation of s-dependent and final properties, including
+  \begin{itemize}
+  \item Beam moments, from tracking or analysis
+  \item Twiss parameters
+  \item Matrix elements 
+  \item Trajectory/orbit
+  \item Trajectory/orbit response matrix
+  \item Floor coordinates
+  \end{itemize}
+\item Aperture determination
+  \begin{itemize}
+  \item Input of s-dependent aperture
+  \item Computation of dynamic acceptance
+  \item Computation of s-dependent momentum acceptance
+  \end{itemize}
+\item Optimization of results of computations and tracking
+\item Tracking and computations with errors
+  \begin{itemize}
+  \item Generate or load random error sets
+  \item Perform correction of tunes, chromaticities, trajectory/orbit
+  \end{itemize}
+\item Control lattice parameters
+  \begin{itemize}
+  \item Scan parameters in multi-dimensional loops
+  \item Alter parameters from values in lattice definition
+  \item Load SDDS data to overwrite values in lattice definition
+  \item Insert elements into lattice
+  \item Sub-divide elements
+  \end{itemize}
+\item Bunch generation, or reading of bunch data from files
+\item Multi-stage simulation
+  \begin{itemize}
+  \item Load particles from previous tracking run
+  \item Load lattice parameters from previous optimization run
+  \item Load errors and correction settings from previous error run
+  \end{itemize}
+\item Time-dependent ramping or modulation
+\item Determination of frequency maps for rings
+\item Change of particle type (default is electrons)
+\end{enumerate}
+
+\section{Physics Capabilities}
+
+The physics capabilities of {\tt elegant} are listed here.  Generally
+speaking, these capabilities map into elements that can appear in the
+lattice file.
+\begin{enumerate}
+\item Single-particle dynamics
+  \begin{itemize}
+  \item Magnetic elements using matrix or symplectic tracking methods, e.g.,
+    drifts, dipoles, quadrupoles, sextupoles, higher multipoles, wigglers, alpha magnets, solenoids, etc.
+  \item Stray fields and steering correctors
+  \item Undulator kick maps\cite{Elleaume1992}.
+  \item Classical and quantum synchrotron radiation effects in magnets
+  \item Accelerating and deflecting standing-wave rf cavities
+  \item Traveling wave linear accelerating cavities
+  \item Scattering by materials or using user-defined distributions
+  \item Time-dependent dipole and multipole kickers
+  \item User-designed transformation using external program
+  \item User-specified matrix
+  \item Apertures and scrapers
+  \end{itemize}
+\item Collective dynamics
+  \begin{itemize}
+  \item Short-range wake fields and impedances.
+  \item Long-range wakes due to resonant modes.
+  \item Coherent synchrotron radiation.
+  \item Longitudinal space-charge impedance \cite{Huang2004}.
+  \item Transverse space-charge kicks for rings \cite{Xiao2007A}.
+  \item Intrabeam scattering \cite{Xiao2008a}.
+  \item Touschek scattering \cite{Xiao2010a}.
+  \end{itemize}
+\item Other
+  \begin{itemize}
+  \item Beam position monitors
+  \item Phase space output and analysis monitors
+  \item Digital feedback systems
+  \end{itemize}
+\end{enumerate}
+
+\section{Cooperative Capabilities}
+
+One of the strengths of {\tt elegant} is its ability to work cooperatively with other programs.
+This is done through the use of SDDS (Self-Describing Data Sets\cite{SDDS1,SDDS2}) files.
+Such capabilities include
+\begin{enumerate}
+\item Use of the general-purpose SDDS toolkit for postprocessing and graphics.  Capabilities include
+sophisticated plotting, definition of new quantities using formulae, filtering, cross-referencing, sorting,
+one- and two-dimensional histograms, frequency analysis, fitting, etc.
+You can find out more about SDDS from the \htmladdnormallink{SDDS Info Page}{http://www.aps.anl.gov/asd/oag/SDDSInfo.shtml}.
+\item Reading particle distribution data from other programs, including ASTRA \cite{ASTRA}, IMPACT \cite{IMPACT}, and TRACK \cite{TRACK}.
+\item Phase space analysis to obtain twiss parameters and moments.
+\item Computation of radiation brightness and flux tuning curves, as well as radiation distributions and other properties.
+\item Upsampling of particle distributions to increase particle number, smooth the distribution, and add modulations.
+\item Processing of quadrupole-scan emittance measurement data.
+\item Computation of the CSR impedance for use in tracking \cite{Warnock}.
+\item Use of {\tt elegant} data for Touschek lifetime, intrabeam scattering, and potential well distortion computations.
+\item Translation of {\tt elegant} lattice into other formats.
+\item Computation of multipole error data to reflect defined magnet construction errors \cite{Halbach_69a}.
+\end{enumerate}
+
+
+\begin{thebibliography}{9}
+
+\bibitem{SDDS1}
+M. Borland, ``A Self-Describing File Protocol for Simulation
+Integration and Shared Postprocessors,'' Proc. 1995 PAC, May 1-5,
+1995, Dallas, Texas, pp. 2184-2186 (1996).
+
+\bibitem{SDDS2}
+M. Borland, ``A Universal Postprocessing Toolkit for Accelerator 
+Simulation and Data Analysis,'' Proc. 1998 ICAP Conference, 
+Sept. 14-18, 1998, Monterey, California, to be published.
+
+\bibitem{Halbach_69a}
+    K. Halbach, ``First Order Perturbation Effects in Iron-Dominated Two-Dimensional Symmetrial Multipoles'',
+    NIM {\bf 74-1}, 1969, 147-164.
+
+\bibitem{Huang2004}
+  Z. Huang {\em et al.}, Phys. Rev. ST Accel. Beams {\bf 7} 074401 (2004).
+
+\bibitem{Xiao2007A}
+  A. Xiao {\em et al.}, ``Direct Space-Charge Calculation in {\tt elegant} and its Application to the
+ ILC Damping Ring,'' Proc. PAC2007, 3456-3458.
+
+\bibitem{Xiao2008a}
+  A. Xiao, ``Study of IBS Effects for High-Brightness Linac Beams,'' Proc. Linac08, 296-298 (2009).
+
+\bibitem{Xiao2010a}
+  A. Xiao {\em et al.}, ``Monte Carlo simulation of Touschek effect,'' Phys. Rev. ST Accel. Beams {\bf 13},
+  074201 (2010).
+
+\bibitem{Warnock}
+  W. Warnock, ``Shielded Coherent Synchrotron Radiation and Its Effect on Very Short Bunches,'' SLAC-PUB-5375, 1990.
+
+\bibitem{Elleaume1992}
+  P. Elleaume, ``A New Approach to Electron Beam Dynamics in Undulators and Wigglers,'' Proc. EPAC 1992, 661-663.
+
+\bibitem{ASTRA}
+  K. Fl\"{o}ttmann, Astra User Manual, http://www.desy.de/~mpyflo/Astra\_dokumentation/
+
+\bibitem{IMPACT}
+J. Qiang {\em et al.},  J.~Comp.~Phys. 163, 434 (2000).
+
+\bibitem{TRACK}
+  V. N. Aseev {\em et al.}, Proc. PAC05, 2053-2055 (2005); ASCII version 39 from B. Mustapha.
+
+\end{thebibliography}
+
+\end{document}

@@ -1,0 +1,172 @@
+#*************************************************************************
+# Copyright (c) 2002 The University of Chicago, as Operator of Argonne
+# National Laboratory.
+# Copyright (c) 2002 The Regents of the University of California, as
+# Operator of Los Alamos National Laboratory.
+# This file is distributed subject to a Software License Agreement found
+# in the file LICENSE that is included with this distribution. 
+#*************************************************************************
+#
+# $Id: Makefile.OAG,v 1.24 2010/02/23 14:23:50 borland Exp $
+#
+# $Log: Makefile.OAG,v $
+# Revision 1.24  2010/02/23 14:23:50  borland
+# Added spiffe2elegant
+#
+# Revision 1.23  2010/02/04 23:51:46  soliday
+# Updated because sddsrandmult.cc replaces sddsrandmult.c
+#
+# Revision 1.22  2010/01/27 04:40:24  borland
+# Restored optimization flag.
+#
+# Revision 1.21  2010/01/27 04:39:59  borland
+# Now tolerates missing items in loading parameters.
+#
+# Revision 1.20  2010/01/15 22:57:46  borland
+# Added rfgun2elegant, an old program for converting the output of rfgun to elegant
+# format.
+#
+# Revision 1.19  2010/01/15 15:10:47  borland
+# Various refinements and improvements after testing.
+#
+# Revision 1.18  2009/12/20 19:55:40  borland
+# Added -O3 for optimization.
+#
+# Revision 1.17  2009/12/03 17:19:34  soliday
+# Added the -D_ISOC99_SOURCE flag.
+#
+# Revision 1.16  2009/07/28 14:44:53  borland
+# Replaced astra2elegant script with astra2elegant.c
+#
+# Revision 1.15  2009/07/22 21:52:59  borland
+# Added elegant2track script.
+#
+# Revision 1.14  2009/04/27 14:36:12  borland
+# Added gsl library.
+#
+# Revision 1.13  2009/04/24 18:58:10  soliday
+# Updated to work with the gsl library that we now include with CVS.
+#
+# Revision 1.12  2009/04/02 19:25:42  borland
+# Added doubleDist6 script.
+#
+# Revision 1.11  2009/03/17 17:09:28  borland
+# Added fracEmittance script.
+#
+# Revision 1.10  2009/03/13 15:36:50  borland
+# Added computeTwissBeats.
+#
+# Revision 1.9  2009/03/09 15:18:13  borland
+# Added impact2sdds and impact2elegant.
+#
+# Revision 1.8  2008/08/22 15:55:59  borland
+# Added script smoothDist6s.
+#
+# Revision 1.7  2008/08/14 17:10:40  borland
+# Added astra2elegant and elegant2astra.
+#
+# Revision 1.6  2008/08/13 19:01:54  soliday
+# Updated to work without needing the entire GSL library installed.
+#
+# Revision 1.5  2008/07/28 21:11:27  shang
+# added csrImpedance
+#
+# Revision 1.4  2008/07/24 22:06:13  borland
+# Added km2sdds
+#
+# Revision 1.3  2007/11/09 22:10:32  soliday
+# Changed order of link libraries.
+#
+# Revision 1.2  2007/04/12 15:57:46  soliday
+# Added touschekLifetime to elegantTools
+#
+# Revision 1.1  2007/03/30 16:50:28  soliday
+# Moved from directory above.
+#
+#
+#
+
+#CMPLR = ANSI
+Ocustom = -O3
+#HOST_OPT = NO
+
+#RATIONAL = purify
+#RATIONAL = quantify
+#RATIONAL = purecov
+ifdef RATIONAL
+ifeq ($(EPICS_VERSION).$(EPICS_REVISION),3.13)
+HOST_OPT = NO
+CC = $(RATIONAL) -best-effort $($(ANSI)_$(CMPLR))
+CXX = $(RATIONAL) -best-effort $($(CPLUSPLUS)_$(CXXCMPLR))
+else 
+CC := $(RATIONAL) -best-effort $(CC)
+CCC := $(RATIONAL) -best-effort $(CCC)
+endif
+endif
+
+PRODOAG = sddsemitmeas sddsemitproc sddsTouschekInteg \
+          recurseSetup haissinski sddsmatchtwiss \
+          sddsanalyzebeam sddsrandmult sddsresdiag \
+          sddsfindresonances touschekLifetime csrImpedance astra2elegant rfgun2elegant
+
+SCRIPTS = elegantRingAnalysis beamLifetimeCalc fin2param elegant2shower shower2elegant longitCmd longitCalcs km2sdds elegant2astra smoothDist6s impact2sdds impact2elegant computeTwissBeats fracEmittance doubleDist6 track2sdds track2mag elegant2track makeSkewResponseCP correctCoupling spiffe2elegant
+
+PROD_HOST = $(PRODOAG)
+
+USR_CFLAGS = 	-I$(EPICS_EXTENSIONS)/src/SDDS/include -I$(EPICS_EXTENSIONS_INCLUDE) \
+		-DIEEE_MATH -DzLib -D_ISOC99_SOURCE
+
+ifdef WIN32
+USR_LIBS = 	mdbcommon matlib fftpack SDDS1 \
+		namelist rpnlib mdbmth mdblib \
+		meschach z fdlibm gsl
+z_DIR = $(EPICS_EXTENSIONS_LIB)
+else
+USR_LIBS = 	mdbcommon matlib fftpack SDDS1 \
+		namelist rpnlib mdbmth mdblib \
+		meschach gsl
+SYS_PROD_LIBS_DEFAULT += z 
+SYS_PROD_LIBS_Linux += z
+SYS_PROD_LIBS_solaris += z curses rt 
+endif
+
+SDDS1_DIR = $(EPICS_EXTENSIONS_LIB)
+namelist_DIR = $(EPICS_EXTENSIONS_LIB)
+fftpack_DIR = $(EPICS_EXTENSIONS_LIB)
+mdbmth_DIR = $(EPICS_EXTENSIONS_LIB)
+matlib_DIR = $(EPICS_EXTENSIONS_LIB)
+mdblib_DIR = $(EPICS_EXTENSIONS_LIB)
+mdbcommon_DIR = $(EPICS_EXTENSIONS_LIB)
+rpnlib_DIR = $(EPICS_EXTENSIONS_LIB)
+meschach_DIR = $(EPICS_EXTENSIONS_LIB)
+fdlibm_DIR = $(EPICS_EXTENSIONS_LIB)
+gsl_DIR = $(EPICS_EXTENSIONS_LIB)
+
+
+astra2elegant_SRCS = astra2elegant.c
+
+sddsemitproc_SRCS = sddsemitproc.c
+
+sddsemitmeas_SRCS = sddsemitmeas.c
+
+sddsrandmult_SRCS = sddsrandmult.cc
+
+sddsresdiag_SRCS = sddsresdiag.c
+
+sddsTouschekInteg_SRCS = sddsTouschekInteg.c
+
+recurseSetup_SRCS = recurseSetup.c
+
+haissinski_SRCS = haissinski.c
+
+sddsmatchtwiss_SRCS = sddsmatchtwiss.c
+
+sddsfindresonances_SRCS = sddsfindresonances.c
+
+sddsanalyzebeam_SRCS = sddsanalyzebeam.c
+sddsanalyzebeam_CFLAGS = -I$(EPICS_EXTENSIONS)/src/SDDS/meschach
+
+csrImpedance_SRCS = csrImpedance.c
+csrImpedance_CFLAGS = -I$(EPICS_EXTENSIONS)/src/SDDS/gsl
+csrImpedance_LIBS = gsl
+

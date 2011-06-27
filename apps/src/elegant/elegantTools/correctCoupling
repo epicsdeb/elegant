@@ -1,0 +1,192 @@
+#!/bin/sh  
+# \
+exec oagtclsh "$0" "$@"
+
+# $Log: correctCoupling,v $
+# Revision 1.6  2010/01/25 22:51:52  borland
+# Copy the correct parameter file for case with emittance target.
+#
+# Revision 1.5  2010/01/15 18:45:47  borland
+# Changes to workaround an apparent bug in elegant.
+#
+# Revision 1.4  2010/01/15 17:31:35  borland
+# Further refinements, mostly to make the filenames more sensible.
+#
+# Revision 1.3  2010/01/15 15:47:07  borland
+# Use cp for some copy operations to avoid stupid tcl copying of links.
+#
+# Revision 1.2  2010/01/15 15:10:47  borland
+# Various refinements and improvements after testing.
+#
+
+set auto_path [linsert $auto_path 0  /usr/local/oag/apps/lib/$env(HOST_ARCH)]
+set auto_path [linsert $auto_path 0 /usr/local/oag/lib_patch/$env(HOST_ARCH)]
+APSStandardSetup
+
+set usage {usage: correctCoupling -rootname <string> -input <parameterFile> -eyTarget <pm>  -inverse <filename> -diagnostic <markerName> -skewLimit <K1Value> -iterations <num> -order {1|2}}
+set inverse ""
+set rootname ""
+set input ""
+set eyTarget 31
+set fraction 1.0
+set iterations 1
+set diagnostic S35BM#1
+set skewLimit 0.12
+set order 2
+set srcDir $OAGGlobal(OAGAppConfigDataDirectory)/elegant
+set args $argv
+if {[APSStrictParseArguments {rootname iterations input eyTarget fraction inverse diagnostic skewLimit srcDir order}] || ![string length $rootname] || ![string length $input] || \
+    ![string length $inverse]} {
+    return -code error "$usage"
+}
+if {[string length $input] && ![file exists $input]} {
+    return -code error "not found: $input"
+}
+if {![file exists $inverse]} {
+    return -code error "not found: $inverse"
+}
+
+# Get relevant data from the inverse response matrix.  This ensures that we have consistent parameters 
+# between computing the response matrix and doing the correction
+
+set dataList [exec sdds2stream $inverse  -parameter=skewPattern,bpmPattern,hcPattern,vcPattern,lattice,beamline]
+foreach var [list skewPattern bpmPattern hcPattern vcPattern lattice beamline] value $dataList {
+    set $var $value
+}
+if {![file exists $lattice]} {
+    return -code error "not found: $lattice"
+}
+
+set fdo [open $rootname.cc-log w]
+puts $fdo "rootname = $rootname, input = $input, eyTarget = $eyTarget"
+flush $fdo
+
+# First, perform SVD correction of vertical dispersion and cross-plane matrix
+# We perform several iterations with fractional correction
+
+set input0 $input
+for {set iteration 1} {$iteration<=$iterations} {incr iteration} {
+    # Compute moments and response matrix with input errors
+    catch {exec elegant $srcDir/etayCPCorrTemplate.ele -macro=rootname=${rootname}-original,inputParameters=$input,hcPattern=$hcPattern,vcPattern=$vcPattern,lattice=$lattice,beamline=$beamline,bpmPattern=$bpmPattern,order=$order > ${rootname}-original.log} result
+    puts $fdo "Compute moments with input errors: $result"
+    flush $fdo
+    if $iteration==1 {
+        # Want to keep the actual original values for later review
+        file copy -force $rootname-original.mom $rootname-original.mom0
+        file copy -force $rootname-original.twi $rootname-original.twi0
+    }
+    # Create error vector
+    # This code needs to closely follow that in makeSkewResponseCP to get the order the same
+    set index 0
+    set fileList ""
+    foreach pattern [list $vcPattern $hcPattern] cplane {v h} type {hv vh} Type {HV VH} {
+        # Process cross-plane matrix 
+        set rmFile ${rootname}-original.${type}rm
+        set corList [APSGetSDDSNames -class column -fileName $rmFile]
+        foreach cor $corList {
+            # Process specific corrector data
+            # Make a file with the error in a single column
+            if ![string match $pattern $cor] continue
+            if [catch {exec sddsconvert $rmFile $rootname-error.$index -retain=col,BPMName,$cor -rename=column,$cor=Error,BPMName=ElementName} result] {
+                puts stderr "$result"
+                exit 1
+            }
+            lappend fileList $rootname-error.$index
+            incr index
+        }
+    }
+    # Vertical dispersion error
+    exec sddsconvert  $rootname-original.twi  -pipe=out -retain=column,ElementName,etay -rename=col,etay=Error \
+      | sddsprocess -pipe=in -match=col,ElementName=$bpmPattern $rootname-error.$index 
+    lappend fileList $rootname-error.$index
+
+    # Combine all the responses for this skew quad into a single-column file.
+    eval exec sddscombine $fileList $rootname-error.all -merge -overwrite -delete=col,ElementType,s36,s66
+    eval file delete -force $fileList
+    
+    # Multiply inverse matrix with error vector and convert to parameter format
+    catch {exec sddsmatrixmult $inverse $rootname-error.all -pipe=out \
+             | sddsxref $inverse -take=OldColumnNames -rename=col,OldColumnNames=ElementTag -pipe \
+             | sddsprocess -pipe=in $rootname-correction.param \
+             "-edit=column,ElementName,ElementTag,S/#/100d" \
+             "-scan=column,ElementOccurence,ElementTag,%ld,edit=Z#,type=long" \
+             -print=col,ElementParameter,K1 "-define=col,ParameterValue,Error $fraction * chs" \
+             -print=col,ParameterMode,differential} result
+    puts $fdo "Multiply with inverse matrix: $result"
+    flush $fdo
+
+    set tmpInput /tmp/[APSTmpString]
+    APSAddToTempFileList $tmpInput
+    # Combine the previous parameter input file with the correction parameter file to make
+    # starting point for the next iteration
+    exec sddscombine $input $rootname-correction.param -merge -overwrite $tmpInput
+    set input $tmpInput
+    file copy -force $input $rootname.lastInput
+}
+# Copy the true original results to convenient names
+file copy -force $input $rootname-correction.param
+file copy -force $rootname-original.mom0 $rootname-original.mom
+file copy -force $rootname-original.twi0 $rootname-original.twi
+file delete -force $rootname-original.mom0 $rootname-original.twi0
+
+# In the next step, we evaluate the correction.
+catch {exec elegant $srcDir/couplingCorrTemplate1.ele \
+         -macro=lattice=$lattice,beamline=$beamline,rootname=${rootname},inputParameters=$input,eyTarget=$eyTarget \
+         -macro=bpmPattern=$bpmPattern,hcPattern=$hcPattern,vcPattern=$vcPattern \
+         -macro=order=$order > $rootname.log} result
+puts $fdo "$result"
+if ![file exists $rootname.done] {
+    puts stderr "Run failed."
+    exit 1
+}
+
+if [expr $eyTarget>0] {
+    # Optionally run the optimizer to raise the vertical emittance to the target value using the zeroth harmonic
+    # Create input file including emittance tuning
+    set fdl [open $rootname.ele1 w]
+    set first 1
+    foreach skewOcc [exec sdds2stream -column=OldColumnNames $inverse] {
+        set skew [os editstring "S/#/10D" $skewOcc]
+        set occurence [os editstring "Z#" $skewOcc]
+        if $occurence!=1 continue
+        if $first {
+            puts $fdl "&optimization_variable name=$skew, item=K1, lower_limit=[expr -1*$skewLimit], upper_limit=$skewLimit, step_size=[expr $skewLimit/100.0] &end"
+            set firstSkew $skew
+            set first 0
+        } else {
+            puts $fdl "&optimization_covariable name=$skew, item=K1, equation=\"${skew}.K10 ${firstSkew}.K1 ${firstSkew}.K10 - +\" &end"
+            puts $fdl "&optimization_term term = \"${skew}.K1 abs $skewLimit 1e-2 segt\" &end"
+        }
+    }
+    close $fdl
+    exec cat $srcDir/couplingCorrTemplate2.ele $rootname.ele1 $srcDir/couplingCorrTemplate3.ele > $rootname.ele
+    file delete $rootname.ele1 
+}
+
+if ![string match "*#*" $diagnostic] {
+    append diagnostic "#1"
+}
+set diagnostic0 [os editstring "S/#/10D" $diagnostic]
+catch {exec elegant $rootname.ele \
+         -macro=lattice=$lattice,beamline=$beamline,rootname=${rootname},inputParameters=$input,eyTarget=$eyTarget \
+         -macro=bpmPattern=$bpmPattern,hcPattern=$hcPattern,vcPattern=$vcPattern \
+         -macro=diagnostic0=$diagnostic0,diagnostic=$diagnostic,order=$order > $rootname.log} result
+puts $fdo "Correct coupling: $result"
+flush $fdo
+
+if ![file exists $rootname.done] {
+    puts stderr "Run failed."
+    exit 1
+}
+
+# Keep only the skew data in the output parameter file
+if [expr $eyTarget<=0] {
+    exec sddsprocess ${rootname}-correction.param ${rootname}.param -nowarning -match=col,ElementName=$skewPattern 
+} else {
+    exec sddsprocess ${rootname}-final.param ${rootname}.param -nowarning -match=col,ElementName=$skewPattern 
+}
+
+# Clean up
+eval file delete $rootname.param1 $rootname.param2 $rootname-error.all $rootname.cc-log 
+
+

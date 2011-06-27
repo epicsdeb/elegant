@@ -1,0 +1,21 @@
+&run_setup
+        lattice = spiffe2elegant.lte,
+        use_beamline = DL,
+        p_central = "{exec sddsprocess <input> -pipe=out -process=pz,ave,pzAve | sdds2stream -pipe -param=pzAve}",
+        output = <output>
+&end
+
+&alter_elements name=D, item=L, value=<drift> &end
+
+&run_control    
+        n_steps = 1
+&end
+
+&sdds_beam
+        input = <input>,
+        input_type = "spiffe",
+        prebunched = 0,
+        n_particles_per_ring = 1,
+&end
+
+&track &end

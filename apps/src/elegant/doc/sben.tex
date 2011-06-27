@@ -1,0 +1,37 @@
+Some confusion may exist about the edge angles, particularly the signs.
+For a sector magnet, we have of course \verb|E1=E2=0|.  For a symmetric rectangular
+magnet, \verb|E1=E2=ANGLE/2|.  If \verb|ANGLE| is negative, then so are
+\verb|E1| and \verb|E2|.  To understand this, imagine a rectangular magnet with positive \verb|ANGLE|.
+If the magnet is flipped over, then \verb|ANGLE| becomes negative, as does the bending
+radius $\rho$.    Hence, to keep the focal length
+of the edge $1/f = -\tan E_i /\rho$ constant, we must also change the sign of
+$E_i$.
+
+When adding errors, care should be taken to choose the right
+parameters.  The \verb|FSE| and \verb|ETILT| parameters are used for
+assigning errors to the strength and alignment relative to the ideal
+values given by \verb|ANGLE| and \verb|TILT|.  One can also assign 
+errors to \verb|ANGLE| and \verb|TILT|, but this has a different meaning:
+in this case, one is assigning errors to the survey itself.  The reference
+beam path changes, so there is no orbit/trajectory error. The most common
+thing is to assign errors to \verb|FSE| and \verb|ETILT|.  Note that when
+adding errors to \verb|FSE|, the error is assumed to come from the power
+supply, which means that multipole strengths also change.
+
+{\em Special note about splitting dipoles}: when dipoles are long, it is
+common to want to split them into several pieces, to get a better look
+at the interior optics.  When doing this, care must be exercised not
+to change the optics.  {\tt elegant} has some special features that
+are designed to reduce or manage potential problems. At issue is the
+need to turn off edge effects between the portions of the same dipole.
+
+First, one can simply use the \verb|divide_elements| command to set up
+the splitting.  Using this command, {\tt elegant} takes care of everything.
+
+Second, one can use a series of dipoles {\em with the same name}.  In this case,
+elegant automatically turns off interior edge effects.  This is true when the
+dipole elements directly follow one another or are separated by a MARK element.
+
+Third, one can use a series of dipoles with different names.  In this case, you
+must also use the \verb|EDGE1_EFFECTS| and \verb|EDGE2_EFFECTS| parameters to
+turn off interior edge effects.  
