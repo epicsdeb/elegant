@@ -9,9 +9,13 @@ Build-Depends: debhelper (>= 7), cdbs,
 Standards-Version: 3.8.0
 Homepage: http://www.aps.anl.gov/Accelerator_Systems_Division/Operations_Analysis/software.shtml
 
-Package: elegant-util
+Package: elegant
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends},
+         tcsh | csh | c-shell,
+Conflicts: elegant-util, liboagphy22.1
+Replaces: elegant-util
+Provides: elegant-util
 Description: ELEctron Generation ANd Tracking package
  Elegant stands for "ELEctron Generation ANd Tracking", a somewhat 
  out-of-date description of a fully 6D accelerator program that 
@@ -21,21 +25,6 @@ Description: ELEctron Generation ANd Tracking package
  which may be either transport lines, circular machines, or a 
  combination thereof. Program execution is driven by commands in a 
  namelist format.
-
-Package: liboagphy22.1
-Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: ELEctron Generation ANd Tracking package
- Elegant stands for "ELEctron Generation ANd Tracking", a somewhat 
- out-of-date description of a fully 6D accelerator program that 
- now does much more than generate particle distributions and track
- them. elegant, written entirely in the C programming language, 
- uses a variant of the MAD input format to describe accelerators, 
- which may be either transport lines, circular machines, or a 
- combination thereof. Program execution is driven by commands in a 
- namelist format.
- .
- OAG runtime libraries
 
 Package: elegant-doc
 Section: contrib/doc

@@ -1,86 +1,46 @@
 #!/usr/bin/make -f
 # -*- makefile -*-
 
-include /usr/share/cdbs/1/rules/debhelper.mk
-include /usr/share/cdbs/1/class/makefile.mk
-include /usr/share/cdbs/1/rules/utils.mk
+export DH_VERBOSE=1
+
+override_dh_auto_test:
 
 EPICS_HOST_ARCH:=$(shell /usr/lib/epics/startup/EpicsHostArch)
+
+# Disable debug build
+export CROSS_COMPILER_TARGET_ARCHS:=$(EPICS_HOST_ARCH)
 
 # chop out the source version from Changelog (ie 1.12.20)
 SOV=$(shell echo "$(DEB_NOEPOCH_VERSION)"| cut -f 1 -d '-')
 
 ENV=EPICS_HOST_ARCH=$(EPICS_HOST_ARCH)
 
-DEB_MAKE_ENVVARS = PATH="$(CURDIR)/apps/bin/$(EPICS_HOST_ARCH):$$PATH" \
-LD_LIBRARY_PATH="$(CURDIR)/apps/lib/$(EPICS_HOST_ARCH):$$LD_LIBRARY_PATH"
+export PATH:="$(CURDIR)/apps/bin/$(EPICS_HOST_ARCH):$(PATH)"
 
-DEB_MAKE_MAKEVARS = EPICS_HOST_ARCH=$(EPICS_HOST_ARCH) USE_RPATH=NO \
-SHRLIB_VERSION=$(SOV) ABS_INSTALL_DIR=/usr/lib/epics
+export LD_LIBRARY_PATH:="$(CURDIR)/apps/lib/$(EPICS_HOST_ARCH):$(LD_LIBRARY_PATH)"
 
-# Prevent CFLAGS and similar from being passed to EPICS since
-# this will break cross-builds of things.
-DEB_MAKE_INVOKE  = $(DEB_MAKE_ENVVARS) $(MAKE) -C $(DEB_BUILDDIR) $(DEB_MAKE_MAKEVARS)
+binary binary-arch binary-indep build install clean:
+	dh $@ --with epics -Sepicsmake
+install: build
+binary-arch binary-indep: install
+binary: binary-arch binary-indep
 
-DEB_BUILDDIR=apps/src/
+override_dh_auto_build:
+	[ -d ./apps/configure ] || ln -s /usr/lib/epics/extensions/configure ./apps/
+	dh_auto_build -- -C apps/src all
 
-post-patches:: ./apps/configure
+override_dh_auto_install:
+	dh_auto_install -- -C apps/src install
 
-./apps/configure:
-	ln -s /usr/lib/epics/extensions/configure ./apps/
+	install -d debian/tmp/usr/bin
 
-move-src: move-src-stamp
+	# Basic commands go in /usr/bin
+	for ff in debian/tmp/usr/lib/epics/bin/$(EPICS_HOST_ARCH)/*;do \
+		install -m 755 $$ff debian/tmp/usr/bin/`basename $$ff`; \
+	done
 
-clean::
+override_dh_auto_clean:
 	rm -f move-src-stamp
-
-DEB_MAKE_CLEAN_TARGET =
-DEB_MAKE_BUILD_TARGET = all
-DEB_MAKE_INSTALL_TARGET = all INSTALL_LOCATION=$(CURDIR)/debian/tmp/usr/lib/epics
-DEB_MAKE_CHECK_TARGET =
-
-# Build Rules
-
-binbuild=$(CURDIR)/apps/bin/$(EPICS_HOST_ARCH)
-libbuild=$(CURDIR)/apps/lib/$(EPICS_HOST_ARCH)
-
-clean::
 	rm -f ./apps/configure
 	rm -rf ./apps/bin ./apps/include ./apps/lib
 	find . -name 'O.*' -type d|xargs rm -rf
-
-# Install Rules
-
-instroot=$(CURDIR)/debian/tmp
-bindir=$(instroot)/usr/bin
-libdir=$(instroot)/usr/lib
-datadir=$(instroot)/usr/share/elegant
-docdir=$(instroot)/usr/share/doc/elegant
-
-epicsroot=$(instroot)/usr/lib/epics
-epicslibs=$(epicsroot)/lib/$(EPICS_HOST_ARCH)
-epicsbins=$(epicsroot)/bin/$(EPICS_HOST_ARCH)
-
-install/liboagphy22.1::
-	install -d $(datadir)
-	install -d $(libdir)
-	install -d $(docdir)
-	install -d $(epicslibs)
-
-	# Basic libraries go in /usr/lib/epics/lib
-	for ff in $(epicslibs)/*.so;do \
-		mv $$ff.$(SOV) $(libdir)/; \
-		rm -f $$ff; \
-		ln -s ../../../../lib/`basename $$ff`.$(SOV) $$ff; \
-	done
-
-install/elegant-util::
-	install -d $(bindir)
-	install -d $(datadir)
-	install -d $(docdir)
-	install -d $(epicsbins)
-
-	# Basic commands go in /usr/bin
-	for ff in $(epicsbins)/*;do \
-		ln -s ../lib/epics/bin/$(EPICS_HOST_ARCH)/`basename $$ff` $(bindir)/`basename $$ff`; \
-	done
