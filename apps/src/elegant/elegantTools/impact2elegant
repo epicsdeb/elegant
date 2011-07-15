@@ -1,4 +1,4 @@
-#!/bin/tcsh
+#!/usr/bin/tcsh
 set nonomatch
 
 if ($#argv != 3) then
