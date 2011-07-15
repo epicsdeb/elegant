@@ -140,7 +140,7 @@ mdbcommon_DIR = $(EPICS_EXTENSIONS_LIB)
 rpnlib_DIR = $(EPICS_EXTENSIONS_LIB)
 meschach_DIR = $(EPICS_EXTENSIONS_LIB)
 fdlibm_DIR = $(EPICS_EXTENSIONS_LIB)
-gsl_DIR = $(EPICS_EXTENSIONS_LIB)
+gsl_DIR = /usr/lib
 
 
 astra2elegant_SRCS = astra2elegant.c
