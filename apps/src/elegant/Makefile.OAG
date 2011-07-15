@@ -107,7 +107,7 @@ USR_LIBS = 	mdbcommon matlib fftpack SDDS1 \
 		rpnlib mdbmth namelist mdblib \
 		meschach z fdlibm gsl
 endif
-z_DIR = $(EPICS_EXTENSIONS_LIB)
+z_DIR = /usr/lib
 
 ifeq ($(MPI),1)
 USR_CFLAGS_WIN32 = -Ic:/MPICH2/include
