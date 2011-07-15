@@ -2,7 +2,7 @@ Source: elegant
 Section: contrib/admin
 Priority: extra
 Maintainer: Guobao Shen <shengb@bnl.gov>
-Build-Depends: debhelper (>= 7), cdbs,
+Build-Depends: debhelper (>= 7.0.50~), epics-debhelper (>= 6~),
                epics-extensions-dev (>= 20091204.1),
                sdds-dev (>=2.9-3), libgsl0-dev,
                zlib1g-dev, liblapack-dev, gfortran, libgfortran3, 
