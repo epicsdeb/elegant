@@ -1,9 +1,10 @@
+ELEGANT=../O.linux-x86_64/elegant
 
 all:: elegant.ps elegant.pdf overview.ps overview.pdf
 
 elegant.ps:
 	rm -f elegant.aux elegant.dvi elegant.log elegant.toc dictionary.tex
-	../O.linux-x86_64/elegant print_dict.ele
+	$(ELEGANT) print_dict.ele
 	latex elegant
 	latex elegant
 	dvips elegant -o elegant.ps
