@@ -261,7 +261,12 @@ long new_sdds_beam(
 #endif
           beam->accepted = (double**)czarray_2d
             (sizeof(double), (long)(beam->n_particle*factor), 7);
-        new_particle_data = 1;
+	if (run->losses)  
+#if USE_MPI
+        if (isSlave || !notSinglePart)
+#endif
+	  beam->lost = (double**)czarray_2d(sizeof(double),(long)(beam->n_particle*factor), 8);
+        new_particle_data = 1;	
       }
       else
         /* since we've read the whole file already and saved it, there is no new data */
@@ -297,6 +302,8 @@ long new_sdds_beam(
 	  if (run->acceptance) 
 	    beam->accepted = (double**)czarray_2d
 	      (sizeof(double), (long)(beam->n_particle*factor), 7);
+	  if (run->losses)  
+	    beam->lost = (double**)czarray_2d(sizeof(double), (long)(beam->n_particle*factor), 8);
 	}
       }
       else { 
@@ -311,7 +318,7 @@ long new_sdds_beam(
 
   p_central = beam->p0_original = run->p_central;
 #if SDDS_MPI_IO
-  if (isSlave && notSinglePart)  {
+  if (isSlave && notSinglePart && new_particle_data)  { /* Compute the offset of particle ID for different processors */
       long sum=0, tmp, my_offset, *offset = tmalloc(n_processors*sizeof(*offset)),
 	n_particle=(beam->n_original)/sample_interval*sample_fraction;
       MPI_Allgather(&n_particle, 1, MPI_LONG, offset, 1, MPI_LONG, workers);
@@ -480,6 +487,12 @@ long new_sdds_beam(
     }
 #if SDDS_MPI_IO
     }
+    /* We need change to the singlePart mode for certain special situations */
+    if (do_find_aperture || runInSinglePartMode) {
+      notSinglePart = 0;
+      lessPartAllowed = 1;
+      partOnMaster = 1;	
+    } 
     if (isSlave || (!notSinglePart) || (partOnMaster)) {
 #endif
     if (!beam->original)
@@ -509,6 +522,19 @@ long new_sdds_beam(
 #endif
   }
 #if SDDS_MPI_IO
+  if (notSinglePart) {
+    if (isMaster)
+      beam->n_to_track = 0;
+    MPI_Allreduce (&(beam->n_to_track), &(beam->n_to_track_total), 1, MPI_LONG, MPI_SUM, MPI_COMM_WORLD);
+    beam->n_original_total = beam->n_to_track_total;
+  }
+
+  /* We need change to the singlePart mode for certain special situations */
+  if (do_find_aperture || runInSinglePartMode) {
+    notSinglePart = 0;
+    lessPartAllowed = 1;
+    partOnMaster = 1;	
+  } 
   if (isSlave || (!notSinglePart) || partOnMaster) {
 #endif
   if (new_particle_data && save_initial_coordinates && 
@@ -519,6 +545,46 @@ long new_sdds_beam(
        */
     if (beam->original==beam->particle) 
       bombElegant("logic error in new_sdds_beam: array for original coordinates is missing", NULL);
+#if SDDS_MPI_IO
+  if (!notSinglePart && new_particle_data) {/* Each processor will hold a copy of the whole beam */
+    long np_total, np=beam->n_to_track;
+    double **data_all=NULL, **data=beam->particle;
+    int *offset_array= (int*)tmalloc(n_processors*sizeof(*offset_array));
+    long *n_vector_long = (long*)tmalloc(n_processors*sizeof(*n_vector_long));
+    int *n_vector = (int*)tmalloc(n_processors*sizeof(*n_vector));
+    
+    MPI_Allreduce (&np, &np_total, 1, MPI_LONG, MPI_SUM, MPI_COMM_WORLD);
+
+    data_all = (double**)resize_czarray_2d((void**)data_all, sizeof(double), (long)(np_total), 7);
+    
+    MPI_Allgather(&np, 1, MPI_LONG, n_vector_long, 1, MPI_LONG, MPI_COMM_WORLD);
+    offset_array[0] = 0;
+    for (i=0; i<n_processors-1; i++) {
+      n_vector[i] = 7*n_vector_long[i]; 
+      offset_array[i+1] = offset_array[i] + n_vector[i];
+    }
+    n_vector[n_processors-1] = 7*n_vector_long[n_processors-1]; 
+
+    if (!beam->n_original) /* A dummy memory is allocated on Master */ 
+      data = (double**)czarray_2d(sizeof(**data), 1, 7);
+    MPI_Allgatherv(&data[0][0], 7*np, MPI_DOUBLE, &data_all[0][0], n_vector, offset_array, MPI_DOUBLE, MPI_COMM_WORLD );
+  
+    if (data)
+      free_czarray_2d((void**)data, np, 7);
+    if (offset_array)
+      tfree(offset_array);
+    if (n_vector)
+      tfree(n_vector);
+    if (n_vector_long)
+      tfree(n_vector_long);
+    if (beam->particle)
+      beam->particle = data_all;
+    beam->n_to_track = np_total;
+
+    /* The memory for original will be reallocated to hold the whole beam */
+    beam->original = (double**)resize_czarray_2d((void**)beam->original, sizeof(double), (long)(np_total), 7);
+  }
+#endif
     if (!beam->original)
       bombElegant("beam->original is NULL (new_sdds_beam.4)", NULL);
     if (!beam->particle)
@@ -561,14 +627,7 @@ long new_sdds_beam(
   if (beam->original==beam->particle)
       beam->original = NULL;
   }
-#if SDDS_MPI_IO
-  if (notSinglePart) {
-    if (isMaster)
-      beam->n_to_track = 0;
-    MPI_Allreduce (&(beam->n_to_track), &(beam->n_to_track_total), 1, MPI_LONG, MPI_SUM, MPI_COMM_WORLD);
-    beam->n_original_total = beam->n_to_track_total;
-  }
-#endif
+
   log_exit("new_sdds_beam");
   return(beam->n_to_track);
 }

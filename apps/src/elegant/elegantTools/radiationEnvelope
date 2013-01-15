@@ -1,0 +1,158 @@
+#!/bin/sh  
+# \
+exec oagtclsh "$0" "$@"
+
+set auto_path [linsert $auto_path 0  /usr/local/oag/apps/lib/$env(HOST_ARCH)]
+set auto_path [linsert $auto_path 0 /usr/local/oag/lib_patch/$env(HOST_ARCH)]
+APSStandardSetup
+
+set usage {usage: radiationEnvelope [-brightness <filename>] [-fluxDensity <filename>] [-totalFlux <filename>] [-pinholeFlux <filename>] -output <filename> [-spacing <keV>(0.1)] [-range <min>,<max>] [-breakPages {0|1}(1)]}
+set brightness ""
+set fluxDensity ""
+set totalFlux ""
+set pinholeFlux ""
+set output ""
+set spacing 0.1
+set range 0,0
+set breakPages 1
+set args $argv
+if {[APSStrictParseArguments {brightness totalFlux pinholeFlux fluxDensity breakPages spacing input output hmax range}] || ![string length $output]} {
+    return -code error "$usage"
+}
+if [file exists $output] {
+    return -code error "in use: $output"
+}
+
+set inputType(Brightness) $brightness
+set inputType(FluxDensity) $fluxDensity
+set inputType(TotalFlux) $totalFlux
+set inputType(PinholeFlux) $pinholeFlux
+set inputType(CentralConeFlux) $fluxDensity
+foreach name {Brightness FluxDensity TotalFlux PinholeFlux} {
+    set input $inputType($name)
+    if {[string length $input]} {
+	if {![file exists $input]} {
+	    return -code error "not found: $input"
+	}
+    }
+}
+
+set PEMin [lindex [split $range ,] 0]
+set PEMax [lindex [split $range ,] 1]
+if [expr $PEMin==$PEMax] {
+    set PEEMin 1e100
+    set PEMax -1e100
+    foreach name {Brightness FluxDensity TotalFlux PinholeFlux} {
+        set input $inputType($name)
+        if [string length $input]==0 continue
+        if [catch {exec sddsprocess $input -pipe=out \
+                     "-process=photonEnergy*,min,%sMin" \
+                     "-process=photonEnergy*,max,%sMax" \
+                     | sddscollapse -pipe \
+                     | sddscollect -pipe -collect=prefix=photonEnergy \
+                     | sddsprocess -pipe -process=photonEnergy,min,PEMin -process=photonEnergy,max,PEMax \
+                     | sdds2stream -pipe -parameter=PEMin,PEMax} result] {
+            return -code error "$result"
+        }
+        set PEMin0 [lindex $result 0]
+        set PEMax0 [lindex $result 1]
+        if [expr $PEMin0<$PEMin] {
+            set PEMin $PEMin0
+        }
+        if [expr $PEMax0>$PEMax] {
+            set PEMax $PEMax0
+        }
+    }
+}
+
+set finalOutput $output
+set mainFileList ""
+
+set unitsType(Brightness) "ph/s/mm\$a2\$n/mrad\$a2\$n/0.1%BW"
+set unitsType(FluxDensity) "ph/s/mrad\$a2\$n/0.1%BW"
+set unitsType(TotalFlux) "ph/s/0.1%BW"
+set unitsType(PinholeFlux) "ph/s/0.1%BW"
+set unitsType(CentralConeFlux) "ph/s/0.1%BW"
+set firstName ""
+
+foreach name {Brightness FluxDensity TotalFlux PinholeFlux CentralConeFlux} {
+    set input $inputType($name)
+    if [string length $input]==0 continue
+    set columnList [APSGetSDDSNames -class column -fileName $input]
+    set fileList ""
+    set count 0
+    set units $unitsType($name)
+    set BList ""
+    set hList ""
+    set PDList ""
+    set TPList ""
+    set extraInterpList ""
+    set output $finalOutput.$name
+    if [lsearch -exact $columnList ${name}1]==-1 {
+	puts stderr "Error: did not find ${name}1 in $input"
+	exit 1
+    }
+    if [string length $firstName]==0 {
+        set firstName $name
+    }
+    set hLim 3
+    set count 1
+    while 1 {
+        if [lsearch -exact $columnList ${name}$hLim]==-1 {
+            break
+        }
+        incr count
+        set hLim [expr $hLim+2]
+    }
+
+    if [lsearch -exact $columnList OnAxisPowerDensity]!=-1 {
+        lappend extraInterpList OnAxisPowerDensity
+    } 
+    if [lsearch -exact $columnList TotalPower]!=-1 {
+        lappend extraInterpList TotalPower
+    } 
+    
+    for {set h 1} {$h<$hLim} {incr h 2} {
+        set interpList $extraInterpList
+        lappend interpList $name$h
+        exec sddssort $input -pipe=out -column=photonEnergy$h,incr \
+          | sddsinterp -pipe \
+          -equispaced=$spacing,$PEMin,$PEMax -below=value=0 -above=value=0 \
+          -column=photonEnergy$h,[join $interpList ,],[join $extraInterpList ,] \
+          | sddsconvert -pipe=in $input.$h \
+          -rename=column,photonEnergy$h=photonEnergy
+        lappend fileList $input.$h
+        lappend BList $name$h
+        lappend hList $h $name$h
+    }
+
+    if {[lsearch -exact $columnList OnAxisPowerDensity]!=-1 && [lsearch -exact $columnList TotalPower]!=-1} {
+        eval exec sddsxref $fileList -pipe=out -take=* \
+          | sddsprocess -pipe \
+          "{-define=column,$name,$BList $count maxn,units=$units}" \
+          "{-define=column,Harmonic,$name 0 > ? $hList $name findItem : 0 $ ,type=short}" \
+          | sddsconvert -pipe=in $output \
+          -delete=column,*1,*2,*3,*5,*6,*7,*9
+    } else {
+        eval exec sddsxref $fileList -pipe=out -take=* \
+          | sddsprocess -pipe=in $output \
+          "{-define=column,$name,$BList $count maxn,units=$units}" 
+    }
+    
+    lappend mainFileList $output
+
+    eval file delete $fileList 
+}
+
+if $breakPages {
+    eval exec sddsxref -take=* $mainFileList -pipe=out \
+        | sddsprocess -pipe \
+        "{-define=column,Break1,$firstName 1e6 < ? 1 : 0  \$ }"  \
+        "{-define=column,Break2,i_row 0 == ? 0 : $firstName i_row 1 - &$firstName \[ 1e-16 + / 1.1 / int \$ }" \
+        "{-define=column,Break,Break1 Break2 +}" \
+        | sddsbreak -pipe -change=Break \
+        | sddsprocess -pipe=in -nowarning -filter=col,Break,0,0 "{-test=parameter,n_rows 1 > }" $finalOutput
+} else {
+    eval exec sddsxref -take=* $mainFileList $finalOutput
+}
+eval file delete -force $mainFileList

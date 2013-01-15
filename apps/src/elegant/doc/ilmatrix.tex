@@ -10,7 +10,16 @@ individual particle's linear matrix.
 
 Using this element is very similar to using linear chromatic matrix
 tracking via the \verb|setup_linear_chromatic_tracking| command.
-The advantage is that using ILMATRIX, one can split a ring into segments
+The advantage is that using {\tt LMATRIX}, one can split a ring into segments
 and place, for example, impedance elements between the segments.
 
 This element was inspired by requests from Y. Chae (APS).
+
+N.B.: There is a bug related to using {\tt ILMATRIX} that will result in a crash
+if one does not request computation of the twiss parameters. If you encounter this
+problem, just add the following statement after the \verb|run_setup| command:
+\begin{verbatim}
+&twiss_output
+        matched = 1
+&end
+\end{verbatim}

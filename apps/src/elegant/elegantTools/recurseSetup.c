@@ -11,10 +11,7 @@
  * purpose: work out recursion relations for SLAC 75 for input into mathematica
  * 
  * Michael Borland, 1991, 1996
- $Log: recurseSetup.c,v $
- Revision 1.1  2007/03/30 16:50:28  soliday
- Moved from directory above.
-
+ $Log: not supported by cvs2svn $
  Revision 1.4  2002/08/14 20:23:46  soliday
  Added Open License
 

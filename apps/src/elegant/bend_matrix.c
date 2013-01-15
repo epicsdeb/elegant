@@ -515,7 +515,7 @@ VMATRIX *corrector_matrix(
       tmp  = Mtot;
       Mtot = M;
       M    = tmp;
-      free_matrices(Medge); tfree(Medge); 
+      free_matrices(Medge); tfree(Medge);  Medge = NULL;
       
       Medge = edge_matrix(kick, h, 0.0, 0.0, 1, 0.0, max_order, 1, 0);
       concat_matrices(Mtot, Medge, M, 0);
@@ -536,7 +536,7 @@ VMATRIX *corrector_matrix(
 
 
 /* routine: sbend_matrix
- * purpose: third-order sector bending magnet matrix calculation
+ * purpose: second-order sector bending magnet matrix calculation
  * 
  * Michael Borland, 1991. 
  */

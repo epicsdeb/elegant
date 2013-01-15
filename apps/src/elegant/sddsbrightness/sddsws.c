@@ -10,7 +10,19 @@
    transfer by Shang from ws.f by Roger Dejus 
    for calculating wiggler and bending magnet spectra using the bessel function approximation.
 
-$Log: sddsws.c,v $
+$Log: not supported by cvs2svn $
+Revision 1.14  2012/01/08 21:26:02  borland
+Fixed units for Kx and Ky in output file.
+
+Revision 1.13  2011/03/14 15:06:15  shang
+fixed the current parameter units which should be mA instead of A
+
+Revision 1.12  2011/03/09 20:51:54  shang
+added the description for computing bending magnet spectra.
+
+Revision 1.11  2011/03/09 20:44:36  shang
+added description
+
 Revision 1.10  2009/06/05 15:03:21  shang
 added warning message for possible inaccurate results.
 
@@ -106,20 +118,29 @@ pinhole          Specifies pinhole parameters: \n\
                  pinhole parameters are not needed for computing on-axis brilliance (i.e., mode=3). \n\
 calculationMode specifies calculation mode: \n\
                 1 | fluxDistribution:        Angular/spatial flux density distribution \n\
+                                             Flux distribution at the energy chosen as minimum energy. \n\
                 2 | fluxSpectrum:            Angular/spatial flux density spectrum \n\
+                                             Spectrum at any given point in space as selected by the X and Y \n\
+                                             coordinate for the center of the pinhole. X is horizontal and Y is vertical.\n\
                 3 | brightness | brilliance: On-axis brilliance spectrum (not implemented) \n\
                 4 | pinholeSpectrum:         Flux spectrum through a pinhole \n\
+                                             Spectrum through a pinhole centered at X-center and Y-center with \n\
+                                             size X-size and Y-size.  The energy range is from the minimum to the \n\
+                                             maximum energy. \n\
                 5 | integratedSpectrum:      Flux spectrum integrated over all angles \n\
+                                             The pinhole parameters have no significance here. \n\
                 6 | powerDensity:            Power density and integrated power \n\
+                                             Integrated over all energies, thus the energy parameters have no significance here.\n\
 transformed from ws.f by Roger Dejus, Hairong Shang (April, 2009).\n\n\
 NOTE: THE POLARIZATION PARAMETERS ARE PROVIDED (P1, P2, P3 and P4 in the output file.) \n\
 ALTHOUGH NOT THOROUGHLY TESTED - USE WITH CAUTION.\n\
-For a bending magnet source:  set N=0.5, and make Ky large and adjust the period length accordingly. \n\
-For example, put Ky=9.34 and alculate the period length from, Period (cm) = 10.0/B0(T), where B0 is \n\
-strength of the magnetic field (in Tesla) for the bending magnet.  The calculated power density (pd) is correct,\n\
-but the total power (ptot) is irrelevant. Typically make the extend of the pinhole small in the horizontal direction\n\
-(theta << Ky/gamma) as the intensity should not depend on the horizontal offset. Check value of B0 (and critcal energy EC0)\n\
-in the output file.\n\n";
+sddsws calculates wiggler spectra using the Bessel function approximation. \n\
+The input parameters are divided into sections related to the storage ring, the wiggler device, and the quantity to be calculated.\n\n\
+Note: For a bending magnet source: set N=0.5, and make Ky large and adjust the period length accordingly. \n\
+For example, put Ky=9.34 and calculate the period length from, Period (cm) = 10.0/B0(T), where B0 is the known\n\
+strength of the magnetic field (in Tesla) for the bending magnet.  The calculated power density (pd) is \n\
+correct, but the total power (ptot) is irrelevant. Typically make the extend of the pinhole small in the\n\
+horizontal direction (theta << Ky/gamma) as the intensity should not depend on the horizontal offset.\n\n";
          
 void checkWSInput(long mode, double *xpc, double *ypc, double xsize, double ysize, long nE, double kx, double ky, 
                   long bendingMagnet, long *isAngular, double *pdistance,
@@ -163,9 +184,9 @@ int main(int argc, char **argv)
 {
   char  *outputfile=NULL;
   double energy=7.0, current=100.0, emax=-1, emin=-1, xpc=0, ypc=0, xsize=-1, ysize=-1, kx=0, ky=-1, period=-1, pdistance=0;
-  long mode=-1, nxp=20, nyp=20, nE=500, i, j, k, bendingMagnet=0, i_arg, nowarnings=0, mode_index=-1, isAngular=0, total_rows=0, index;
+  long mode=-1, nxp=20, nyp=20, nE=500, bendingMagnet=0, i_arg, nowarnings=0, mode_index=-1, isAngular=0, total_rows=0, index=0;
   double nPeriod;
-  SDDS_DATASET SDDSin, SDDSout;
+  SDDS_DATASET SDDSout;
   SCANNED_ARG *s_arg;
   unsigned long dummyFlags=0, pipeFlags=0;
   
@@ -429,15 +450,15 @@ void SetupOutputFile(char *filename, SDDS_DATASET *SDDSout, long mode, long isAn
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
   if (SDDS_DefineParameter(SDDSout, "Description", NULL, NULL, NULL, NULL, SDDS_STRING, 0)<0 ||
       SDDS_DefineParameter(SDDSout, "eBeamEnergy", NULL, "Gev", "Electron Beam Energy", NULL, SDDS_DOUBLE, 0)<0 ||
-      SDDS_DefineParameter(SDDSout, "eBeamCurrent", NULL, "A", "Electron Beam Current", NULL, SDDS_DOUBLE, 0)<0 ||
+      SDDS_DefineParameter(SDDSout, "eBeamCurrent", NULL, "mA", "Electron Beam Current", NULL, SDDS_DOUBLE, 0)<0 ||
       SDDS_DefineParameter(SDDSout, "MinEnergy", NULL, "eV", "minimum photon energy", NULL, SDDS_DOUBLE, 0)<0 ||
       SDDS_DefineParameter(SDDSout, "MaxEnergy", NULL, "eV", "maximum photon energy", NULL, SDDS_DOUBLE, 0)<0 ||
       SDDS_DefineParameter(SDDSout, "EnergyStep", NULL, NULL, "number of points of photon energy", NULL, SDDS_LONG, 0)<0 ||
       SDDS_DefineParameter(SDDSout, "Device", NULL, NULL, NULL, NULL, SDDS_STRING, 0)<0 ||
       SDDS_DefineParameter(SDDSout, "Period", NULL, "cm", "Period length of wiggler or undulator", NULL, SDDS_DOUBLE, 0)<0 ||
       SDDS_DefineParameter(SDDSout, "NPeriod", NULL, NULL, "number of periods of wiggler", NULL, SDDS_DOUBLE, 0)<0 ||
-      SDDS_DefineParameter(SDDSout, "Kx", NULL, "Tesla", "x field", NULL, SDDS_DOUBLE, 0)<0 ||
-      SDDS_DefineParameter(SDDSout, "Ky", NULL, "Tesla", "y field", NULL, SDDS_DOUBLE, 0)<0 ||
+      SDDS_DefineParameter(SDDSout, "Kx", NULL, NULL, "K value of horizontal field", NULL, SDDS_DOUBLE, 0)<0 ||
+      SDDS_DefineParameter(SDDSout, "Ky", NULL, NULL, "K value of vertical field", NULL, SDDS_DOUBLE, 0)<0 ||
       SDDS_DefineParameter(SDDSout, "PinholeDistance", NULL, "m", "pinhole distance from the source", NULL, SDDS_DOUBLE, 0)<0 ||
       SDDS_DefineParameter(SDDSout, "PinholeXPos", NULL, isAngular ? "mrad": "mm",
                            "X-coordinate for center of pinhole (mm) or (mrad)", NULL, SDDS_DOUBLE, 0)<0 ||
@@ -456,7 +477,7 @@ void SetupOutputFile(char *filename, SDDS_DATASET *SDDSout, long mode, long isAn
       SDDS_DefineParameter(SDDSout, "e1", NULL, "keV", NULL, NULL, SDDS_DOUBLE, 0)<0 ||
       SDDS_DefineParameter(SDDSout, "lamda1", NULL, "A", NULL, NULL, SDDS_DOUBLE, 0)<0 ||
       SDDS_DefineParameter(SDDSout, "TotalPowerDensity",  NULL, 
-                           "Watts/mm^2 or mrad^2", NULL, NULL, SDDS_DOUBLE, 0)<0 ||
+                           "Watts/mm$a2$n or mrad$a2$n", NULL, NULL, SDDS_DOUBLE, 0)<0 ||
       SDDS_DefineParameter(SDDSout, "TotalPower",  NULL, "Watts", NULL, NULL, SDDS_DOUBLE, 0)<0)
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
   switch (mode) {
@@ -471,26 +492,26 @@ void SetupOutputFile(char *filename, SDDS_DATASET *SDDSout, long mode, long isAn
                           "vertical position of pinhole",NULL, SDDS_DOUBLE, 0)<0)
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
     if (isAngular) {
-      if (SDDS_DefineColumn(SDDSout, "AngularFluxDensity", NULL, "photons/s/mrad^2/0.1%bandwidth", "angular flux density",NULL, SDDS_DOUBLE, 0)<0)
+      if (SDDS_DefineColumn(SDDSout, "AngularFluxDensity", NULL, "photons/s/mrad$a2$n/0.1%BW", "angular flux density",NULL, SDDS_DOUBLE, 0)<0)
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
-    } else if (SDDS_DefineColumn(SDDSout, "Irradiance", NULL,"photons/s/mm^2/0.1%bandwidth", "spatial flux density",NULL, SDDS_DOUBLE, 0)<0)
+    } else if (SDDS_DefineColumn(SDDSout, "Irradiance", NULL,"photons/s/mm$a2$n/0.1%BW", "spatial flux density",NULL, SDDS_DOUBLE, 0)<0)
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
     break;
   case 2:
-    if (SDDS_DefineParameter(SDDSout, "IntegratedPowerDensity",  NULL, isAngular ? "Watts/mrad^2" : "Watts/mm^2", NULL, NULL, SDDS_DOUBLE, 0)<0 ||
-        SDDS_DefineParameter(SDDSout, "IntegratedFluxDensity",  NULL,  isAngular ? "ph/s/mr^2" : "ph/s/mm^2", NULL, NULL, SDDS_DOUBLE, 0))
+    if (SDDS_DefineParameter(SDDSout, "IntegratedPowerDensity",  NULL, isAngular ? "Watts/mrad$a2$n" : "Watts/mm$a2$n", NULL, NULL, SDDS_DOUBLE, 0)<0 ||
+        SDDS_DefineParameter(SDDSout, "IntegratedFluxDensity",  NULL,  isAngular ? "ph/s/mr$a2$n" : "ph/s/mm$a2$n", NULL, NULL, SDDS_DOUBLE, 0))
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
     if (SDDS_DefineColumn(SDDSout, "Energy", NULL, "eV", "photon energy",NULL, SDDS_DOUBLE, 0)<0)
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
     if (isAngular) {
-      if (SDDS_DefineColumn(SDDSout, "AngularFluxDensity", NULL, "photons/s/mrad^2/0.1%bandwidth", "angular flux density",NULL, SDDS_DOUBLE, 0)<0)
+      if (SDDS_DefineColumn(SDDSout, "AngularFluxDensity", NULL, "photons/s/mrad$a2$n/0.1%BW", "angular flux density",NULL, SDDS_DOUBLE, 0)<0)
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
-    } else if (SDDS_DefineColumn(SDDSout, "Irradiance", NULL, "photons/s/mm^2/0.1%bandwidth", "spatial flux density",NULL, SDDS_DOUBLE, 0)<0)
+    } else if (SDDS_DefineColumn(SDDSout, "Irradiance", NULL, "photons/s/mm$a2$n/0.1%BW", "spatial flux density",NULL, SDDS_DOUBLE, 0)<0)
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
     break;
   case 3:
     if (SDDS_DefineColumn(SDDSout, "Energy", NULL, "eV", "photon energy",NULL, SDDS_DOUBLE, 0)<0 ||
-        SDDS_DefineColumn(SDDSout, "Brightness", NULL, "ph/s/mr^2/mm^2/0.1%bw", 
+        SDDS_DefineColumn(SDDSout, "Brightness", NULL, "ph/s/mr$a2$n/mm$a2$n/0.1%bw", 
                           "on axis brightness",NULL, SDDS_DOUBLE, 0)<0)
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
     break;
@@ -513,7 +534,7 @@ void SetupOutputFile(char *filename, SDDS_DATASET *SDDSout, long mode, long isAn
         SDDS_DefineColumn(SDDSout, "Y", NULL, isAngular ? "mrad" : "mm", 
                           "vertical position of pinhole",NULL, SDDS_DOUBLE, 0)<0)
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
-    if (SDDS_DefineColumn(SDDSout, "PowerDensity", NULL, isAngular ? "Watts/mrad^2" : "Watts/mm^2", "power density distribution",NULL, SDDS_DOUBLE, 0)<0)
+    if (SDDS_DefineColumn(SDDSout, "PowerDensity", NULL, isAngular ? "Watts/mrad$a2$n" : "Watts/mm$a2$n", "power density distribution",NULL, SDDS_DOUBLE, 0)<0)
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
     break;
   }
@@ -549,7 +570,7 @@ void checkWSInput(long mode, double *xpc, double *ypc, double xsize, double ysiz
     exit(1);
   }
   if (nE>10000) {
-    fprintf(stderr, "Enery array (nE) out of bounds; number of points %d is greater than allowed (10000).\n", nE);
+    fprintf(stderr, "Enery array (nE) out of bounds; number of points %ld is greater than allowed (10000).\n", nE);
     exit(1);
   }
   if (kx !=0) {
@@ -570,7 +591,7 @@ void checkWSInput(long mode, double *xpc, double *ypc, double xsize, double ysiz
     fprintf(stderr, "The pinhole distance can not be zero.\n");
     exit(1);
   }
-  if (mode=1) {
+  if (mode==1) {
     if (emin<0) {
       fprintf(stderr, "The minimum photon energy for mode=1 has to be provided.\n");
       exit(1);
@@ -661,7 +682,7 @@ void compute_constants(long nE, long nxp, long nyp, double nPeriod,
 void compute_irradiance(long nxp, long nyp, long bendingMagnet, double kx, double ky, double p_e, long mode, double *ra0, double *ra1,  double *ra3)
 {
   long i, j, k;
-  double  xg, yg, vp, vpmax, ecp, yg2, yg1, cc, cpi, cpis, y2, eta, y, asigma, api, area, fc, e1;
+  double  xg, yg, vp, vpmax, ecp, yg2, yg1, cc, cpi, cpis, y2, eta, y, asigma, api, fc, e1;
   
   vpmax = sqrt(1.0 - ECP_FRAC);
   for (j=0; j<nyp; j++) {
@@ -709,7 +730,7 @@ void space_distribution(long mode, long bendingMagnet, long nxp, long nyp, long 
                         double **p1, double **p2, double **p3, double **p4, double *flux, double *power)
 {
   long i, j, k;
-  double *ra1, *ra3, *ra0, fc, a1, a2, a3, ra2;
+  double *ra1, *ra3, *ra0, a1, a2, a3, ra2;
 
   *xpp = calloc(sizeof(**xpp), nxp*nyp);
   *ypp = calloc(sizeof(**ypp), nxp*nyp);
@@ -781,9 +802,9 @@ void spectral_distribution(long mode, long nE,  long nxp, long nyp, long bending
                            double **irradiance,  double **p1, double **p2, double **p3, double **p4, double *flux, double *power)
 {
   /*units ph/s/mr^2.0.1%bw for angular flux density and ph/s/mm^2/0.1%bw for spatial flux density */
-  double vpmax, *ra0=NULL, *ra1=NULL, *ra2=NULL, *ra3=NULL, area0, area1, area3=0, we=0;
-  double spec0, spec1, spec2, spec3, a1, a3;
-  long ix, iy, ie;
+  double *ra0=NULL, *ra1=NULL, *ra3=NULL, area0, area1, area3=0, we=0;
+  double spec0=0, spec1=0, spec3=0, a1, a3;
+  long ie;
   
   
   *p1 = calloc(sizeof(**p1), nE);
@@ -837,7 +858,7 @@ void spectral_distribution(long mode, long nE,  long nxp, long nyp, long bending
 void angle_integration(long lopt, long nE, 
                        double **irradiance, double **p1, double **p2, double **p3, double **p4, double *flux, double *power) 
 {
-  double vp, dvs, ec02, dec, *wgt, sum=0, spec0, spec1, spec3, vn, ecn, ecp, *ecpa, we, dvn, sumx;
+  double vp, dvs, ec02, dec, *wgt, spec0, spec3, vn, ecn, ecp, *ecpa, we, dvn, sumx;
   long nxa = 100; /* Number of steps for integration over horizontal angle */
   long ie, i;
   double  g1, y1;
@@ -1013,7 +1034,7 @@ void bendingMagnet_power_distribution(long nxp, long nyp, long nE, double ky, do
                                 double **irradiance, double **p1, double **p2, double **p3, double **p4, double *power)
 {
   long neta, ie, ix, iy, k;
-  double etamin, etamax, deta, vpmax, we, *eta, *asigma, *api, ra0, ra1,ra2, ra3, xg, yg, vp, ecp, yg2, yg1, cc, cpi, cpis, c1, fc, y, y2, a1, a2, a3;
+  double etamin, etamax, deta, vpmax, we, *eta, *asigma, *api, ra0, ra1,ra2, ra3, xg, yg, vp, ecp, yg2, yg1, cc, cpi, cpis, c1, fc, y, y2, a1, a3;
   
   asigma = api  = NULL;
   neta   = NETA_SZ;
@@ -1129,7 +1150,7 @@ c  Output: 	Stokes parameters
 c  Roger J. Dejus, XFD/APS, April, 1995. */
 void fk(double xg, double yg, double k_magnet, double *s0, double *s1, double *s2, double *s3)
 {
-  double gk, c, xc, yc, kc, A, B, eps, fkh, fkv;
+  double gk, c, A, B, eps, fkh, fkv;
   A=0;
   B=PI;
   eps = 1.0e-12;

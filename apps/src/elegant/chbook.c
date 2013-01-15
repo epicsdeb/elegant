@@ -13,6 +13,7 @@
 #include "constants.h"
 #include "chbook.h"
 
+void exitElegant(long status);
 void bombElegant(char *error, char *usage);
 
 void findBit (long value, long *Bit, long inc, long length);

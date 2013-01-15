@@ -497,6 +497,7 @@ long assert_element_links(ELEMENT_LINKS *links, RUN *run, LINE_LIST *beamline, l
             if ((entity_description[targ[0]->type].parameter[param].flags&PARAM_CHANGES_MATRIX) && targ[i_elem]->matrix) {
                 free_matrices(targ[i_elem]->matrix);
                 tfree(targ[i_elem]->matrix);
+                targ[i_elem]->matrix = NULL;
                 compute_matrix(targ[i_elem], run, NULL);
                 matrices_changed++;
                 }

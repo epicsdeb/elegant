@@ -19,6 +19,7 @@ long find_nearby_array_entry(double *entry, long n, double key);
 void set_up_rftm110(RFTM110 *rf_param, double **initial, long n_particles, double pc_central);
 void set_up_rfdf(RFDF *rf_param, double **initial, long n_particles, double pc_central);
 double linear_interpolation(double *y, double *t, long n, double t0, long i);
+void set_up_mrfdf(MRFDF *rf_param, double **initial, long n_particles, double pc_central);
 
 void track_through_rf_deflector(
                                 double **final, 
@@ -35,13 +36,23 @@ void track_through_rf_deflector(
   double t_part;      /* time at which a particle enters cavity */
   double Estrength;    /* |e.V.L/nSections|/(gap.m.c^2) */
   double x, xp, y, yp;
-  double beta, px, py, pz, beta_z, pc, gamma;
+  double beta, px, py, pz, beta_z, pc, gamma, dpx;
   double omega, k, Ephase, voltFactor, t0;
   double cos_tilt, sin_tilt, dtLight, tLight;
   double length;
   long ip, is, n_kicks;
 
-  n_kicks = rf_param->n_kicks;
+  omega = 2*PI*rf_param->frequency;
+  k = omega/c_mks;
+
+  if ((n_kicks = rf_param->n_kicks)<=0) {
+    if ((n_kicks = (rf_param->length/(PIx2/k)*100))<1) {
+      if (rf_param->length==0)
+        n_kicks = 1;
+      else
+        n_kicks = 11;
+    }
+  }
   if (n_kicks%2==0)
     n_kicks += 1;
   
@@ -81,6 +92,8 @@ void track_through_rf_deflector(
     voltFactor = 1;
   }
 
+  voltFactor *= (1+rf_param->fse);
+
   voltFactor *= (gauss_rn_lim(1.0, rf_param->voltageNoise, 2, random_3) +
      (rf_param->voltageNoiseGroup
       ? rf_param->groupVoltageNoise*GetNoiseGroupValue(rf_param->voltageNoiseGroup)
@@ -91,7 +104,6 @@ void track_through_rf_deflector(
     return;
   }
   
-  omega = 2*PI*rf_param->frequency;
   t_first = rf_param->t_first_particle;
   length = rf_param->length/n_kicks;
   Ephase = (rf_param->phase
@@ -116,10 +128,11 @@ void track_through_rf_deflector(
 
   cos_tilt = cos(rf_param->tilt);
   sin_tilt = sin(rf_param->tilt);
-  Estrength = (particleCharge*rf_param->voltage/n_kicks)/(particleMass*sqr(c_mks));
-  k = omega/c_mks;
+  Estrength = voltFactor*(particleCharge*rf_param->voltage/n_kicks)/(particleMass*sqr(c_mks));
 
   if (isSlave || !notSinglePart) {
+    if (rf_param->dx || rf_param->dy || rf_param->dz)
+      offsetBeamCoordinates(initial, n_particles, rf_param->dx, rf_param->dy, rf_param->dz);
     if (rf_param->tilt)
       rotateBeamCoordinates(initial, n_particles, rf_param->tilt);
     for (ip=0; ip<n_particles; ip++) {
@@ -159,6 +172,8 @@ void track_through_rf_deflector(
 		ip, is, omega*(t_part-tLight)*180/PI, fmod((t_part-tLight)*omega+Ephase, PIx2)*180/PI);
 #endif
 	px += Estrength*cos((t_part-tLight)*omega + Ephase);
+        if (rf_param->magneticDeflection)
+          pz = sqrt(sqr(pc)-sqr(px)-sqr(py));
         pz += Estrength*k*x*sin((t_part-tLight)*omega + Ephase);
 	xp = px/pz;
 	yp = py/pz;
@@ -179,7 +194,9 @@ void track_through_rf_deflector(
 #endif
     }
     if (rf_param->tilt)
-      rotateBeamCoordinates(initial, n_particles, -rf_param->tilt);
+      rotateBeamCoordinates(final, n_particles, -rf_param->tilt);
+    if (rf_param->dx || rf_param->dy || rf_param->dz)
+      offsetBeamCoordinates(final, n_particles, -rf_param->dx, -rf_param->dy, -rf_param->dz);
   }
   
 }
@@ -529,3 +546,159 @@ void set_up_rfdf(RFDF *rf_param, double **initial, long n_particles, double pc_c
   }
 }
 
+void track_through_multipole_deflector(
+                                double **final, 
+                                MRFDF *rf_param,
+                                double **initial,
+                                long n_particles,
+                                double pc_central
+                                )
+{
+  double t_first;     /* time when first particle reaches cavity */
+  double x, xp, y, yp;
+  double beta, px, py, pz, pc;
+  double omega, k, t_part;
+  double ptPhaseFactor, pzPhaseFactor;
+  double dpx, dpy, dpz, phase;
+  long ip, mode;
+
+  if (rf_param->frequency==0) 
+    bombElegant("MRFDF cannot have frequency=0", NULL);
+  if (rf_param->factor==0)
+    return;
+    
+  if (!rf_param->initialized || !rf_param->fiducial_seen)
+      set_up_mrfdf(rf_param, initial, n_particles, pc_central);
+
+  t_first = rf_param->t_first_particle;
+
+  if (rf_param->tilt)
+    rotateBeamCoordinates(initial, n_particles, rf_param->tilt);
+
+  for (ip=0; ip<n_particles; ip++) {
+    x  = initial[ip][0];
+    xp = initial[ip][1];
+    y  = initial[ip][2];
+    yp = initial[ip][3];
+    pc = pc_central*(1+initial[ip][5]);
+    pz = pc/sqrt(1+sqr(xp)+sqr(yp));
+    px = xp*pz;
+    py = yp*pz;
+    beta = pc/sqrt(1+sqr(pc));
+    t_part = initial[ip][4]/(c_mks*beta);
+    dpx = dpy = dpz = 0;
+    
+    for (mode=0; mode<5; mode++) {
+      if (rf_param->frequency[mode]==0 || (rf_param->a[mode]==0 && rf_param->b[mode]==0))
+        continue;
+      
+      omega = 2*PI*rf_param->frequency[mode];
+      k = omega/c_mks;
+      phase = rf_param->phase[mode]*PI/180.0  + omega*(t_part-t_first);
+      ptPhaseFactor = cos(phase)/k;
+      pzPhaseFactor = sin(phase);
+      if (isSlave || !notSinglePart) {
+        switch (mode) {
+        case 0: /* dipole */
+          dpx += rf_param->b[0]*ptPhaseFactor;
+          dpy -= rf_param->a[0]*ptPhaseFactor;
+          dpz += (rf_param->b[0]*x - rf_param->a[0]*y)*pzPhaseFactor;
+          break;
+        case 1: /* quadrupole */
+          dpx += 2*(rf_param->b[1]*x-rf_param->a[1]*y)*ptPhaseFactor;
+          dpy -= 2*(rf_param->b[1]*y+rf_param->a[1]*x)*ptPhaseFactor;
+          dpz += (rf_param->b[1]*(x*x-y*y) - 2*rf_param->a[1]*x*y)*pzPhaseFactor;
+          break;
+        case 2: /* sextupole */
+          dpx += (rf_param->b[2]*(3*x*x-3*y*y) + rf_param->a[2]*(-6*x*y))*ptPhaseFactor;
+          dpy -= (rf_param->b[2]*6*x*y + rf_param->a[2]*(3*x*x-3*y*y))*ptPhaseFactor;
+          dpz += (rf_param->b[2]*(ipow(x,3)-3*x*y*y) - rf_param->a[2]*(3*x*x*y-ipow(y,3)))*pzPhaseFactor;
+          break;
+        case 3: /* octupole  */
+          dpx += (rf_param->b[3]*(4*ipow(x,3)-12*x*y*y) + rf_param->a[3]*(-12*x*x*y+4*ipow(y,3)))*ptPhaseFactor;
+          dpy -= (rf_param->b[3]*(12*x*x*y - 4*ipow(y,3)) + rf_param->a[3]*(4*ipow(x,3)-12*x*y*y))*ptPhaseFactor;
+          dpz += (rf_param->b[3]*(ipow(x,4)-6*ipow(x*y,2)+ipow(y,4)) - 4*rf_param->a[3]*(x*x-y*y)*x*y)*pzPhaseFactor;
+          break;
+        case 4: /* decapole */
+          dpx += (rf_param->b[4]*(5*ipow(y,4)+5*ipow(x,4)-30*ipow(x*y,2)) + rf_param->a[4]*(-20*ipow(x,3)*y+20*x*ipow(y,3)))*ptPhaseFactor;
+          dpy -= (rf_param->b[4]*(20*ipow(x,3)*y-20*x*ipow(y,3)) + rf_param->a[4]*(5*ipow(x,4)-30*ipow(x*y,2)+5*ipow(y,4)))*ptPhaseFactor;
+          dpz += (rf_param->b[4]*(ipow(x,5)-10*ipow(x,3)*y*y+5*x*ipow(y,4)) - rf_param->a[4]*(ipow(y,5)+5*ipow(x,4)*y-10*y*ipow(x*y,2)))*pzPhaseFactor;
+          break;
+        }
+      }
+    }
+    /* We assume the deflection is from magnetic fields, so p^2 doesn't change */
+    px += dpx*rf_param->factor*particleCharge/(particleMass*sqr(c_mks));
+    py += dpy*rf_param->factor*particleCharge/(particleMass*sqr(c_mks));
+    pz = sqrt(sqr(pc)-sqr(px)-sqr(py));
+
+    /* Now add the effect of longitudinal field */
+    pz += dpz*rf_param->factor*particleCharge/(particleMass*sqr(c_mks));
+    pc = sqrt(sqr(px)+sqr(py)+sqr(pz));
+
+    xp = px/pz;
+    yp = py/pz;
+    
+    beta = pc/sqrt(1+sqr(pc));
+    final[ip][0] = x;
+    final[ip][1] = xp;
+    final[ip][2] = y;
+    final[ip][3] = yp;
+    final[ip][4] = t_part*c_mks*beta;
+    final[ip][5] = (pc-pc_central)/pc_central;
+    final[ip][6] = initial[ip][6];
+    
+  }
+
+  if (rf_param->tilt)
+    rotateBeamCoordinates(initial, n_particles, -rf_param->tilt);
+}
+
+void set_up_mrfdf(MRFDF *rf_param, double **initial, long n_particles, double pc_central)
+{
+  long ip;
+  double pc, beta;
+#ifdef USE_KAHAN
+  double error = 0.0; 
+#endif
+
+  if (!rf_param->fiducial_seen) {
+    if (isSlave || !notSinglePart) {
+      for (ip=rf_param->t_first_particle=0; ip<n_particles; ip++) {
+        pc = pc_central*(1+initial[ip][5]);
+        beta = pc/sqrt(1+sqr(pc));
+#ifndef USE_KAHAN
+        rf_param->t_first_particle += initial[ip][4]/beta/c_mks;
+#else
+        rf_param->t_first_particle = KahanPlus(rf_param->t_first_particle, initial[ip][4]/beta/c_mks, &error); 
+#endif
+      }
+    }
+#if USE_MPI
+    if (USE_MPI && notSinglePart) {
+      long n_total;
+#ifndef USE_KAHAN 
+      double tmp;
+#endif
+      if (isMaster) {
+        n_particles = 0;
+        rf_param->t_first_particle = 0.0;
+      }
+#ifndef USE_KAHAN 
+      MPI_Allreduce(&(rf_param->t_first_particle), &tmp, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+      rf_param->t_first_particle = tmp;
+#else
+      rf_param->t_first_particle = KahanParallel(rf_param->t_first_particle, error, MPI_COMM_WORLD); 
+#endif
+      
+      MPI_Allreduce(&n_particles, &n_total, 1, MPI_LONG, MPI_SUM, MPI_COMM_WORLD);
+      n_particles = n_total; 
+    }
+#endif
+    if (n_particles)
+      rf_param->t_first_particle /= n_particles;
+    rf_param->fiducial_seen = 1;
+  }
+  
+
+}

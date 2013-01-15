@@ -310,6 +310,8 @@ void run_matrix_output(
 	for (i=0; i<6; i++)
 	  M1->C[i] = member->accumMatrix->C[i];
 	free_matrices(Mfull);
+        free(Mfull);
+        Mfull = NULL;
       }
     }
     beamline->elem_recirc = NULL;

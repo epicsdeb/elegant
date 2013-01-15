@@ -21,7 +21,7 @@
 #ifndef GWIG
 #define GWIG
 
-#define WHmax 200
+#define WHmax 1000
 #define GWIG_EPS (1e-6)
 
 static const int Elem_Entrance = 1;

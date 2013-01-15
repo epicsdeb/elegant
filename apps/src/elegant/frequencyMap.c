@@ -294,6 +294,9 @@ long doFrequencyMap(
   }
 #endif
 
+#if USE_MPI
+  MPI_Barrier(MPI_COMM_WORLD);
+#endif
   return(1);
 }
 

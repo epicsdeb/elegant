@@ -49,7 +49,10 @@ void track_through_lscdrift(double **part, long np, LSCDRIFT *LSC, double Po, CH
     bombElegant("No charge defined for LSC.  Insert a CHARGE element in the beamline.", NULL);
 
   Z0 = sqrt(mu_o/epsilon_o);
-  nb = LSC->bins;
+  if ((nb = LSC->bins)<2) {
+    fprintf(stdout, "Error: LSC must have an BINS>=2\n");
+    exitElegant(1);
+  }
   if (nb%2==1) {
     fprintf(stdout, "Error: LSC must have an even number of bins\n");
     exitElegant(1);

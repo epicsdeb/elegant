@@ -17,6 +17,7 @@
 #include "track.h"
 
 #define EXSQRT(value, order) (order==0?sqrt(value):(1+0.5*((value)-1)))
+void convolveArrays1(double *output, long n, double *a1, double *a2);
 
 static long negativeWarningsLeft = 100;
 
@@ -39,6 +40,9 @@ void applyFilterTable(double *function, long bins, double dt, long fValues,
                       double *fFreq, double *fReal, double *fImag);
 
 long correctDistribution(double *array, long npoints, double desiredSum);
+
+void convertToDipoleCanonicalCoordinates(double *Qi, double rho, long sqrtOrder);
+void convertFromDipoleCanonicalCoordinates(double *Qi, double rho, long sqrtOrder);
 
 static double **Fx_xy = NULL, **Fy_xy = NULL;
 static long expansionOrder1 = 11;  /* order of expansion+1 */
@@ -421,7 +425,7 @@ long track_through_csbend(double **part, long n_part, CSBEND *csbend, double p_e
 
     if (csbend->edgeFlags&BEND_EDGE1_EFFECTS) {
       rho = (1+dp)*rho_actual;
-      if (csbend->edge_order<2) {
+      if (csbend->edge_order<2 || csbend->edge1_effects>1) {
         /* apply edge focusing */
         delta_xp = tan(e1)/rho*x;
         if (e1_kick_limit>0 && fabs(delta_xp)>e1_kick_limit)
@@ -447,6 +451,11 @@ long track_through_csbend(double **part, long n_part, CSBEND *csbend, double p_e
       Qi[5] -= dp_prime*x*tan(e1);
     }
 
+    convertToDipoleCanonicalCoordinates(Qi, rho0, csbend->sqrtOrder);
+    
+    if (csbend->edgeFlags&BEND_EDGE1_EFFECTS && csbend->edge1_effects>1)
+      dipoleFringe(Qi, rho0, -1, csbend->edge1_effects-2);
+  
     particle_lost = 0;
     if (!particle_lost) {
       if (csbend->integration_order==4)
@@ -454,6 +463,11 @@ long track_through_csbend(double **part, long n_part, CSBEND *csbend, double p_e
       else
         integrate_csbend_ord2(Qf, Qi, sigmaDelta2, csbend->length, csbend->n_kicks, csbend->sqrtOrder, rho0, Po);
     }
+
+    if (csbend->edgeFlags&BEND_EDGE2_EFFECTS && csbend->edge2_effects>1)
+      dipoleFringe(Qf, rho0, 1, csbend->edge2_effects-2);
+
+    convertFromDipoleCanonicalCoordinates(Qf, rho0, csbend->sqrtOrder);
 
     if (particle_lost) {
       if (!part[i_top]) {
@@ -518,7 +532,7 @@ long track_through_csbend(double **part, long n_part, CSBEND *csbend, double p_e
     if (csbend->edgeFlags&BEND_EDGE2_EFFECTS) {
       /* apply edge focusing */
       rho = (1+dp)*rho_actual;
-      if (csbend->edge_order<2) {
+      if (csbend->edge_order<2 || csbend->edge2_effects>1) {
         delta_xp = tan(e2)/rho*x;
         if (e2_kick_limit>0 && fabs(delta_xp)>e2_kick_limit)
           delta_xp = SIGN(delta_xp)*e2_kick_limit;
@@ -556,6 +570,23 @@ long track_through_csbend(double **part, long n_part, CSBEND *csbend, double p_e
   return(i_top+1);
 }
 
+void convertToDipoleCanonicalCoordinates(double *Qi, double rho, long sqrtOrder)
+{
+  double f;
+  f = (1 + Qi[5])/EXSQRT(sqr(1+Qi[0]/rho) + sqr(Qi[1]) + sqr(Qi[3]), sqrtOrder);
+  Qi[1] *= f;
+  Qi[3] *= f;
+}
+
+void convertFromDipoleCanonicalCoordinates(double *Qi, double rho, long sqrtOrder)
+{
+  double f, delta;
+  f = (1 + Qi[0]/rho)/EXSQRT(sqr(1+Qi[5])-sqr(Qi[1])-sqr(Qi[3]), sqrtOrder);
+  Qi[1] *= f;
+  Qi[3] *= f;
+}
+
+
 void integrate_csbend_ord2(double *Qf, double *Qi, double *sigmaDelta2, double s, long n, long sqrtOrder, double rho0, double p0)
 {
   long i;
@@ -586,11 +617,14 @@ void integrate_csbend_ord2(double *Qf, double *Qi, double *sigmaDelta2, double s
     bombElegant("invalid number of steps (integrate_csbend_ord2)", NULL);
 
   /* calculate canonical momenta (scaled to central momentum) */
-  dp = DPoP0;
+/*  dp = DPoP0;
   f = (1+dp)/EXSQRT(sqr(1+X0/rho0) + sqr(XP0) + sqr(YP0), sqrtOrder);
   QX = XP0*f;
   QY = YP0*f;
+*/
 
+  memcpy(Qf, Qi, sizeof(*Qi)*6);
+  
   X = X0;
   Y = Y0;
   S = S0;
@@ -706,9 +740,12 @@ void integrate_csbend_ord2(double *Qf, double *Qi, double *sigmaDelta2, double s
   }
 
   /* convert back to slopes */
+/*
   f = (1+X/rho0)/EXSQRT(sqr(1+DPoP)-sqr(QX)-sqr(QY), sqrtOrder);
   Qf[1] *= f;
   Qf[3] *= f;
+*/
+
   Qf[4] += dist;
 }
 
@@ -746,6 +783,7 @@ void integrate_csbend_ord4(double *Qf, double *Qi, double *sigmaDelta2, double s
     bombElegant("invalid number of steps (integrate_csbend_ord4)", NULL);
 
   /* calculate canonical momenta (scaled to central momentum) */
+/*
   dp = DPoP0;
   f = (1+dp)/EXSQRT(sqr(1+X0/rho0) + sqr(XP0) + sqr(YP0), sqrtOrder);
   QX = XP0*f;
@@ -755,7 +793,10 @@ void integrate_csbend_ord4(double *Qf, double *Qi, double *sigmaDelta2, double s
   Y = Y0;
   S = S0;
   DPoP = DPoP0;
+*/
   
+  memcpy(Qf, Qi, sizeof(*Qi)*6);
+
   dist = 0;
 
   s /= n;
@@ -927,9 +968,12 @@ void integrate_csbend_ord4(double *Qf, double *Qi, double *sigmaDelta2, double s
   }
 
   /* convert back to slopes */
+/*
   f = (1+X/rho0)/EXSQRT(sqr(1+DPoP)-sqr(QX)-sqr(QY), sqrtOrder);
   Qf[1] *= f;
   Qf[3] *= f;
+*/
+
   Qf[4] += dist;
 }
 
@@ -985,7 +1029,7 @@ long track_through_csbendCSR(double **part, long n_part, CSRCSBEND *csbend, doub
   double h, n, he1, he2;
   static long csrWarning = 0;
   static double *beta0=NULL, *ctHist=NULL, *ctHistDeriv=NULL;
-  static double *dGamma=NULL, *T1=NULL, *T2=NULL, *denom=NULL;
+  static double *dGamma=NULL, *T1=NULL, *T2=NULL, *denom=NULL, *chik=NULL, *grnk=NULL;
   static long maxParticles = 0, maxBins = 0 ;
   static char *particleLost=NULL;
   double x=0, xp, y=0, yp, p1, beta1, p0;
@@ -1004,7 +1048,7 @@ long track_through_csbendCSR(double **part, long n_part, CSRCSBEND *csbend, doub
   double dxi, dyi, dzi;
   double dxf, dyf, dzf;
   double delta_xp;
-  double macroParticleCharge, CSRConstant;
+  double macroParticleCharge, CSRConstant, gamma2, gamma3;
   long iBin, iBinBehind;
   long csrInhibit = 0, largeRhoWarning = 0;
   double derbenevRatio = 0;
@@ -1013,9 +1057,25 @@ long track_through_csbendCSR(double **part, long n_part, CSRCSBEND *csbend, doub
   VMATRIX *Msection=NULL, *Me1=NULL, *Me2=NULL;
   static double accumulatedAngle = 0;
   short accumulatingAngle = 1;
-  
 #if USE_MPI
   double *buffer;  
+#endif
+#ifdef DEBUG_IGF
+  FILE *fpdeb;
+  fpdeb = fopen("csr.sdds","w");
+  fprintf(fpdeb, "SDDS1\n&parameter name = Slice, type=long &end\n");
+  fprintf(fpdeb, "&column name=s, type=double, units=m &end\n");
+  fprintf(fpdeb, "&column name=iBin, type=long &end\n");
+  fprintf(fpdeb, "&column name=Chi, type=double &end\n");
+  fprintf(fpdeb, "&column name=G, units=V/m, type=double &end\n");
+  fprintf(fpdeb, "&column name=dGamma, type=double &end\n");
+  fprintf(fpdeb, "&data mode=ascii &end\n");
+#endif
+
+  gamma2 = Po*Po+1;
+  gamma3 = pow(gamma2, 3./2);
+
+#if USE_MPI 
   if (notSinglePart)
     n_partMoreThanOne = 1; /* This is necessary to solve synchronization issue in parallel version*/
   else
@@ -1034,7 +1094,10 @@ long track_through_csbendCSR(double **part, long n_part, CSRCSBEND *csbend, doub
   getTrackingContext(&tContext);
   
   if (!csbend)
-    bombElegant("null CSBEND pointer (track_through_csbend)", NULL);
+    bombElegant("null CSRCSBEND pointer (track_through_csbend)", NULL);
+  if (csbend->integratedGreensFunction && !csbend->steadyState) {
+    bombElegant("CSRCSBEND requires STEADYSTATE=1 if IGF=1.", NULL);
+  }
 
   if (csbend->angle==0) {
     if (!csbend->useMatrix)
@@ -1315,6 +1378,8 @@ long track_through_csbendCSR(double **part, long n_part, CSRCSBEND *csbend, doub
       !(dGamma=SDDS_Realloc(dGamma, sizeof(*dGamma)*nBins)))
     bombElegant("memory allocation failure (track_through_csbendCSR)", NULL);
 
+  
+  
   /* prepare some data for CSRDRIFT */
   csrWake.dGamma = dGamma;
   csrWake.bins = nBins;
@@ -1434,6 +1499,7 @@ long track_through_csbendCSR(double **part, long n_part, CSRCSBEND *csbend, doub
 	  Qi[3] = YP;
 	  Qi[4] = 0;  
 	  Qi[5] = DP;
+          convertToDipoleCanonicalCoordinates(Qi, rho0, 0);
         
 	  if (csbend->integration_order==4)
 	    integrate_csbend_ord4(Qf, Qi, NULL, csbend->length/csbend->n_kicks, 1, 0, rho0, Po);
@@ -1442,6 +1508,7 @@ long track_through_csbendCSR(double **part, long n_part, CSRCSBEND *csbend, doub
 	  particleLost[i_part] = particle_lost;
       
 	  /* retrieve coordinates from arrays */
+          convertFromDipoleCanonicalCoordinates(Qf, rho0, 0);
 	  X  = Qf[0];  
 	  XP = Qf[1];  
 	  Y  = Qf[2];  
@@ -1597,55 +1664,100 @@ long track_through_csbendCSR(double **part, long n_part, CSRCSBEND *csbend, doub
       diSlippage = slippageLength/dct;
       diSlippage4 = 4*slippageLength/dct;
       if (kick==0 || !csbend->binOnce) {
-	for (iBin=0; iBin<nBins; iBin++) {
-	  double term1, term2;
-	  long count;
-	  T1[iBin] = T2[iBin] = 0;
-	  term1 = term2 = 0;
-	  if (CSRConstant) {
-	    if (csbend->steadyState) {
-	      if (!csbend->trapazoidIntegration) {
-		for (iBinBehind=iBin+1; iBinBehind<nBins; iBinBehind++)
-		  T1[iBin] += ctHistDeriv[iBinBehind]/denom[iBinBehind-iBin];
-	      }
-	      else {
-		if ((iBinBehind=iBin+1)<nBins)
-		  term1 = ctHistDeriv[iBinBehind]/denom[iBinBehind-iBin];
-		for (count=0, iBinBehind=iBin+1; iBinBehind<nBins; iBinBehind++, count++)
-		  T1[iBin] += (term2=ctHistDeriv[iBinBehind]/denom[iBinBehind-iBin]);
-		if ((iBin+1)<nBins)
-		  T1[iBin] += 0.3*sqr(denom[1])*(2*ctHistDeriv[iBin+1]+3*ctHistDeriv[iBin])/dct;
-		if (count>1)
-		  T1[iBin] -= (term1+term2)/2;
-	      }
-	    } else {
-	      if (!csbend->trapazoidIntegration) {
-		for (iBinBehind=iBin+1; iBinBehind<=(iBin+diSlippage) && iBinBehind<nBins; iBinBehind++)
-		  T1[iBin] += ctHistDeriv[iBinBehind]/denom[iBinBehind-iBin];
-	      }
-	      else {
-		if ((iBinBehind = iBin+1)<nBins && iBinBehind<=(iBin+diSlippage))
-		  term1 = ctHistDeriv[iBinBehind]/denom[iBinBehind-iBin]/2;
-		for (count=0, iBinBehind = iBin+1; iBinBehind<=(iBin+diSlippage) && iBinBehind<nBins; 
-		     count++, iBinBehind++)
-		  T1[iBin] += (term2=ctHistDeriv[iBinBehind]/denom[iBinBehind-iBin]);
-		if (diSlippage>0 && (iBin+1)<nBins)
-		  T1[iBin] += 0.3*sqr(denom[1])*(2*ctHistDeriv[iBin+1]+3*ctHistDeriv[iBin])/dct;
-		if (count>1)
-		  T1[iBin] -= (term1+term2)/2;
-	      }
-	      if ((iBin+diSlippage)<nBins)
-		T2[iBin] += ctHist[iBin+diSlippage];
-	      if ((iBin+diSlippage4)<nBins)
-		T2[iBin] -= ctHist[iBin+diSlippage4];
-	    }
-	    /* there is no negative sign here because my derivative is w.r.t. -s
-	       in notation of Saldin, et. al. */
-	    T1[iBin] *= CSRConstant*csbend->length/csbend->n_kicks; 
-	    /* keep the negative sign on this term, which has no derivative */
-	    T2[iBin] *= -CSRConstant*csbend->length/csbend->n_kicks/slippageLength13;
-	  }
-	  dGamma[iBin] = T1[iBin]+T2[iBin];
+        if (csbend->integratedGreensFunction) {
+          /* Integrated Greens function method */
+          double const2;
+          double z, xmu, a, b, frac, const1;
+          if (kick==0) {
+            if (!csbend->steadyState) 
+              bombElegant("Must have STEADY_STATE=1 when IGF=1\n", NULL);
+            if (!(grnk=SDDS_Realloc(grnk, sizeof(*grnk)*nBins)) ||
+                !(chik=SDDS_Realloc(chik, sizeof(*chik)*nBins)))
+              bombElegant("memory allocation failure (track_through_csbendCSR)", NULL);
+          }
+          frac = 9.0/16.0;
+          const1 = 6.0-log(27.0/4.0);
+          for (iBin=0; iBin<nBins; iBin++) {
+            z   = iBin*dct;
+            xmu = 3.0*gamma3*z/(2.0*rho0);
+            a   = sqrt(xmu*xmu+1.0);
+            b   = a+xmu;
+            if (xmu < 1e-3) 
+              chik[iBin] = frac*const1 + 0.50*ipow(xmu,2)-(7.0/54.0)*ipow(xmu,4)+(140.0/2187.0)*ipow(xmu,6);
+            else
+              chik[iBin] = frac*( 3.0*( -2.0*xmu*pow(b,1.0/3.0) + pow(b,2.0/3.0) + pow(b,4.0/3.0) ) +
+                                 log( pow((1-pow(b,2.0/3.0))/xmu,2)  / (1+pow(b,2.0/3.0)+pow(b,4.0/3.0)) ) );
+          }
+          const2 = (16.0/27.0)*(particleCharge/(4*PI*epsilon_o))/(gamma2*dct);
+          grnk[0] = const2*(chik[1]-chik[0]);
+          for (iBin=1; iBin<nBins-1; iBin++)
+            grnk[iBin] = const2*(chik[iBin+1] - 2.0*chik[iBin] + chik[iBin-1] );
+          grnk[nBins-1] = 0;
+        } else {
+          for (iBin=0; iBin<nBins; iBin++) {
+            double term1, term2;
+            long count;
+            T1[iBin] = T2[iBin] = 0;
+            term1 = term2 = 0;
+            if (CSRConstant) {
+              if (csbend->steadyState) {
+                if (!csbend->integratedGreensFunction) {
+                  if (!csbend->trapazoidIntegration) {
+                    for (iBinBehind=iBin+1; iBinBehind<nBins; iBinBehind++)
+                      T1[iBin] += ctHistDeriv[iBinBehind]/denom[iBinBehind-iBin];
+                  }
+                  else {
+                    if ((iBinBehind=iBin+1)<nBins)
+                      term1 = ctHistDeriv[iBinBehind]/denom[iBinBehind-iBin];
+                    for (count=0, iBinBehind=iBin+1; iBinBehind<nBins; iBinBehind++, count++)
+                      T1[iBin] += (term2=ctHistDeriv[iBinBehind]/denom[iBinBehind-iBin]);
+                    if ((iBin+1)<nBins)
+                      T1[iBin] += 0.3*sqr(denom[1])*(2*ctHistDeriv[iBin+1]+3*ctHistDeriv[iBin])/dct;
+                    if (count>1)
+                      T1[iBin] -= (term1+term2)/2;
+                  }
+                }
+              } else {
+                /* Transient CSR */
+                if (!csbend->trapazoidIntegration) {
+                  for (iBinBehind=iBin+1; iBinBehind<=(iBin+diSlippage) && iBinBehind<nBins; iBinBehind++)
+                    T1[iBin] += ctHistDeriv[iBinBehind]/denom[iBinBehind-iBin];
+                }
+                else {
+                  if ((iBinBehind = iBin+1)<nBins && iBinBehind<=(iBin+diSlippage))
+                    term1 = ctHistDeriv[iBinBehind]/denom[iBinBehind-iBin]/2;
+                  for (count=0, iBinBehind = iBin+1; iBinBehind<=(iBin+diSlippage) && iBinBehind<nBins; 
+                       count++, iBinBehind++)
+                    T1[iBin] += (term2=ctHistDeriv[iBinBehind]/denom[iBinBehind-iBin]);
+                  if (diSlippage>0 && (iBin+1)<nBins)
+                    T1[iBin] += 0.3*sqr(denom[1])*(2*ctHistDeriv[iBin+1]+3*ctHistDeriv[iBin])/dct;
+                  if (count>1)
+                    T1[iBin] -= (term1+term2)/2;
+                }
+                if ((iBin+diSlippage)<nBins)
+                  T2[iBin] += ctHist[iBin+diSlippage];
+                if ((iBin+diSlippage4)<nBins)
+                  T2[iBin] -= ctHist[iBin+diSlippage4];
+              }
+              /* there is no negative sign here because my derivative is w.r.t. -s
+                 in notation of Saldin, et. al. */
+              T1[iBin] *= CSRConstant*csbend->length/csbend->n_kicks; 
+              /* keep the negative sign on this term, which has no derivative */
+              T2[iBin] *= -CSRConstant*csbend->length/csbend->n_kicks/slippageLength13;
+            }
+            dGamma[iBin] = T1[iBin]+T2[iBin];
+          }
+        }
+        
+	if (csbend->integratedGreensFunction) {
+          convolveArrays1(dGamma, nBins, ctHist, grnk);
+          for (iBin=0; iBin<nBins; iBin++) 
+            dGamma[iBin] *= -macroParticleCharge/(particleMass*sqr(c_mks))*csbend->length/csbend->n_kicks;
+#ifdef DEBUG_IGF
+	  fprintf(fpdeb, "%ld\n%ld\n", kick, nBins);
+	  for (iBin=0; iBin<nBins; iBin++)
+	    fprintf(fpdeb, "%le %ld %le %le %le\n", iBin*dct, iBin, chik[iBin], grnk[iBin], dGamma[iBin]);
+#endif
 	}
 
 	if (csbend->wffValues) 
@@ -1679,6 +1791,7 @@ long track_through_csbendCSR(double **part, long n_part, CSRCSBEND *csbend, doub
                                 "Pass", -1, "Kick", kick, "pCentral", Po, "Angle", phiBend, 
                                 NULL))
           SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors|SDDS_VERBOSE_PrintErrors);
+	convertFromCSBendCoords(part, n_part, rho0, cos_ttilt, sin_ttilt, 1);
         for (ip=0; ip<n_part; ip++) {
           if (!SDDS_SetRowValues(&csbend->SDDSpart, SDDS_SET_BY_INDEX|SDDS_PASS_BY_VALUE,
                                  ip, 
@@ -1689,11 +1802,11 @@ long track_through_csbendCSR(double **part, long n_part, CSRCSBEND *csbend, doub
                                  -1)) 
             SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors|SDDS_VERBOSE_PrintErrors);
         }
+	convertToCSBendCoords(part, n_part, rho0, cos_ttilt, sin_ttilt, 1);
         if (!SDDS_WritePage(&csbend->SDDSpart))
           SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors|SDDS_VERBOSE_PrintErrors);
         if (!inhibitFileSync)
           SDDS_DoFSync(&csbend->SDDSpart);
-	  printf ("Pelegant does not support dumping particle data inside an element now.");
 	}
       }
 
@@ -1824,7 +1937,7 @@ long track_through_csbendCSR(double **part, long n_part, CSRCSBEND *csbend, doub
       coord = part[i_part];
       if (csbend->edgeFlags&BEND_EDGE2_EFFECTS && e2!=0 && rad_coef) {
 	/* post-adjust dp/p to correct error made by integrating over entire sector */
-        computeCSBENDFields(&Fx, &Fy, x, y);
+        computeCSBENDFields(&Fx, &Fy, X, Y);
         
 	dp_prime = -rad_coef*(sqr(Fx)+sqr(Fy))*sqr(1+DP)*
 	  sqrt(sqr(1+X/rho0)+sqr(XP)+sqr(YP));
@@ -1949,6 +2062,10 @@ long track_through_csbendCSR(double **part, long n_part, CSRCSBEND *csbend, doub
       free_matrices(Msection);
       free_matrices(Me1);
       free_matrices(Me2);
+      free(Msection);
+      free(Me1);
+      free(Me2);
+      Msection = Me1 = Me2 = NULL;
     }
   }
 
@@ -1967,6 +2084,10 @@ long track_through_csbendCSR(double **part, long n_part, CSRCSBEND *csbend, doub
   free(T2);
   free(denom);
   free(particleLost);
+  if (grnk)
+    free(grnk);
+  if (chik)
+    free(chik);
   beta0 = ctHist = ctHistDeriv = T1 = T2 = denom = NULL;
   particleLost  = NULL;
   maxBins = maxParticles = 0;
@@ -1981,6 +2102,7 @@ long track_through_csbendCSR(double **part, long n_part, CSRCSBEND *csbend, doub
     return n_part; /* i_top is not defined for master */
 #endif 
 }
+#undef DEBUG_IGF
 
 long binParticleCoordinate(double **hist, long *maxBins,
                            double *lower, double *upper, double *binSize, long *bins,
@@ -3855,3 +3977,12 @@ void addCorrectorRadiationKick(double **coord, long np, ELEMENT_LIST *elem, long
     *sigmaDelta2 /= np;
 }
   
+void convolveArrays1(double *output, long n, double *a1, double *a2)
+{
+  long ib, ib1;
+  for (ib=0; ib<n; ib++) {
+    output[ib] = 0;
+    for (ib1=ib; ib1<n; ib1++)
+      output[ib] += a1[ib1]*a2[ib1-ib];
+  }
+}

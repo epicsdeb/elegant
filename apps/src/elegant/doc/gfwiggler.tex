@@ -1,0 +1,28 @@
+N.B.: at present this element is {\em not} included in computations
+of beam moments (\verb|moments_output| command).
+
+This element simulates a wiggler or undulator using the generate
+function method given by J. Bahrdt and G. W\"{u}stefeld (``Symplectic
+tracking and compensation of dynamic field integrals in complex
+undulator structures,'' PRSTAB 14, 040703, 2011.). 
+
+To use the element, one must supply an SDDS file giving harmonic
+analysis of the wiggler field. The field expansion used by the code is
+for a wiggler working at the nominal gap and provide pure horizontal
+deflecting to the on-axis beam. See \verb|CWIGGLER|, horizontal
+wiggler with normal poles, for detail explaination of the field
+expansion and format of the input file. Besides the required columns
+of {\tt Cmn}, {\tt KxOverKw}, {\tt KyOverKw}, and {\tt KzOverKw} by
+the \verb|CWIGGLER| elements, two more input columns are needed:
+\begin{itemize}
+\item The longitudinal harmonic number, $n$, in column {\tt zHarm}.
+\item The horizontal harmonic number of $l$, in column {\tt xHarm}.
+\end{itemize}
+If a file include all required columns from \verb|CWIGGLER| and
+\verb|GFWIGGLER| then user can use either of the both methods for
+simulating a horizontal planar wiggler.
+
+An universal wiggler field, which be used for generating an arbitrary
+polarization, can be derived by given different longitudinal phase
+parameters: {\tt PHASE\_1,2,3,4}. The photon energy can be varied by a
+non-zero {\tt D\_GAP} value.

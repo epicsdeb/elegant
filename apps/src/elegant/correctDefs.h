@@ -52,7 +52,8 @@ typedef struct {
 #define TRAJECTORY_CORRECTION 0
 #define ORBIT_CORRECTION 1
     long method, verbose, track_before_and_after, n_iterations, n_xy_cycles, minimum_cycles;
-    long prezero_correctors, start_from_centroid, use_actual_beam, response_only;
+    long prezero_correctors, start_from_centroid, use_actual_beam, response_only, disable;
+    long use_response_from_computed_orbits;
     double clorb_accuracy;
     double clorb_iterations;
     double clorb_iter_fraction;
@@ -101,3 +102,4 @@ extern void add_steering_element(CORRECTION *correct, LINE_LIST *beamline, RUN *
 void compute_amplification_factors(NAMELIST_TEXT *nltext, RUN *run, CORRECTION *correct,
     long closed_orbit, LINE_LIST *beamline);
 
+long zero_correctors(ELEMENT_LIST *elem, RUN *run, CORRECTION *correct);

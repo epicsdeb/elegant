@@ -31,6 +31,10 @@ double linear_interpolation(double *y, double *t, long n, double t0, long i);
 }
 #endif
 
+#if USE_MPI
+void histogram_sums(long nonEmptyBins, long firstBin, long *lastBin, long *his);
+#endif
+
 void runBinlessRfMode(double **part, long np, RFMODE *rfmode, double Po,
 		      char *element_name, double element_z, long pass, long n_passes,
 		      CHARGE *charge);
@@ -51,14 +55,15 @@ void track_through_rfmode(
     double tmin=0, tmax, tmean, dt=0, P;
     double Vb, V, omega=0, phase, t, k, damping_factor, tau;
     double V_sum, Vr_sum, phase_sum;
-    double Vc, Vcr, Q_sum, dgamma;
+    double Q_sum, dgamma;
     long n_summed, max_hist, n_occupied;
     static long been_warned = 0;
     double Qrp, VbImagFactor, Q=0;
     long deltaPass;
 #if USE_MPI
-    double *buffer;
+    long nonEmptyBins = 0;
     long np_total;
+    long firstBin = rfmode->n_bins;
 #endif
 
     if (rfmode->binless) { /* This can't be done in parallel mode */
@@ -82,13 +87,14 @@ void track_through_rfmode(
       if (np)
         rfmode->mp_charge = rfmode->charge/np;
 #else
-      if (USE_MPI) {
-	if (isSlave) {
-	  MPI_Allreduce(&np, &np_total, 1, MPI_LONG, MPI_SUM, workers);
-	  if (np_total)
-	    rfmode->mp_charge = rfmode->charge/np_total; 
-	}
-      } 
+      if (notSinglePart) {
+	MPI_Allreduce(&np, &np_total, 1, MPI_LONG, MPI_SUM, MPI_COMM_WORLD);
+	if (np_total)
+	  rfmode->mp_charge = rfmode->charge/np_total; 
+      } else {
+        if (np)
+          rfmode->mp_charge = rfmode->charge/np;
+      }
 #endif
     }
 
@@ -168,12 +174,20 @@ void track_through_rfmode(
         if (ib>rfmode->n_bins - 1)
             continue;
         Ihist[ib] += 1;
+#if USE_MPI
+	if (Ihist[ib]==1)
+	  nonEmptyBins++;
+#endif
         pbin[ip] = ib;
         if (ib>lastBin)
           lastBin = ib;
+#if USE_MPI
+      if (ib<firstBin)    
+	firstBin = ib;
+#endif
         n_binned++;
       }
-      V_sum = Vr_sum = phase_sum = Vc = Vcr = Q_sum = 0;
+      V_sum = Vr_sum = phase_sum = Q_sum = 0;
       n_summed = max_hist = n_occupied = 0;
       nb2 = rfmode->n_bins/2;
     
@@ -209,7 +223,6 @@ void track_through_rfmode(
       }
     }
 #endif
-    if (isSlave) {
       tau = 2*Q/omega;
       k = omega/4*(rfmode->RaInternal)/rfmode->Q;
       if ((deltaPass = (pass-rfmode->detuned_until_pass)) <= (rfmode->rampPasses-1)) 
@@ -225,27 +238,31 @@ void track_through_rfmode(
 	rfmode->last_t = tmin + 0.5*dt;
       }
 #if USE_MPI
-      if (isSlave) {
+      histogram_sums(nonEmptyBins, firstBin, &lastBin, Ihist);
+
+      /*      if (isSlave) {
         long lastBin_global;         
         MPI_Allreduce(&lastBin, &lastBin_global, 1, MPI_LONG, MPI_MAX, workers);
         lastBin = lastBin_global;
       }
       if(isSlave) {
-        buffer = (double*)malloc(sizeof(double) * (lastBin+1)); 
+        buffer = (double*)tmalloc(sizeof(double) * (lastBin+1)); 
 	MPI_Allreduce(Ihist, buffer, lastBin+1, MPI_LONG, MPI_SUM, workers);
         memcpy(Ihist, buffer, sizeof(long)*(lastBin+1));
 	free(buffer);
       }
-#endif    
+      */
+     
+#endif 
       for (ib=0; ib<=lastBin; ib++) {
-        if (!Ihist[ib])
-	  continue;
+	if (!Ihist[ib])
+          continue;
         if (Ihist[ib]>max_hist)
-	  max_hist = Ihist[ib];
+          max_hist = Ihist[ib];
         n_occupied++;
 
         t = tmin+(ib+0.5)*dt;           /* middle arrival time for this bin */
-        
+
         /* advance cavity to this time */
         phase = rfmode->last_phase + omega*(t - rfmode->last_t);
         damping_factor = exp(-(t-rfmode->last_t)/tau);
@@ -270,11 +287,6 @@ void track_through_rfmode(
         phase_sum += Ihist[ib]*rfmode->last_phase;
         Q_sum += Ihist[ib]*rfmode->mp_charge*particleRelSign;
         n_summed  += Ihist[ib];
-        
-        if (ib==nb2) {
-	  Vc = rfmode->V;
-	  Vcr = rfmode->Vr;
-	}
       }
 
       if (rfmode->rigid_until_pass<=pass) {
@@ -288,7 +300,6 @@ void track_through_rfmode(
 	  }
 	}
       }
-    }
     
     if (rfmode->record) {
 #if (USE_MPI)
@@ -660,3 +671,87 @@ void runBinlessRfMode(
 #endif
 
 }
+
+
+#if USE_MPI
+typedef struct {
+  long index;  /* Records the real index in the whole histogram */
+  long sum;
+} SUB_HISTOGRAM;
+
+ void histogram_sums(long nonEmptyBins, long firstBin, long *lastBin, long *his)
+{
+  static long *nonEmptyArray = NULL;
+  long lastBin_global, firstBin_global;
+  long nonEmptyBins_total = 0, offset = 0;
+  long i, j, map_j, ib;
+  static SUB_HISTOGRAM *subHis; /* a compressed histogram with non-zero bins only */
+  static long max_nonEmptyBins_total = 0;
+  MPI_Status status;
+
+  MPI_Reduce(lastBin, &lastBin_global, 1, MPI_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&firstBin, &firstBin_global, 1, MPI_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
+  if (isMaster) {
+    *lastBin = lastBin_global;
+    firstBin = firstBin_global; 
+  }
+
+  if (!nonEmptyArray)
+    nonEmptyArray =(long*) tmalloc(sizeof(*nonEmptyArray)*n_processors);
+
+  MPI_Gather(&nonEmptyBins,1,MPI_LONG,nonEmptyArray,1,MPI_LONG,0,MPI_COMM_WORLD);
+  if (isMaster){
+    for (i=1; i<n_processors; i++) 
+      nonEmptyBins_total += nonEmptyArray[i];
+  }
+  MPI_Bcast(&nonEmptyBins_total, 1, MPI_LONG, 0, MPI_COMM_WORLD);
+ 
+  if (nonEmptyBins_total>max_nonEmptyBins_total) {
+    if (!(subHis = (SUB_HISTOGRAM*) trealloc(subHis, sizeof(*subHis)*(max_nonEmptyBins_total=nonEmptyBins_total))))
+      bomb ("Memory allocation failure in track_through_ftrfmod", NULL);
+  }
+
+  if (isSlave) {
+    for (i=0,ib=firstBin; ib<=*lastBin; ib++) {
+      if (his[ib]){        
+	subHis[i].index = ib;
+	subHis[i].sum = his[ib]; 
+	i++;
+      }
+    }
+    MPI_Send(subHis, nonEmptyBins*sizeof(*subHis), MPI_BYTE, 0, 108, MPI_COMM_WORLD);
+  }
+  else {
+    for (i=1; i<n_processors; i++) {
+      if (i>1)
+	offset += nonEmptyArray[i-1];
+      MPI_Recv (&subHis[offset], nonEmptyArray[i]*sizeof(*subHis), MPI_BYTE, i, 108, MPI_COMM_WORLD, &status); 
+      for (j=offset; j<nonEmptyArray[i]+offset; j++) {
+        #define current subHis[j]
+	map_j = current.index;
+	his[map_j] += current.sum; 
+      }
+    }
+      
+    for (i=0, ib=firstBin; ib<=*lastBin; ib++) { 
+      if (his[ib]) {
+	subHis[i].index = ib;
+	subHis[i].sum = his[ib];
+	i++;  
+      }
+    } 
+    /* If there are overlapped bins between different processors, the number should be less than the original
+       nonEmptyBins_total */
+    nonEmptyBins_total = i;  
+  }
+  MPI_Bcast (&nonEmptyBins_total, 1, MPI_LONG, 0, MPI_COMM_WORLD);
+  MPI_Bcast (subHis, nonEmptyBins_total*sizeof(*subHis), MPI_BYTE, 0, MPI_COMM_WORLD);
+  MPI_Bcast (lastBin, 1, MPI_LONG, 0, MPI_COMM_WORLD);
+
+  if (isSlave) {
+    for (i=0; i<nonEmptyBins_total; i++) {      
+      his[subHis[i].index] = subHis[i].sum; 
+    }
+  } 
+}
+#endif

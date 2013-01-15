@@ -6,10 +6,9 @@
 &run_setup
 	lattice = <lattice>,
 	use_beamline = <beamline>,
-	p_central_mev = 7e3,
+	p_central_mev = <pCentralMeV>,
 	default_order = <order>,
         magnets = %s.mag,
-        semaphore_file = %s.done,
         rootname = <rootname>
 &end
 
@@ -18,6 +17,11 @@
         force_occurence_data = 1
         change_defined_values = 1
 	allow_missing_parameters = 1
+&end
+
+&twiss_output
+        radiation_integrals = 1
+        matched = 1
 &end
 
 &alter_elements
@@ -44,6 +48,7 @@
         matched = 1,
         equilibrium = 1,
         radiation = 1,
+        output_at_each_step = 1
 &end
 
 &twiss_output
@@ -51,6 +56,7 @@
         filename = <rootname>-final.twi
         concat_order = <order>
         radiation_integrals = 1
+        output_at_each_step = 1
 &end
 
 

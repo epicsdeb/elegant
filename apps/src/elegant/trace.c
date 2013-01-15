@@ -203,3 +203,20 @@ void traceback_handler(int sig)
     fflush(stdout);    /* to force flushing of output sent to stdout by other parts of the code */
     exitElegant(1);
     }
+
+void show_traceback(FILE *fp)
+{
+    long i;
+    if (!traceback_on && !trace_on)
+      return ;
+    fprintf(stdout, "Program trace-back:\n");
+    for (i=0; i<trace_level; i++) {
+        fputs(routine_name[i], stdout);
+        fputc('\n', stdout);
+        }
+    if (in_trace_routine==1)
+        fprintf(stdout, "log_entry\n");
+    else if (in_trace_routine==2)
+        fprintf(stdout, "log_exit\n");
+    fflush(stdout);    /* to force flushing of output sent to stdout by other parts of the code */
+    }

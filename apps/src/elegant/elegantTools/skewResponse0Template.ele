@@ -3,7 +3,7 @@
 &run_setup
 	lattice = <lattice>,
 	use_beamline = <beamline>,
-	p_central_mev = 7e3,
+	p_central_mev = <pCentralMeV>,
 	default_order = <order>,
         rootname = <rootname>
         semaphore_file = %s.done,

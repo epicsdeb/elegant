@@ -66,6 +66,11 @@ static char *search_mode[N_SEARCH_MODES] = {
 } ;
 static long mode_code = 0;
 
+#if USE_MPI
+long do_aperture_search_line_p(RUN *run, VARY *control, double *referenceCoord, ERRORVAL *errcon,
+			       LINE_LIST *beamline, long lines, double *returnValue);
+#endif
+
 void setup_aperture_search(
 			   NAMELIST_TEXT *nltext,
 			   RUN *run,
@@ -894,6 +899,10 @@ long do_aperture_search_line(
   long last_index; /* The index for which the last particle is survived */
 #endif
 
+#if USE_MPI
+  return do_aperture_search_line_p(run, control, referenceCoord, errcon, beamline, lines, returnValue);
+#endif
+
   coord = (double**)czarray_2d(sizeof(**coord), 1, 7);
 
   dxFactor = tmalloc(sizeof(*dxFactor)*lines);
@@ -965,7 +974,6 @@ long do_aperture_search_line(
     }
   }
   
-  originStable = 0;
   for (line=0; line<lines; line++) {
     if (dxFactor[line]>0)
       xSurvived = ySurvived = -1;
@@ -1195,3 +1203,384 @@ long do_aperture_search_line(
   return(1);
 }
 
+#if USE_MPI
+
+/* Line aperture search that makes use of larger parallel resources by tracking all particles for all
+   lines at the same time (if enough processors are available
+*/
+
+long do_aperture_search_line_p(
+			     RUN *run,
+			     VARY *control,
+			     double *referenceCoord,
+			     ERRORVAL *errcon,
+			     LINE_LIST *beamline,
+			     long lines,
+                             double *returnValue
+			     )
+{
+  double **coord;
+  double p_central;
+  long index, split, step, nSteps;
+  long effort, n_trpoint, line;
+  double area, dtheta;
+  double orbit[6] = {0,0,0,0,0,0};
+  double *x0, *y0, *dx, *dy, *dxFactor, *dyFactor;
+  double *xLimit, *yLimit, *xLost, *yLost, *sLost;
+  double **xLost2, **yLost2, **sLost2;
+  long originStable;
+  double **survived, **buffer;
+  long maxSteps;
+#if DEBUG
+  FILE *fpd, *fpd2, *fpd3;
+  char s[100];
+  sprintf(s, "pda-%03d.sdds", myid);
+  fpd = fopen(s, "w");
+  fprintf(fpd, "SDDS1\n&column name=x type=double &end\n&column name=y type=double &end\n&column name=survived type=short &end\n");
+  fprintf(fpd, "&column name=split type=short &end\n&column name=line type=short &end\n&column name=step type=short &end\n");
+  fprintf(fpd, "&column name=index type=short &end\n&column name=ID type=short &end\n&data mode=ascii no_row_counts=1 &end\n");
+  sprintf(s, "pda-%03d.txt", myid);
+  fpd2 = fopen(s, "w");
+  fpd3 = fopen("pda.sdds", "w");
+  fprintf(fpd3, "SDDS1\n&column name=x type=double &end\n&column name=y type=double &end\n&column name=survived type=short &end\n");
+  fprintf(fpd3, "&column name=split type=short &end\n&column name=line type=short &end\n&column name=step type=short &end\n");
+  fprintf(fpd3, "&column name=index type=short &end\n&column name=ID type=short &end\n&data mode=ascii no_row_counts=1 &end\n");
+#endif
+
+  maxSteps = 1/split_fraction+0.5;
+  if (nx>maxSteps)
+    maxSteps = nx;
+
+  coord = (double**)czarray_2d(sizeof(**coord), 1, 7);
+
+  /* These arrays are used to store results for each line and each step on the line */
+  survived = (double**)czarray_2d(sizeof(**survived), lines, maxSteps);
+  xLost2 = (double**)czarray_2d(sizeof(**xLost2), lines, maxSteps);
+  yLost2 = (double**)czarray_2d(sizeof(**yLost2), lines, maxSteps);
+  sLost2 = (double**)czarray_2d(sizeof(**sLost2), lines, maxSteps);
+  /* buffer for sharing data among processors */
+  buffer = (double**)czarray_2d(sizeof(**buffer), lines, maxSteps);
+
+  /* Some of these were just scalars in the previous version.  We use arrays to avoid recomputing values */
+  dx = tmalloc(sizeof(*dx)*lines);
+  dy = tmalloc(sizeof(*dy)*lines);
+  x0 = tmalloc(sizeof(*x0)*lines);
+  y0 = tmalloc(sizeof(*y0)*lines);
+  xLost = tmalloc(sizeof(*xLost)*lines);
+  yLost = tmalloc(sizeof(*yLost)*lines);
+  sLost = tmalloc(sizeof(*sLost)*lines);
+  dxFactor = tmalloc(sizeof(*dxFactor)*lines);
+  dyFactor = tmalloc(sizeof(*dyFactor)*lines);
+  xLimit = calloc(sizeof(*xLimit), lines);
+  yLimit = calloc(sizeof(*yLimit), lines);
+
+  for (line=0; line<lines; line++)
+    xLost[line] = yLost[line] = sLost[line] = DBL_MAX;
+
+  switch (lines) {
+  case 1:
+    dxFactor[0] = 1; dyFactor[0] = 1;
+    break;
+  case 2:
+    dxFactor[0] = -1; dyFactor[0] = 1;
+    dxFactor[1] =  1; dyFactor[1] = 1;
+    break;
+  case 3:
+    dxFactor[0] = 0;   dyFactor[0] = 1;
+    dxFactor[1] = dyFactor[1] = 1/sqrt(2);
+    dxFactor[2] = 1;   dyFactor[2] = 0;
+    break;
+  default:
+    dtheta = PI/(lines-1);
+    for (line=0; line<lines; line++) {
+      if (fabs(dxFactor[line] = sin(-PI/2+dtheta*line))<1e-6)
+	dxFactor[line] = 0;
+      if (fabs(dyFactor[line] = cos(-PI/2+dtheta*line))<1e-6)
+	dyFactor[line] = 0;
+    }
+    break;
+  }
+
+  effort = 0;
+  if (offset_by_orbit) {
+    /* N.B.: for an off-momentum orbit that is created with an initial
+     * MALIGN element, the momentum offset will not appear in the
+     * referenceCoord array.  So this works if the user sets ON_PASS=0
+     * for the MALIGN.
+     */
+    memcpy(orbit, referenceCoord, sizeof(*referenceCoord)*6);
+  }
+
+  if (verbosity>=1) {
+    printf("** Starting %ld-line aperture search\n", lines);
+    fflush(stdout);
+  }
+
+  if (isMaster && output) {
+    if (!SDDS_StartTable(&SDDS_aperture, lines)) {
+      SDDS_SetError("Unable to start SDDS table (do_aperture_search)");
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+    }
+    SDDS_SetParameters(&SDDS_aperture, SDDS_SET_BY_INDEX|SDDS_PASS_BY_VALUE, 0, control->i_step, -1);
+    if (control->n_elements_to_vary) {
+      for (index=0; index<control->n_elements_to_vary; index++)
+        if (!SDDS_SetParameters(&SDDS_aperture, SDDS_SET_BY_INDEX|SDDS_PASS_BY_VALUE, index+1,
+                                control->varied_quan_value[index], -1))
+          break;
+    }
+    if (SDDS_NumberOfErrors()) {
+      SDDS_SetError("Problem setting SDDS parameter values (do_aperture_search)");
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+    }
+  }
+
+  /* For each split, loop over lines and steps on lines to evaluate which particles survive */
+  for (split=0; split<=n_splits; split++) {
+    if (split==0)
+      nSteps = nx;
+    else
+      nSteps = 1/split_fraction-0.5;
+    if (nSteps<1)
+      nSteps = 1;
+    /* Mark all particles as not surviving */
+    for (line=0; line<lines; line++) {
+      for (step=0; step<nSteps; step++)
+	survived[line][step] = 0;
+    }
+    /* loop over lines.  'index' counts the particles to be tracked */
+    for (index=line=0; line<lines; line++) {
+      /* Set start and delta values for the line */
+      if (split==0) {
+	dx[line] = xmax/(nx-1)*dxFactor[line];
+	dy[line] = ymax/(nx-1)*dyFactor[line];
+	x0[line] = y0[line] = 0;
+      } else {
+	x0[line] = xLimit[line];
+	y0[line] = yLimit[line];
+	dx[line] *= split_fraction;
+	dy[line] *= split_fraction;
+	x0[line] += dx[line];
+	y0[line] += dy[line];
+      }
+      /* step along the line */
+      for (step=0; step<nSteps; step++, index++) {
+	/* initialize 2d arrays to zero even if we won't track this particle */
+	xLost2[line][step] = 0;
+	yLost2[line][step] = 0;
+	sLost2[line][step] = 0;
+	survived[line][step] = 0;
+#if DEBUG
+	fprintf(fpd2, "myid=%d, split=%ld, line=%ld, step=%ld, index=%ld, n_processors=%d---", 
+		myid, split, line, step, index, n_processors);
+#endif
+
+	/* decide if we are going to track this particle */
+	if (myid != index%n_processors) {
+#if DEBUG
+	  fprintf(fpd2, "not tracking\n");
+#endif
+	  continue;
+	}
+#if DEBUG
+	fprintf(fpd2, "tracking---");
+#endif
+
+	/* Track a particle */
+	memcpy(coord[0], orbit, sizeof(*orbit)*6);
+	coord[0][0] = step*dx[line] + x0[line] + orbit[0];
+	coord[0][2] = step*dy[line] + y0[line] + orbit[2];
+	p_central = run->p_central;
+	n_trpoint = 1;
+	if (do_tracking(NULL, coord, n_trpoint, &effort, beamline, &p_central, 
+			NULL, NULL, NULL, NULL, run, control->i_step, 
+			SILENT_RUNNING, control->n_passes, 0, NULL, NULL, NULL, NULL, NULL)!=1) {
+	  /* Particle lost, so record information */
+	  xLost2[line][step] = coord[0][0];
+	  yLost2[line][step] = coord[0][2];
+	  sLost2[line][step] = coord[0][4];
+	  survived[line][step] = 0;
+#if DEBUG
+	  fprintf(fpd2, "lost\n");
+#endif
+	} else {
+	  /* Particle survived */
+	  survived[line][step] = 1;
+#if DEBUG
+	  fprintf(fpd2, "survived\n");
+#endif
+	}
+#if DEBUG
+	fprintf(fpd, "%le %le %.0f %ld %ld %ld %ld %d\n", step*dx[line]+x0[line], step*dy[line]+y0[line], survived[line][step], split, line, step,
+		index, myid);
+#endif
+      }
+    }
+    /* Wait for all processors to exit the loop */
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    /* Sum values of arrays over all processors */
+    MPI_Allreduce(survived[0], buffer[0], lines*maxSteps, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    memcpy(survived[0], buffer[0], sizeof(double)*lines*maxSteps);
+
+    MPI_Allreduce(xLost2[0], buffer[0], lines*maxSteps, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    memcpy(xLost2[0], buffer[0], sizeof(double)*lines*maxSteps);
+
+    MPI_Allreduce(yLost2[0], buffer[0], lines*maxSteps, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    memcpy(yLost2[0], buffer[0], sizeof(double)*lines*maxSteps);
+
+    MPI_Allreduce(sLost2[0], buffer[0], lines*maxSteps, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    memcpy(sLost2[0], buffer[0], sizeof(double)*lines*maxSteps);
+
+#if DEBUG
+    for (line=0; line<lines; line++)
+      for (step=0; step<nSteps; step++)
+	fprintf(fpd3, "%le %le %.0f %ld %ld %ld %ld %d\n", step*dx[line]+x0[line], step*dy[line]+y0[line], survived[line][step], split, line, step,
+		index, myid);
+#endif
+
+    /* Scan array to determine x and y stability limits */
+    for (line=0; line<lines; line++) {
+#if DEBUG
+      printf("Checking line=%ld\n", line);
+#endif
+      if (split==0) {
+	if (!survived[line][0])
+	  bombElegant("Particle unstable at origin", NULL);
+	for (step=1; step<nSteps; step++) {
+	  if (!survived[line][step])
+	    break;
+	}
+#if DEBUG
+	printf("split=0, lost at step=%ld of %ld\n", step, nSteps);
+#endif
+      } else {
+	for (step=0; step<nSteps; step++) {
+	  if (!survived[line][step])
+	    break;
+	}
+#if DEBUG
+	printf("split=%ld, lost at step=%ld of %ld\n", split, step, nSteps);
+#endif
+	if (step==0)
+	  continue;
+      }
+      step--;
+
+#if DEBUG
+      printf("line=%ld, split=%ld, x0=%le, y0=%le, dx=%le, dy=%le\n", line, split,
+	     x0[line], y0[line], dx[line], dy[line]);
+      printf("Particle survived at step=%ld, x=%le, y=%le\n", step, x0[line]+step*dx[line], y0[line]+step*dy[line]);
+#endif
+
+      if ((dx[line]>0 && xLimit[line]<(step*dx[line] + x0[line])) ||
+	  (dx[line]==0 && yLimit[line]<(step*dy[line] + y0[line])) ||
+	  (dx[line]<0 && xLimit[line]>(step*dx[line] + x0[line]))) {
+#if DEBUG
+	printf("Change limit from (%le, %le) to (%le, %le)\n",
+	       xLimit[line], yLimit[line], step*dx[line]+x0[line], step*dy[line]+y0[line]);
+#endif
+	xLimit[line] = step*dx[line] + x0[line];
+	yLimit[line] = step*dy[line] + y0[line];
+	if (step < (nSteps-1)) {
+	  xLost[line] = xLost2[line][step+1];
+	  yLost[line] = yLost2[line][step+1];
+	  sLost[line] = sLost2[line][step+1];
+	}
+      }
+    }
+  }
+
+  if (isMaster) {
+    /* Analyze and store results */
+
+    if (output) {
+      for (line=0; line<lines; line++)
+	if (!SDDS_SetRowValues(&SDDS_aperture, SDDS_SET_BY_INDEX|SDDS_PASS_BY_VALUE, line,
+			       IC_X, xLimit[line], IC_Y, yLimit[line],  
+			       IC_XLOST, xLost[line], IC_YLOST, yLost[line], IC_SLOST, sLost[line], -1)) {
+	  SDDS_SetError("Problem setting SDDS row values (do_aperture_search)");
+	  SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+	}
+    }
+    
+    area = 0;
+    if (lines>1) {
+      /* compute the area */
+      
+      /* First clip off any portions that stick out like islands.  This is done in three steps. */
+      
+      /* 1.  Insist that the x values must be monotonically increasing 
+       */
+      for (line=0; line<lines/2; line++)
+	if (xLimit[line+1]<xLimit[line])
+	  xLimit[line+1] = xLimit[line];
+      for (line=lines-1; line>lines/2; line--)
+	if (xLimit[line-1]>xLimit[line])
+	  xLimit[line-1] = xLimit[line];
+      
+      /* 2. for x<0, y values must increase monotonically as x increases (larger index) */
+      for (line=lines/2; line>0; line--) {
+	if (yLimit[line-1]>yLimit[line])
+	  yLimit[line-1] = yLimit[line];
+      }
+      
+      /* 3. for x>0, y values must fall monotonically as x increases (larger index) */
+      for (line=lines/2; line<(lines-1); line++) {
+	if (yLimit[line+1]>yLimit[line])
+	  yLimit[line+1] = yLimit[line];
+      }
+      
+      /* perform trapazoid rule integration */
+      for (line=0; line<lines-1; line++) 
+	area += (xLimit[line+1]-xLimit[line])*(yLimit[line+1]+yLimit[line])/2;
+      
+    }
+    *returnValue = area;
+
+    if (output) {
+      if (!SDDS_SetColumn(&SDDS_aperture, SDDS_SET_BY_NAME, xLimit, lines, "xClipped") ||
+	  !SDDS_SetColumn(&SDDS_aperture, SDDS_SET_BY_NAME, yLimit, lines, "yClipped") ||
+	  !SDDS_SetParameters(&SDDS_aperture, SDDS_SET_BY_NAME|SDDS_PASS_BY_VALUE,
+			      "Area", area, NULL)) {
+	SDDS_SetError("Problem setting parameters values in SDDS table (do_aperture_search)");
+	SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+      }
+      if (control->n_elements_to_vary) {
+	long i;
+	for (i=0; i<control->n_elements_to_vary; i++)
+	  if (!SDDS_SetParameters(&SDDS_aperture, SDDS_SET_BY_INDEX|SDDS_PASS_BY_VALUE, i+N_PARAMETERS,
+				  control->varied_quan_value[i], -1))
+	    break;
+      }
+      
+      if (!SDDS_WriteTable(&SDDS_aperture)) {
+	SDDS_SetError("Problem writing SDDS table (do_aperture_search)");
+	SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+      }
+      if (!inhibitFileSync)
+	SDDS_DoFSync(&SDDS_aperture);
+    }
+  }
+  
+  free_czarray_2d((void**)coord, 1, 7);
+  free_czarray_2d((void**)survived, lines, maxSteps);
+  free_czarray_2d((void**)xLost2, lines, maxSteps);
+  free_czarray_2d((void**)yLost2, lines, maxSteps);
+  free_czarray_2d((void**)sLost2, lines, maxSteps);
+  free_czarray_2d((void**)buffer, lines, maxSteps);
+
+  free(dx);
+  free(dy);
+  free(x0);
+  free(y0);
+  free(xLost);
+  free(yLost);
+  free(dxFactor);
+  free(dyFactor);
+  free(xLimit);
+  free(yLimit);
+  
+  return(1);
+}
+
+#endif

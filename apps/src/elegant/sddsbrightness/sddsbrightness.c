@@ -13,7 +13,10 @@
  *
  * Michael Borland, 2002
  *
- $Log: sddsbrightness.c,v $
+ $Log: not supported by cvs2svn $
+ Revision 1.19  2011/02/09 20:26:33  shang
+ Per Roger Dejus's fix, added statement to ensure that the emittance  down-shifted peak is less then the zero-emittance calculated energy. The down-shift is set to be  always larger than 5e-4. Errors may otherwise occur for very small emittances and long devices (large N).
+
  Revision 1.18  2011/01/05 22:24:48  borland
  Added ability to take error factors from a file and multiply each harmonic by the specified factor.
 
@@ -127,13 +130,13 @@ char *option[N_OPTIONS] = {
 } ;
 
 char *USAGE1="sddsbrightness [-pipe=[input][,output]] [<twissFile>] [<SDDSoutputfile>]\n\
- -harmonics=<integer> -Krange=start=<value>,end=<value>,points=<integer>\n\
+ -harmonics=<integer> -Krange={start=<value>,end=<value>,points=<integer> | filename=<string>,column=<string>}\n\
  -current=<Amps> -totalLength=<meters> -periodLength=<meters>\n\
  [-errorFactors=<filename>,<columnName>] \n\
  [-emittanceRatio=<value> | -coupling=<value>] [-noSpectralBroadening]\n\
  [-method=<string value>,device=<string value>,neks=<value>]] \n\n\
 harmonics        number of harmonics to compute\n\
-Krange           range and number of undulator K parameter to evaluate\n\
+Krange           range and number of undulator K parameter to evaluate or a list of K values provided by a file.\n\
 current          beam current in amperes\n\
 totalLength      total length of the undulator in meters\n\
 periodLength     length of the undulator period in meters\n\
@@ -162,7 +165,7 @@ method           choose method for calculating brightness \n\
 Computes on-axis brightness for an undulator centered on the end of the beamline\n\
 the Twiss parameters for which are in the input file.  You should generate the\n\
 input file using elegant's twiss_output command with radiation_integrals=1 .\n\n\
-Program by Michael Borland.  (This is version 2, April 2002.)\n";
+Program by Michael Borland.  ANL(This is version 1.20, "__DATE__")\n";
 
 void getErrorFactorData(double **errorFactor, long *errorFactors, char *filename, char *columnName);
 long SetUpOutputFile(SDDS_DATASET *SDDSout, SDDS_DATASET *SDDSin, char *outputfile, long harmonics);
@@ -193,6 +196,7 @@ void Dejus_CalculateBrightness(double current,long nE,
                                double betax, double alphax, double etax, double etaxp,
                                double betay, double alphay, double etay, double etayp,
                                long minNEKS, long maxNEKS, long neks,
+			       double *Kvalue,
                                double kMin,double kMax, long method,
                                double *sigmax,double *sigmay,double *sigmaxp,double *sigmayp,
                                double **K, double ***FnOut,
@@ -201,7 +205,7 @@ void ComputeBeamSize(double period, long Nu, double ex0, double ey0, double Sdel
                      double betax, double alphax, double etax, double etaxp,
                      double betay, double alphay, double etay, double etayp,
                      double *Sx, double *Sy, double *Sxp, double *Syp);
-
+void getKValueData(double **Kvalue, int32_t *Kpoints, char *filename, char *columnName);
 /*fortran subroutine*/
 void usb_();
 #if defined(_WIN32)
@@ -214,7 +218,8 @@ int main(int argc, char **argv)
   char *inputfile, *outputfile;
   SCANNED_ARG *s_arg;
   unsigned long pipeFlags;
-  double current, totalLength, periodLength, KStart, KEnd, coupling, emittanceRatio, dK;
+  char *Kfilename=NULL, *Kcolumn=NULL;
+  double current, totalLength, periodLength, KStart, KEnd, coupling, emittanceRatio, dK=0, *Kvalue=NULL;
   int32_t KPoints;
   long harmonics, tmpFileUsed, iK, i_arg, readCode, h, ih, ij, periods;
   unsigned long dummyFlags;
@@ -272,9 +277,14 @@ int main(int argc, char **argv)
                           "start", SDDS_DOUBLE, &KStart, 1, 0,
                           "end", SDDS_DOUBLE, &KEnd, 1, 0,
                           "points", SDDS_LONG, &KPoints, 1, 0,
-                          NULL) ||
-            KStart>=KEnd || KStart<0 || KPoints<2)
+			  "filename", SDDS_STRING, &Kfilename, 1, 0, 
+			  "column", SDDS_STRING, &Kcolumn, 1, 0,
+                          NULL))
           SDDS_Bomb("invalid -Krange syntax");
+	if (!Kfilename && (KStart>=KEnd || KStart<0 || KPoints<2))
+	  SDDS_Bomb("invalid -Krange start/end/points values");
+	if (Kfilename && !Kcolumn)
+	  SDDS_Bomb("invalid -Krange syntax, column name not provided,");
         break;
       case SET_CURRENT:
         if (s_arg[i_arg].n_items!=2 ||
@@ -375,7 +385,15 @@ int main(int argc, char **argv)
 #ifdef DEBUG
   fprintf(stderr, "Argument parsing done.\n");
 #endif
-
+  if (Kfilename) {
+    getKValueData(&Kvalue, &KPoints, Kfilename, Kcolumn);
+    /*Kvalue is sorted in decreasing order */
+    KStart = Kvalue[KPoints-1];
+    KEnd = Kvalue[0];
+    if (KStart>=KEnd || KStart<0 || KPoints<2)
+      SDDS_Bomb("Invalid K values provided.");
+  }
+  
   if (errorFactor && errorFactors<harmonics)
     SDDS_Bomb("too few error factors for requested number of harmonics");
   if (coupling && emittanceRatio)
@@ -453,7 +471,7 @@ int main(int argc, char **argv)
 #endif
   if (!SetUpOutputFile(&SDDSout, &SDDSin, outputfile, harmonics))
     SDDS_Bomb("problem setting up output file");
-
+  
   dK = (KEnd-KStart)/(KPoints-1);
   if (method)
     current=current*1.0e3;    /*change unit from A to mA for dejus's method */
@@ -485,7 +503,7 @@ int main(int argc, char **argv)
       Dejus_CalculateBrightness(current,nE,periodLength, periods,device,ihMin,ihMax,2,Sdelta0,
                                 pCentral,ex0,ey0,
                                 betax,alphax,etax,etaxp,betay,alphay,etay,etayp,
-                                minNEKS,maxNEKS,neks,KStart,KEnd,method,
+                                minNEKS,maxNEKS,neks, Kvalue, KStart, KEnd,method,
                                 &sigmax,&sigmay,&sigmaxp,&sigmayp,
                                 &KK, &FnOut,&Energy,&Brightness,&LamdarOut);
 #ifdef DEBUG
@@ -521,8 +539,10 @@ int main(int argc, char **argv)
         conFactor=1.0; 
         if (spectralBroadening && Sdelta0!=0 && 0.36/periods/h>Sdelta0) {
           conFactor=computeFactorOfConvolution(periods,h,Sdelta0);
-        } 
+        }
         for (K=KStart, iK=0; iK<KPoints; iK++, K+=dK) {
+	  if (Kfilename)
+	    K = Kvalue[iK];
           Bn = conFactor*ComputeBrightness(periodLength, periods, K, h,
                                            pCentral, ex0, ey0, Sdelta0, current,
                                            betax, alphax, etax, etayp, 
@@ -558,6 +578,11 @@ int main(int argc, char **argv)
 
   if (!SDDS_Terminate(&SDDSin) || !SDDS_Terminate(&SDDSout))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+  if (Kfilename) {
+    free(Kvalue);
+    free(Kfilename);
+    free(Kcolumn);
+  }
   free_scanargs(&s_arg,argc);
   if (method) {
     for (ih=0;ih<harmonics;ih++) {
@@ -835,6 +860,7 @@ int Gauss_Convolve(double *E,double *spec,int32_t *ns,double sigmaE)
     return 1;
   }
   FindPeak(E,spec,&ep,&sp,ns1);
+  
   /*generate Gaussian with correct sigma in units of x-axis */
   de=E[1]-E[0];
   sigp=2.0*sigmaE*ep/de; /*sigma in x-axis units */
@@ -934,6 +960,7 @@ void Dejus_CalculateBrightness(double current,long nE,
                                double betax, double alphax, double etax, double etaxp,
                                double betay, double alphay, double etay, double etayp,
                                long minNEKS, long maxNEKS, long neks,
+			       double *Kvalue, 
                                double kMin,double kMax, long method,
                                double *sigmax,double *sigmay,double *sigmaxp,double *sigmayp,
                                double **K, double ***FnOut,
@@ -943,7 +970,7 @@ void Dejus_CalculateBrightness(double current,long nE,
   int32_t ih,i,j,je,errorFlag=0;
   int32_t nSigma=3,nppSigma=6,nek,ns,exitLoop=0,badPoint=0;
   double JArg,sigmaEE,gk,dek,ek;
-  double *tmpE,*tmpSpec,**ei,*ptot,*pd,*kyb,**eb,**sb;
+  double *tmpE,*tmpSpec,**ei,*ptot,*pd,*kyb,**eb,**sb, eiz;
   double e,k;
   double sigmaX,sigmaX1,sigmaY,sigmaY1,period;
   double ENERGY;
@@ -964,7 +991,6 @@ void Dejus_CalculateBrightness(double current,long nE,
   *FnOut=*Energy=*Brightness=*LamdarOut=NULL;
   
   if (neks<=nE) neks=nE+50;
-
 
 #ifdef DEBUG
   fprintf(stderr, "Allocating memory...\n");
@@ -998,6 +1024,10 @@ void Dejus_CalculateBrightness(double current,long nE,
   if (device==HELICAL) {
     kMin=kMin/sqrt(2.0);
     kMax=kMax/sqrt(2.0);
+    if (Kvalue) {
+      for (j=0; j<nE; j++)
+	Kvalue[j] /=sqrt(2.0);
+    }
   }
   eMin=reducedE/(1+kMax*kMax/2.0);
   eMax=reducedE/(1+kMin*kMin/2.0);
@@ -1005,8 +1035,8 @@ void Dejus_CalculateBrightness(double current,long nE,
   /*determin peak shifts for first and second harmonics at kMin */
   ky=kMin;
   nek=maxNEKS;
-
-
+  
+ 
   /*compute electron beam size */
 #ifdef DEBUG
   fprintf(stderr, "Computing beam sizes...\n");
@@ -1021,9 +1051,9 @@ void Dejus_CalculateBrightness(double current,long nE,
 #ifdef DEBUG
   fprintf(stderr, "Done.\n");
 #endif
-
   dep1 = dep2 = 0;
   for (i=1;i<3;i++) {
+    eiz = i * eMax;
     if (i==1) {
       ekMin=0.95*i*eMax;
       ekMax=1.01*i*eMax;
@@ -1040,6 +1070,7 @@ void Dejus_CalculateBrightness(double current,long nE,
     }
     /*find the peak */
     FindPeak(tmpE,tmpSpec,&ep,&sp,ns);
+    if (ep> 0.9995*eiz) ep = 0.9995*eiz;
     if (i==1)
       dep1=eMax*i-ep;
     else
@@ -1062,7 +1093,10 @@ void Dejus_CalculateBrightness(double current,long nE,
     badPoint = exitLoop = 0;
     do {
       je--;
-      ek=eMin+je*de;
+      if (!Kvalue)
+	ek=eMin+je*de;
+      else
+	ek = reducedE/(1+Kvalue[je]*Kvalue[je]/2.0);
       ky=sqrt(2.0*(reducedE/ek-1.0));
       if (device==HELICAL) {
         ky=ky/sqrt(2.0);
@@ -1122,7 +1156,10 @@ void Dejus_CalculateBrightness(double current,long nE,
     }
     je=nE-1;
     for (j=0;j<=je;j++) {
-      ek=eMin+j*de;
+      if (!Kvalue)
+	ek=eMin+j*de;
+      else
+	ek = reducedE/(1+Kvalue[j]*Kvalue[j]/2.0);
       if (!badPoint) {
 	ky=sqrt(2.0*(reducedE/ek-1.0));
 	if (device==HELICAL) {
@@ -1249,6 +1286,26 @@ void Dejus_CalculateBrightness(double current,long nE,
   return;
 }
 
+void getKValueData(double **Kvalue, int32_t *Kpoints, char *filename, char *columnName)
+{
+  SDDS_DATASET SDDSin;
+  
+  if (!SDDS_InitializeInput(&SDDSin, filename))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+  if (SDDS_CheckColumn(&SDDSin, columnName, NULL, SDDS_ANY_FLOATING_TYPE, stderr)!=SDDS_CHECK_OK) {
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+    fprintf(stderr, "Something wrong with column %s in %s\n", columnName, filename);
+    exit(1);
+  }
+  if (SDDS_ReadPage(&SDDSin)<1 || (*Kpoints = SDDS_RowCount(&SDDSin))<1 || 
+      !(*Kvalue=SDDS_GetColumnInDoubles(&SDDSin, columnName)))
+    SDDS_Bomb("unable to read error factor file");
+  /*sort kvalue in decreasing order to make the energy in increasing order */
+  qsort(*Kvalue, *Kpoints, sizeof(**Kvalue), double_cmpdes);
+  if (!SDDS_Terminate(&SDDSin))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+}
+
 void getErrorFactorData(double **errorFactor, long *errorFactors, char *filename, char *columnName)
 {
   SDDS_DATASET SDDSin;
@@ -1263,5 +1320,7 @@ void getErrorFactorData(double **errorFactor, long *errorFactors, char *filename
   if (SDDS_ReadPage(&SDDSin)<1 || (*errorFactors = SDDS_RowCount(&SDDSin))<1 || 
       !(*errorFactor=SDDS_GetColumnInDoubles(&SDDSin, columnName)))
     SDDS_Bomb("unable to read error factor file");
+  if (!SDDS_Terminate(&SDDSin))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
 }
 

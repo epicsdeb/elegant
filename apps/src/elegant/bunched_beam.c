@@ -93,19 +93,19 @@ void setup_bunched_beam(
   if (n_particles_per_bunch<=0)
     bombElegant("n_particles_per_bunch is invalid", NULL);
 #if SDDS_MPI_IO
-    beam->n_original_total = beam->n_to_track_total = n_particles_per_bunch; /* record the total number of particles being tracked */
+  beam->n_original_total = beam->n_to_track_total = n_particles_per_bunch; /* record the total number of particles being tracked */
   if (!runInSinglePartMode) {
-    if (n_particles_per_bunch == 1) /* a special case for single particle tracking */
+    if (n_particles_per_bunch == 1) /* a special case for single particle tracking */ 
       notSinglePart = 0;
     else {
+      notSinglePart = 1;
       if (isSlave) {
         long work_processors = n_processors-1;
         long my_nToTrack = n_particles_per_bunch/work_processors; 
         if (myid<=(n_particles_per_bunch%work_processors)) 
 	  my_nToTrack++;
         n_particles_per_bunch = my_nToTrack;
-      }
-      else {
+      } else {
         n_particles_per_bunch = 0;
       }
     }
@@ -189,11 +189,18 @@ void setup_bunched_beam(
     one_random_bunch = 1;
   if (!one_random_bunch)
     save_initial_coordinates = save_original;
-  if (isSlave || !notSinglePart)
+  if (isSlave || !notSinglePart) {
     beam->particle = (double**)czarray_2d(sizeof(double), n_particles_per_bunch, 7);
+    if (run->losses)  
+      beam->lost = (double**)czarray_2d(sizeof(double), n_particles_per_bunch, 8);			
+    else
+      beam->lost = NULL;	
+  }	
 #if SDDS_MPI_IO
-  else
+  else {	
     beam->particle = NULL;
+    beam->lost = NULL;
+  } 	
 #endif
   if (isSlave) {
     if (!save_initial_coordinates)
@@ -312,6 +319,8 @@ long new_bunched_beam(
 	  beam->original=(double**)czarray_2d(sizeof(double),1,7);
 	if (run->acceptance)
 	  beam->accepted=(double**)czarray_2d(sizeof(double),1,7);
+	if (run->losses)
+	  beam->lost=(double**)czarray_2d(sizeof(double),1,8);
       }	
 #endif
     }
@@ -332,6 +341,8 @@ long new_bunched_beam(
 	    beam->original=(double**)czarray_2d(sizeof(double),n_particles_per_bunch,7);
 	  if (run->acceptance)
 	    beam->accepted=(double**)czarray_2d(sizeof(double),n_particles_per_bunch,7);
+          if (run->losses)
+            beam->lost=(double**)czarray_2d(sizeof(double), n_particles_per_bunch, 8);
 	}
       }
 #endif
@@ -398,8 +409,7 @@ long new_bunched_beam(
                                    (control->cell->elem_recirc?control->cell->elem_recirc:&(control->cell->elem)), 
                                    NULL, run, &unstable, NULL, NULL);
 	    control->cell->flags = savedFlags;
-            free_matrices(M);
-            free(M);
+            free_matrices(M); free(M); M = NULL;
 	    fprintf(stdout, "matched Twiss parameters for beam generation:\nbetax = %13.6e m  alphax = %13.6e  etax = %13.6e m  etax' = %13.6e\n",
                 beta_x, alpha_x, eta_x, etap_x);
      fflush(stdout);
@@ -477,7 +487,7 @@ long new_bunched_beam(
             fflush(stdout);
             dump_phase_space(&SDDS_bunch, beam->original, n_actual_particles, control->i_step, Po,
                              sqrt(-1.0));
-            if (one_random_bunch) {
+            if (one_random_bunch && !(firstIsFiducial && beamCounter==1)) {
                 if (!SDDS_Terminate(&SDDS_bunch)) {
                     SDDS_SetError("Problem terminating 'bunch' file (new_bunched_beam)");
                     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
@@ -532,12 +542,7 @@ long track_beam(
   long n_left, effort;
 
   log_entry("track_beam");
-
-  if (beam->lostOnPass)
-    free(beam->lostOnPass);
-  if (isSlave || !notSinglePart)
-    beam->lostOnPass = tmalloc(sizeof(*(beam->lostOnPass))*beam->n_to_track);
-
+    
   if (!run)
     bombElegant("RUN pointer is NULL (track_beam)", NULL);
   if (!control)
@@ -583,9 +588,6 @@ long track_beam(
     }
   }
 
-  if (isMaster && notSinglePart) /* This is a makeup to avoid changing the execution order of the serial elegant */
-    beam->lostOnPass = NULL;
-
   if (isSlave || !notSinglePart)
 #endif
   if (control->bunch_frequency) {
@@ -599,7 +601,7 @@ long track_beam(
                         (LINEAR_CHROMATIC_MATRIX+LONGITUDINAL_RING_ONLY+FIRST_BEAM_IS_FIDUCIAL+SILENT_RUNNING
                          +FIDUCIAL_BEAM_SEEN+RESTRICT_FIDUCIALIZATION+PRECORRECTION_BEAM+IBS_ONLY_TRACKING)),
                        control->n_passes, 0, &(output->sasefel), &(output->sliceAnalysis),
-		       finalCharge, beam->lostOnPass, NULL); 
+		       finalCharge, beam->lost, NULL); 
   if (control->fiducial_flag&FIRST_BEAM_IS_FIDUCIAL && !(flags&PRECORRECTION_BEAM))
     control->fiducial_flag |= FIDUCIAL_BEAM_SEEN;
   
@@ -724,8 +726,10 @@ void do_track_beam_output(RUN *run, VARY *control,
 #endif
       fflush(stdout);
     }
-    dump_lost_particles(&output->SDDS_losses, beam->particle+n_left, beam->lostOnPass+n_left,
+
+    dump_lost_particles(&output->SDDS_losses, beam->lost+n_left, NULL,
 			beam->n_to_track-n_left, control->i_step);
+
     if (!(flags&SILENT_RUNNING)) 
       fprintf(stdout, "done.\n"); fflush(stdout);
     fflush(stdout);
@@ -830,9 +834,9 @@ void setup_output(
     long n_elements;
     n_elements = beamline->n_elems;
 #if USE_MPI
-  if (runInSinglePartMode) {
+  if (runInSinglePartMode && (!enableOutput)) {
     if (run->acceptance || run->centroid || run->sigma || run->final || run->output || run->losses ) {
-      printf ("\nWarning: Traking will be done independently on each processor for this simulation\n");
+      printf ("\nWarning: Tracking will be done independently on each processor for this simulation\n");
       printf ("Pelegant does not provide intermediate output for optimization now.\n\n");
 	run->acceptance = run->centroid = run->sigma = run->final = run->output = run->losses = NULL;
     }
@@ -985,8 +989,7 @@ void finish_output(
        finalCharge);
 #endif
 
-    free_matrices(M);
-    free(M);
+    free_matrices(M); free(M); M = NULL;
   }
   log_exit("finish_output.1");
 

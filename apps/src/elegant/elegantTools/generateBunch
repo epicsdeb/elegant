@@ -1,0 +1,40 @@
+#!/bin/sh  
+# \
+exec oagtclsh "$0" "$@"
+
+set auto_path [linsert $auto_path 0  /usr/local/oag/apps/lib/$env(HOST_ARCH)]
+set auto_path [linsert $auto_path 0 /usr/local/oag/lib_patch/$env(HOST_ARCH)]
+APSStandardSetup
+
+set usage {usage: generateBunch -output <filename> -number <integer> -xplane <emitx>,<betax>,<alphax>,<etax>,<etaxp> -yplane <emity>,<betay>,<alphay>,<etay>,<etayp> -zplane <MeV>,<sigmaS>,<sigmaDelta>}
+set args $argv
+set output ""
+set number 1000
+set xplane ""
+set yplane ""
+set zplane ""
+if {[APSStrictParseArguments {output number xplane yplane zplane}] || ![string length $output] || \
+   ![string length $xplane] || ![string length $yplane] || ![string length $zplane]} {
+    return -code error "$usage"
+}
+
+APSSetVarsFromList -valueList [split $xplane ,] -variableList [list emitx betax alphax etax etaxp] 
+APSSetVarsFromList -valueList [split $yplane ,] -variableList [list emity betay alphay etay etayp] 
+APSSetVarsFromList -valueList [split $zplane ,] -variableList [list energy sigmaS sigmaDelta]
+set bg [expr $energy/0.51099906]
+set gamma [expr sqrt($bg*$bg+1)]
+set beta [expr $bg/$gamma]
+set sigmaT [expr $sigmaS/($beta*2.99792458e+08)]
+
+exec  sddssampledist -pipe=out -samples=$number \
+     -gaussian=column=x,sigma=1e-3,units=m \
+     -gaussian=column=xp,sigma=1e-3 \
+     -gaussian=column=y,sigma=1e-3,units=m \
+     -gaussian=column=yp,sigma=1e-3 \
+     -gaussian=column=t,sigma=$sigmaT,units=s \
+     -gaussian=column=p,mean=[expr $energy/0.51099906],sigma=[expr $energy/0.51099906*$sigmaDelta] \
+     | sddsmatchtwiss -pipe=in $output \
+     -xplane=beta=$betax,alpha=$alphax,emittance=$emitx,etaValue=$etax,etaSlope=$etaxp \
+     -yplane=beta=$betay,alpha=$alphay,emittance=$emity,etaValue=$etay,etaSlope=$etayp \
+     -zplane=deltaStDev=$sigmaDelta,tStDev=$sigmaT,betaGamma=$bg
+

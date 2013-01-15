@@ -14,8 +14,11 @@
  *            Proc. IEEE Int'l. Conf. on Neural Networks (Perth, Australia)
  */
 
-#include "gsl_vector.h"
-#include "gsl_matrix.h"
+#ifndef USE_GSL
+#error The GSL library must be available to build Pelegant.
+#endif
+#include "gsl/gsl_vector.h"
+#include "gsl/gsl_matrix.h"
 #include "track.h"
 #include "mdb.h"
 
@@ -41,7 +44,7 @@ long swarmMin(
   double local_rand, result, xLow, xHigh, xDiff;
  /* See reference:  Good Parameters for Particle Swarm Optimization By Magnus Erik
   double omiga = -0.4438, phi_p =-0.2699, phi_g = 3.3950; */
-  double phi_p = 2.0, phi_g = 2.0, w_max = 0.5, w_min = 0.2; /* w_max is 0.9 originally */
+  double phi_p = 2.0, phi_g = 2.0, w_max = 0.9, w_min = 0.2;
   static gsl_matrix *coord_matrix=NULL, *velocity_matrix=NULL, *local_best_coord=NULL, *global_best_coord=NULL, *tmp_coord_matrix=NULL;
   static gsl_vector *local_best=NULL, *random_vector=NULL;
   static long initialized = 0;
@@ -85,8 +88,8 @@ long swarmMin(
 	if (isMaster && (i==0)) 
 	  gsl_matrix_set (coord_matrix, i, j, xGuess[j]);
 	else
-	  /*	  gsl_matrix_set (coord_matrix, i, j, xLow+xDiff*random_2(0)); */
-	  gsl_matrix_set (coord_matrix, i, j, xGuess[j]+stepSize[i]*(2*random_2(0)-1));
+	 gsl_matrix_set (coord_matrix, i, j, xLow+xDiff*random_2(0));
+	 /* gsl_matrix_set (coord_matrix, i, j, xGuess[j]+stepSize[i]*(2*random_2(0)-1)); */
 	gsl_matrix_set (velocity_matrix, i, j, 0); 
       }
     }
@@ -125,6 +128,9 @@ long swarmMin(
       Input[j] = gsl_matrix_get (coord_matrix, i, j);
     }
     enforceVariableLimits(Input, xLowerLimit, xUpperLimit, dimensions);
+    /* Set the changed coordinate back to the original matrix */
+    for (j=0; j<dimensions; j++)
+      gsl_matrix_set (coord_matrix, i, j, Input[j]); 
 #if MPI_DEBUG
   for (j=0; j<dimensions; j++)
       fprintf (stdout, "on %d, Input[%ld]=%lf, velocity = %lf, step_limit=%lf\n", myid, j,Input[j], gsl_matrix_get(velocity_matrix, 0, j), xUpperLimit[j]-xLowerLimit[j]);

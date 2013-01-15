@@ -1,3 +1,4 @@
+
 /*************************************************************************\
 * Copyright (c) 2002 The University of Chicago, as Operator of Argonne
 * National Laboratory.
@@ -25,6 +26,10 @@
 #if !defined(__APPLE__)
 #include <malloc.h>
 #endif
+#endif
+#if defined(_WIN32)
+#include <fcntl.h>
+#include <io.h>
 #endif
 
 #if defined(linux)
@@ -56,12 +61,16 @@ void freeInputObjects();
 #define DESCRIBE_INPUT 0
 #define DEFINE_MACRO 1
 #define DEFINE_CPU_LIST 2
-#define N_OPTIONS 3
+#define DEFINE_PIPE 3
+#define DEFINE_RPN_DEFNS 4
+#define N_OPTIONS 5
 char *option[N_OPTIONS] = {
     "describeinput",
     "macro",
     "cpulist",
-        };
+    "pipe",
+    "rpndefns",
+  };
 
 #define SHOW_USAGE    0x0001
 #define SHOW_GREETING 0x0002
@@ -69,11 +78,11 @@ char *option[N_OPTIONS] = {
 void showUsageOrGreeting (unsigned long mode)
 {
 #if USE_MPI
-  char *USAGE="usage: mpirun -np <number of processes> Pelegant <inputfile> [-macro=<tag>=<value>,[...]]";
-  char *GREETING="This is elegant 24.1Beta1, "__DATE__", by M. Borland, W. Guo, V. Sajaev, Y. Wang, Y. Wu, and A. Xiao.\nParallelized by Y. Wang, H. Shang, and M. Borland.";
+  char *USAGE="usage: mpirun -np <number of processes> Pelegant <inputfile> [-macro=<tag>=<value>,[...]] [-rpnDefns=<filename>]";
+  char *GREETING="This is elegant 25.1.0, "__DATE__", by M. Borland, W. Guo, V. Sajaev, Y. Wang, Y. Wu, and A. Xiao.\nParallelized by Y. Wang, H. Shang, and M. Borland.";
 #else
-  char *USAGE="usage: elegant <inputfile> [-macro=<tag>=<value>,[...]]";
-  char *GREETING="This is elegant 24.1Beta1, "__DATE__", by M. Borland, W. Guo, V. Sajaev, Y. Wang, Y. Wu, and A. Xiao.";
+  char *USAGE="usage: elegant {<inputfile>|-pipe=in} [-macro=<tag>=<value>,[...]] [-rpnDefns=<filename>]";
+  char *GREETING="This is elegant 25.1.0, "__DATE__", by M. Borland, W. Guo, V. Sajaev, Y. Wang, Y. Wu, and A. Xiao.";
 #endif
   if (mode&SHOW_GREETING)
     puts(GREETING);
@@ -144,7 +153,8 @@ void showUsageOrGreeting (unsigned long mode)
 #define MODULATE_ELEMENTS 59
 #define PARALLEL_OPTIMIZATION_SETUP 60
 #define RAMP_ELEMENTS 61
-#define N_COMMANDS      62
+#define RF_SETUP 62
+#define N_COMMANDS      63
 
 char *command[N_COMMANDS] = {
     "run_setup", "run_control", "vary_element", "error_control", "error_element", "awe_beam", "bunched_beam",
@@ -158,7 +168,7 @@ char *command[N_COMMANDS] = {
     "transmute_elements", "twiss_analysis", "semaphores", "frequency_map", "insert_sceffects", "momentum_aperture", 
     "aperture_input", "coupled_twiss_output", "linear_chromatic_tracking_setup", "rpn_load",
     "moments_output", "touschek_scatter", "insert_elements", "change_particle", "global_settings","replace_elements",
-    "aperture_data", "modulate_elements", "parallel_optimization_setup", "ramp_elements",
+    "aperture_data", "modulate_elements", "parallel_optimization_setup", "ramp_elements", "rf_setup"
   } ;
 
 char *description[N_COMMANDS] = {
@@ -218,12 +228,13 @@ char *description[N_COMMANDS] = {
     "touschek_scatter                 calculate Touschek lifetime, simulate touschek scattering effects, find out momentum aperture through tracking", 
     "insert_elements                  insert elements into already defined beamline", 
     "change_particle                  change the particle type",
-    "global_settings                  change various global settigs",
+    "global_settings                  change various global settings",
     "replace_elements                 remove or replace elements inside beamline",
     "aperture_input                   provide an SDDS file with the physical aperture vs s (same as aperture_data)", 
     "modulate_elements                modulate values of elements as a function of time",
     "parallel_optimization_setup      requests running of parallel optimization mode and sets it up",
     "ramp_elements                    ramp values of elements as a function of pass",
+    "rf_setup                         set rf cavity frequency, phase, and voltage for ring simulation"
   } ;
 
 #define NAMELIST_BUFLEN 65536
@@ -231,6 +242,7 @@ char *description[N_COMMANDS] = {
 #define DEBUG 0
 
 static VARY run_control;
+static RUN run_conditions;
 static char *semaphoreFile[3];
  
 long writePermitted = 1;
@@ -249,11 +261,14 @@ int dumpAcceptance = 0;
 parallelMode parallelStatus = trueParallel; 
 int partOnMaster = 1; /* indicate if the particle information is available on master */
 long watch_not_allowed = 0;
+long enableOutput = 0; /* This flag is used to enforce output for the simplex method in Pelegant  */
 long lessPartAllowed = 0; /* By default, the number of particles is required to be at least n_processors-1 */
 MPI_Comm workers;
 int fd; /* save the duplicated file descriptor stdout to use it latter */
 long last_optimize_function_call = 0;
 int min_value_location = 0;
+MPI_Group world_group, worker_group;
+int ranks[1];
 #endif
 
 #ifdef SET_DOUBLE
@@ -286,7 +301,6 @@ char **argv;
   SCANNED_ARG *scanned;
   char s[NAMELIST_BUFLEN], *ptr;
   long i;
-  RUN run_conditions;
   CORRECTION correct;
   ERRORVAL error_control;
   BEAM beam;
@@ -298,13 +312,16 @@ char **argv;
   char *saved_lattice = NULL;
   long correction_setuped, run_setuped, run_controled, error_controled, beam_type, commandCode;
   long do_chromatic_correction = 0, do_twiss_output = 0, fl_do_tune_correction = 0, do_coupled_twiss_output = 0;
+  long do_rf_setup = 0;
   long do_moments_output = 0;
   long do_closed_orbit = 0, do_matrix_output = 0, do_response_output = 0;
   long last_default_order = 0, new_beam_flags, links_present, twiss_computed = 0, moments_computed = 0;
   long correctionDone, linear_chromatic_tracking_setup_done = 0;
   double *starting_coord, finalCharge;
   long namelists_read = 0, failed, firstPass;
+  unsigned long pipeFlags = 0;
   double apertureReturn;
+  char *rpnDefns = NULL;
 #if USE_MPI
 #ifdef MPI_DEBUG
   FILE *fpError; 
@@ -312,8 +329,6 @@ char **argv;
   char processor_name[MPI_MAX_PROCESSOR_NAME];
   int namelen;  
 #endif 
-  MPI_Group world_group, worker_group;
-  int ranks[1];
 #endif
 
   semaphoreFile[0] = semaphoreFile[1] = semaphoreFile[2] = NULL;
@@ -422,10 +437,6 @@ char **argv;
   showUsageOrGreeting(SHOW_GREETING);
   fflush(stdout);
   link_date();
-  if (getenv("RPN_DEFNS")) {
-    rpn(getenv("RPN_DEFNS"));
-    if (rpn_check_error()) exitElegant(1);
-  }
 
   inputfile = NULL;
   for (i=1; i<argc; i++) {
@@ -435,6 +446,10 @@ char **argv;
         show_namelists_fields(stdout, namelist_pointer, namelist_name, n_namelists);
         if (argc==2)
           exitElegant(0);
+        break;
+      case DEFINE_PIPE:
+        if (!processPipeOption(scanned[i].list+1, scanned[i].n_items-1, &pipeFlags))
+          bombElegant("invalid -pipe syntax", NULL);
         break;
       case DEFINE_MACRO:
         if ((scanned[i].n_items-=1)<1) {
@@ -489,6 +504,10 @@ char **argv;
         printf("warning: CPU list ignored\n");
 #endif /*(!USE_MPI && defined(linux)) */
         break;
+      case DEFINE_RPN_DEFNS:
+        if (scanned[i].n_items!=2 || !strlen(rpnDefns=scanned[i].list[1]))
+          bombElegant("invalid -rpnDefns syntax", NULL);
+        break;
       default:
         fprintf(stdout, "Unknown option given.\n");
         showUsageOrGreeting(SHOW_USAGE);
@@ -506,14 +525,42 @@ char **argv;
       }
     }
   }
-  
-  if (!inputfile) {
-    fprintf(stdout, "No input file was given.\n");
-    showUsageOrGreeting(SHOW_USAGE);
-    exitElegant(1);
+
+  if (!rpnDefns) {
+    if (getenv("RPN_DEFNS")) {
+      rpn(getenv("RPN_DEFNS"));
+      if (rpn_check_error()) {
+        bombElegant("RPN_DEFNS environment variable invalid", NULL);
+      }
+    } else {
+      bombElegant("RPN_DEFNS environment variable undefined. Must define or provide -rpnDefns commandline option.", NULL);
+    }
+  } else {
+    rpn(rpnDefns);
+    if (rpn_check_error()) {
+      bombElegant("rpn definitions file invalid", NULL);
+    }
   }
-  cp_str(&macroValue[0], inputfile);
+
+  if (pipeFlags&USE_STDIN) {
+    if (inputfile)
+      bombElegant("both -pipe=input and input file given", NULL);
+#if defined(_WIN32)
+    if (_setmode(_fileno(stdin), _O_BINARY) == -1)
+      bombElegant("unable to set stdin to binary mode", NULL);
+#endif
+    fp_in = stdin;
+    inputfile = "stdin";
+  } else {
+    if (!inputfile) {
+      fprintf(stdout, "No input file was given.\n");
+      showUsageOrGreeting(SHOW_USAGE);
+      exitElegant(1);
+    }
+  }
   
+  cp_str(&macroValue[0], inputfile);
+
 #if defined(CONDOR_COMPILE)
   sprintf(s, "%s.ckpt", inputfile);
   init_image_with_file_name(s);
@@ -565,7 +612,7 @@ char **argv;
       
       run_setuped = run_controled = error_controled = correction_setuped = do_closed_orbit = do_chromatic_correction = 
         fl_do_tune_correction = 0;
-      do_twiss_output = do_matrix_output = do_response_output = do_coupled_twiss_output = do_moments_output = do_find_aperture = 0;
+      do_twiss_output = do_matrix_output = do_response_output = do_coupled_twiss_output = do_moments_output = do_find_aperture = do_rf_setup = 0;
       linear_chromatic_tracking_setup_done = 0;
 
       set_namelist_processing_flags(STICKY_NAMELIST_DEFAULTS);
@@ -610,8 +657,6 @@ char **argv;
         fflush(stdout);
       }
       
-      seedElegantRandomNumbers(random_number_seed, 0);
-
       /* copy run data into run_conditions structure */
       run_conditions.ideal_gamma = sqrt(sqr(p_central)+1);
       run_conditions.p_central = p_central;
@@ -642,6 +687,9 @@ char **argv;
         run_conditions.rootname = rootname;
         run_conditions.runfile  = compose_filename(inputfile, rootname);
       }
+
+      seedElegantRandomNumbers(random_number_seed, 0);
+
       /* In the version with parallel I/O, these file names need to be known by all the processors, otherwise there
 	 will be a synchronization issue when calculated accumulated sum in do_tracking */
       run_conditions.acceptance = compose_filename(acceptance, rootname);
@@ -682,8 +730,12 @@ char **argv;
 		
       if (semaphoreFile[0]) {
         /* "started" */
+	char *lastSem;
+	cp_str(&lastSem, semaphoreFile[0]);
         semaphoreFile[0] = compose_filename(semaphoreFile[0], rootname);
-	createSemaphoreFile(semaphoreFile[0]);
+	if (strcmp(lastSem, semaphoreFile[0]))
+	  createSemaphoreFile(semaphoreFile[0]);
+	free(lastSem);
       }
       if (semaphoreFile[1]) {
         /* "done" */
@@ -792,6 +844,9 @@ char **argv;
       beam_type = SET_BUNCHED_BEAM;
       break;
     case SET_SDDS_BEAM: 
+#if USE_MPI
+    notSinglePart = 1; 
+#endif      
       if (!run_setuped || !run_controled)
         bombElegant("run_setup and run_control must precede sdds_beam namelist", NULL);
       setup_sdds_beam(&beam, &namelist_text, &run_conditions, &run_control, &error_control, 
@@ -829,12 +884,12 @@ char **argv;
         setup_transport_analysis(&namelist_text, &run_conditions, &run_control, &error_control);
         break;
       }
-      new_beam_flags = 0;
       firstPass = 1;
       while (vary_beamline(&run_control, &error_control, &run_conditions, beamline)) {
         /* vary_beamline asserts changes due to vary_element, error_element, and load_parameters */
         fill_double_array(starting_coord, 6, 0.0);
         correctionDone = 0;
+        new_beam_flags = 0;
         if (correct.mode!=-1 && (correct.track_before_and_after || correct.start_from_centroid)) {
           if (beam_type==SET_AWE_BEAM) {
             bombElegant("beam type of SET_AWE_BEAM in main routine--this shouldn't happen", NULL);
@@ -846,16 +901,30 @@ char **argv;
           else
             new_bunched_beam(&beam, &run_conditions, &run_control, &output_data, 0);
           new_beam_flags = TRACK_PREVIOUS_BUNCH;
-          if (commandCode==TRACK && correct.track_before_and_after)
+          if (commandCode==TRACK && correct.track_before_and_after) {
             track_beam(&run_conditions, &run_control, &error_control, &optimize.variables, 
                        beamline, &beam, &output_data, 
                        PRECORRECTION_BEAM, 0, &finalCharge);
+            /* This is needed to put the original bunch back in the tracking buffer, since it may
+             * be needed as the starting point for orbit/trajectory correction 
+             */
+            if (beam_type==SET_SDDS_BEAM) {
+              if (new_sdds_beam(&beam, &run_conditions, &run_control, &output_data, 0)<0)
+                break;
+            }
+            else
+              new_bunched_beam(&beam, &run_conditions, &run_control, &output_data, 0);
+            new_beam_flags = TRACK_PREVIOUS_BUNCH;
+          }
         }
+        
 
         /* If needed, find closed orbit, twiss parameters, moments, and response matrix, but don't do
          * any output unless requested to do so "pre-correction"
          */
-        if (do_closed_orbit && !run_closed_orbit(&run_conditions, beamline, starting_coord, &beam, 0) &&
+        if (do_closed_orbit && 
+            !run_closed_orbit(&run_conditions, beamline, starting_coord, &beam, 
+                              new_beam_flags==TRACK_PREVIOUS_BUNCH?0:CLOSED_ORBIT_IGNORE_BEAM) &&
             !soft_failure) {
           fprintf(stdout, "Closed orbit not found---continuing to next step\n");
           fflush(stdout);
@@ -867,6 +936,8 @@ char **argv;
           fflush(stdout);
           continue;
         }
+        if (do_rf_setup)
+          run_rf_setup(&run_conditions, beamline);
         if (do_moments_output)
           runMomentsOutput(&run_conditions, beamline, starting_coord, 0, 1);
         if (do_response_output)
@@ -964,6 +1035,8 @@ char **argv;
           fflush(stdout);
           continue;
         }
+        if (do_rf_setup)
+          run_rf_setup(&run_conditions, beamline);
         if (do_moments_output)
           runMomentsOutput(&run_conditions, beamline, starting_coord, 1, 1);
         if (do_coupled_twiss_output &&
@@ -1002,6 +1075,9 @@ char **argv;
         }
         if (parameters)
           dumpLatticeParameters(parameters, &run_conditions, beamline);
+        /* Reset corrector magnets for before/after tracking mode */
+        if (correct.mode!=-1 && commandCode==TRACK && correct.track_before_and_after)
+          zero_correctors(beamline->elem_recirc?beamline->elem_recirc:&(beamline->elem), &run_conditions, &correct);
       }
       if (commandCode==TRACK)
         finish_output(&output_data, &run_conditions, &run_control, &error_control, &optimize.variables, 
@@ -1066,6 +1142,11 @@ char **argv;
         finish_twiss_output();
       }
       break;
+    case RF_SETUP:
+      if (!run_setuped)
+        bombElegant("run_setup must precede rf_setup namelist", NULL);
+      setup_rf_setup(&namelist_text, &run_conditions, beamline, do_twiss_output, &do_rf_setup);
+      break;
     case MOMENTS_OUTPUT:
       if (!run_setuped)
         bombElegant("run_setup must precede moments_output namelist", NULL);
@@ -1106,19 +1187,13 @@ char **argv;
     case STOP:
       lorentz_report();
       finish_load_parameters();
-      if (semaphore_file)
+      /* if (semaphore_file)
         createSemaphoreFile(semaphore_file);
       if (semaphoreFile[1])
         createSemaphoreFile(semaphoreFile[1]);
+      */
       free_beamdata(&beam);
       printFarewell(stdout);
-#if USE_MPI
-      if (isSlave)
-	MPI_Comm_free(&workers); 
-      MPI_Group_free(&worker_group); 
-      close(fd); 
-      MPI_Finalize();
-#endif
       exitElegant(0);
       break;
     case OPTIMIZATION_SETUP:
@@ -1538,7 +1613,7 @@ char **argv;
     case MODULATE_ELEMENTS:
       if (!run_setuped)
         bombElegant("run_setup must precede modulate_elements", NULL);
-      addModulationElements(&(run_conditions.modulationData), &namelist_text, beamline);
+      addModulationElements(&(run_conditions.modulationData), &namelist_text, beamline, &run_conditions);
       break;
     case RAMP_ELEMENTS:
       if (!run_setuped)
@@ -1565,24 +1640,20 @@ char **argv;
   fflush(stdout);
   lorentz_report();
   finish_load_parameters();
-  if (semaphore_file)
-    createSemaphoreFile(semaphore_file);
-  if (semaphoreFile[1])
-    createSemaphoreFile(semaphoreFile[1]);
   free_beamdata(&beam);
+  free(macroTag);
+  free(macroValue);
+  free(starting_coord);
 #if defined(VAX_VMS) || defined(UNIX) || defined(_WIN32)
   report_stats(stdout, "statistics: ");
   fflush(stdout);
 #endif
   log_exit("main");
   printFarewell(stdout);
-#if USE_MPI
-  close(fd);
-  MPI_Finalize();
-#endif
   if (load_hash)
     hdestroy(load_hash);                         /* destroy hash table */
-  return(0);
+  free_scanargs(&scanned, argc);
+  exitElegant(0);
 }
 
 void printFarewell(FILE *fp)
@@ -2069,9 +2140,10 @@ void free_beamdata(BEAM *beam)
     free_czarray_2d((void**)beam->accepted, beam->n_particle, 7);
   if (beam->original && beam->original!=beam->particle)
     free_czarray_2d((void**)beam->original, beam->n_original, 7);
-  if (beam->lostOnPass)
-    free(beam->lostOnPass);
-  beam->particle = beam->accepted = beam->original = NULL;
+  if (beam->lost)
+    free_czarray_2d((void**)beam->lost, beam->n_particle, 8);
+
+  beam->particle = beam->accepted = beam->original = beam->lost = NULL;
   beam->lostOnPass = NULL;
   beam->n_original = beam->n_to_track = beam->n_accepted = beam->n_saved = beam->n_particle = 0;
   beam->p0_original = beam->p0 =0.;
@@ -2114,9 +2186,16 @@ void getRunControlContext (VARY *context)
   *context = run_control;
 }
 
+void getRunSetupContext (RUN *context)
+{
+  *context = run_conditions;
+}
+
 void swapParticles(double *p1, double *p2)
 {
   double buffer[7];
+  if (p1==p2)
+    return;
   memcpy(buffer,     p1, sizeof(double)*7);
   memcpy(p1    ,     p2, sizeof(double)*7);
   memcpy(p2    , buffer, sizeof(double)*7);
@@ -2125,6 +2204,10 @@ void swapParticles(double *p1, double *p2)
 void createSemaphoreFile(char *filename)
 {
   FILE *fp;
+#if USE_MPI
+  if (!isMaster)
+    return ;
+#endif
   if (filename) {
     fprintf(stdout, "Creating semaphore file %s\n", filename);
   } else 
@@ -2132,6 +2215,9 @@ void createSemaphoreFile(char *filename)
   if (!(fp = fopen(filename, "w"))) {
     fprintf(stdout, "Problem creating semaphore file %s\n", filename);
     exitElegant(1);
+  } else { /* Put the CPU time in the .done file */
+    if (wild_match(filename, "*.done"))
+      fprintf(fp, "%8.2f\n", cpu_time()/100.0); 
   }
   fclose(fp);
 }
@@ -2236,25 +2322,6 @@ void resetApertureData(APERTURE_DATA *apData)
   }
 }
 
-
-static long savedRandomNumberSeed ;
-
-void seedElegantRandomNumbers(long seed, long restart)
-{
-  if (restart)
-    seed = savedRandomNumberSeed;
-  else
-    savedRandomNumberSeed = seed;
-  
-  /* seed random number generators.  Note that random_1_elegant seeds random_2, random_3,
-   * and random_4.
-   * random_1_elegant is used for beamline errors.  
-   * random_4 is used for beam generation 
-   * random_2 is used for random scraping/sampling/scattering.  
-   * random_3 is used for BPM noise.
-   */
-  random_1_elegant(-FABS(seed));
-}
 
 /* Routine to close output files that are associated with beamline elements
  */
@@ -2432,20 +2499,53 @@ void processGlobalSettings(NAMELIST_TEXT *nltext)
 
   inhibitFileSync = inhibit_fsync;
   echoNamelists = echo_namelists;
+  mpiRandomizationMode = mpi_randomization_mode;
   if (log_file)
     freopen(log_file, "w", stdout);
   if (error_log_file)
     freopen(error_log_file, "w", stderr);
 }
 
+void bombTracking(char *error)
+{
+  TRACKING_CONTEXT tc;
+  getTrackingContext(&tc);
+  fprintf(stdout, "error:  %s\n", error);
+  if (tc.elementName)
+    fprintf(stdout, "Tracking through %s#%ld at s=%lem\n", 
+            tc.elementName, tc.elementOccurrence, tc.zEnd);
+  else 
+    fprintf(stdout, "Tracking through unidentified element\n");
+  show_traceback(stdout);
+#if USE_MPI
+  MPI_Barrier(MPI_COMM_WORLD); 
+  if (isSlave)
+    MPI_Comm_free(&workers); 
+  MPI_Group_free(&worker_group); 
+  close(fd); 
+  MPI_Finalize();
+#endif
+  exit(1);
+}
+
+
 void bombElegant(char *error, char *usage)
 {
   if (error)
-    fprintf(stderr, "error: %s\n", error);
+    fprintf(stdout, "error: %s\n", error);
   if (usage)
-    fprintf(stderr, "usage: %s\n", usage);
+    fprintf(stdout, "usage: %s\n", usage);
   if (semaphoreFile[2]) 
     createSemaphoreFile(semaphoreFile[2]);
+  show_traceback(stdout);
+#if USE_MPI
+  MPI_Barrier(MPI_COMM_WORLD); 
+  if (isSlave)
+    MPI_Comm_free(&workers); 
+  MPI_Group_free(&worker_group); 
+  close(fd); 
+  MPI_Finalize();
+#endif
   exit(1);
 }
 
@@ -2457,5 +2557,13 @@ void exitElegant(long status)
     createSemaphoreFile(semaphoreFile[1]);
   if (!status && semaphore_file)
     createSemaphoreFile(semaphore_file);
+#if USE_MPI
+  MPI_Barrier(MPI_COMM_WORLD);
+  if (isSlave)
+    MPI_Comm_free(&workers); 
+  MPI_Group_free(&worker_group); 
+  close(fd); 
+  MPI_Finalize();
+#endif
   exit(status);
 }

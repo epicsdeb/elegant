@@ -12,6 +12,8 @@
         long skip = 1;
         long disable = 0;
         long add_at_end = 0;
+        double s_start = -1;
+        double s_end = -1;
         STRING element_def = NULL;
         long verbose = 0;
         long total_occurrences = 0;

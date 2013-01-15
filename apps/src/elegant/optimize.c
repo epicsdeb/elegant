@@ -30,8 +30,10 @@ void rpnStoreHigherMatrixElements(VMATRIX *M, long **TijkMem, long **UijklMem, l
 #if USE_MPI
 /* Find the global minimal value and its location across all the processors */
 void find_global_min_index (double *min, int *processor_ID, MPI_Comm comm);
-/* Print out the best individual and value after each iteration */
-void SDDS_PrintPopulations(SDDS_TABLE *popLogPtr, long iteration, double best_value, double *variable, long n_variables, double *covariable, long n_covariables);
+/* Print out the best individuals for all the processors */
+void SDDS_PrintPopulations(SDDS_TABLE *popLogPtr, double result,  double *variable, long dimensions); 
+/* Print statistics after each iteration */
+void SDDS_PrintStatistics(SDDS_TABLE *popLogPtr, long iteration, double best_value, double worst_value, double median, double avarage, double spread, double *variable, long n_variables, double *covariable, long n_covariables, long print_all);
 #endif
 
 #if !USE_MPI
@@ -72,8 +74,11 @@ void do_optimization_setup(OPTIMIZATION_DATA *optimization_data, NAMELIST_TEXT *
       output_sparsing_factor = 1;
 #if USE_MPI
     if (!writePermitted)
-      log_file = NULL; 
-    optimization_data->random_factor = random_factor; 
+      log_file = NULL;
+    optimization_data->random_factor = random_factor;
+    /* The output files are disabled for most of the optimization methods in Pelegant except for the simplex method, which runs in serial mode */ 	
+    if (optimization_data->method==OPTIM_METHOD_SIMPLEX) 
+      enableOutput = 1;
 #endif 
    if (log_file) {
         if (str_in(log_file, "%s"))
@@ -119,15 +124,17 @@ void do_optimization_setup(OPTIMIZATION_DATA *optimization_data, NAMELIST_TEXT *
 
 #if USE_MPI
 void do_parallel_optimization_setup(OPTIMIZATION_DATA *optimization_data, NAMELIST_TEXT *nltext, RUN *run, LINE_LIST *beamline)
-{ 
-  runInSinglePartMode = 1;  /* All the processors will track the same particles with different parameters */
+{
+  do_optimization_setup(optimization_data, nltext, run, beamline);
 
-  do_optimization_setup(optimization_data, nltext, run, beamline);  
-  if (optimization_data->method!=OPTIM_METHOD_HYBSIMPLEX) {
+  if (optimization_data->method!=OPTIM_METHOD_SIMPLEX) 
+    runInSinglePartMode = 1;  /* All the processors will track the same particles with different parameters */
+  
+  if (optimization_data->method==OPTIM_METHOD_SWARM || optimization_data->method==OPTIM_METHOD_GENETIC) {
     if (population_size < n_processors) {
-      fprintf (stderr, "The populaition size (%ld) can not be less than the number of processors (%d).\n",
-               population_size, n_processors);
-      MPI_Abort(MPI_COMM_WORLD, 1);
+      fprintf (stdout, "Warning: The population size (%ld) can not be less than the number of processors (%d). The population size will be set as %d.\n",
+               population_size, n_processors, n_processors);
+      population_size = n_processors;
     }
   }
  
@@ -141,6 +148,10 @@ void do_parallel_optimization_setup(OPTIMIZATION_DATA *optimization_data, NAMELI
     if (str_in(population_log, "%s"))
       population_log = compose_filename(population_log, run->rootname);
   }
+  if (optimization_data->method==OPTIM_METHOD_GENETIC)
+    /* The crossover type defined in PGAPACK started from 1, instead of 0. */ 
+    if ((optimization_data->crossover_type=(match_string(crossover, crossover_type, N_CROSSOVER_TYPES, EXACT_MATCH)+1))<1)
+        bombElegant("unknown genecic optimization crossover type ", NULL);
 }
 #endif
 
@@ -687,7 +698,8 @@ void do_optimize(NAMELIST_TEXT *nltext, RUN *run1, VARY *control1, ERRORVAL *err
     long n_total_evaluations_made = 0;
     double scale_factor = optimization_data1->random_factor;
     int min_location = 0;
-    static double *covariables_global = NULL;
+    double worst_result, median, average, spread = 0.0;
+    static double *covariables_global = NULL, *result_array;
 #endif
     
     log_entry("do_optimize");
@@ -810,7 +822,7 @@ void do_optimize(NAMELIST_TEXT *nltext, RUN *run1, VARY *control1, ERRORVAL *err
 #if USE_MPI
     if (scale_factor != 1.0)
       for (i=0; i<variables->n_variables; i++) {
-	variables->step[i] *= scale_factor;
+	variables->step[i] *= scale_factor;	
       }
 #endif 
 
@@ -854,7 +866,8 @@ void do_optimize(NAMELIST_TEXT *nltext, RUN *run1, VARY *control1, ERRORVAL *err
       signal(SIGINT, optimizationInterruptHandler);
 #endif
 #if USE_MPI
-    SDDS_PopulationSetup (population_log, &(optimization_data->popLog), &(optimization_data->variables), &(optimization_data->covariables));
+    if (optimization_data->method!=OPTIM_METHOD_SIMPLEX)
+      SDDS_PopulationSetup (population_log, &(optimization_data->popLog), &(optimization_data->variables), &(optimization_data->covariables));
 #endif
     while (startsLeft-- && !stopOptimization) {
       lastResult = result;
@@ -864,14 +877,14 @@ void do_optimize(NAMELIST_TEXT *nltext, RUN *run1, VARY *control1, ERRORVAL *err
       case OPTIM_METHOD_HYBSIMPLEX:
 	if (optimization_data->method==OPTIM_METHOD_HYBSIMPLEX) {
 	  for (i=0; i<variables->n_variables; i++)
-	    variables->step[i] += (random_2(0)-0.5)*variables->orig_step[i];
+	    variables->step[i] = (random_2(0)-0.5)*variables->orig_step[i]*scale_factor; 	
 	  /* Disabling the report from simplexMin routine, as it will print result from the Master only.
-	     We print the best result across all the processor in a higher level routine */
+	     We print the best result across all the processors in a higher level routine */
 	  optimization_report_ptr = NULL;
 	}
 #endif
 	fputs("Starting simplex optimization.\n", stdout);
-        if (simplexMin(&result, variables->varied_quan_value, variables->step, 
+	if (simplexMin(&result, variables->varied_quan_value, variables->step, 
                        variables->lower_limit, variables->upper_limit, NULL, 
                        variables->n_variables, optimization_data->target, 
                        optimization_data->tolerance, optimization_function, optimization_report_ptr,
@@ -881,7 +894,7 @@ void do_optimize(NAMELIST_TEXT *nltext, RUN *run1, VARY *control1, ERRORVAL *err
                        (optimization_data->includeSimplex1dScans?0:SIMPLEX_NO_1D_SCANS)+
 		       (optimization_data->verbose>1?SIMPLEX_VERBOSE_LEVEL1:0)+
 		       (optimization_data->verbose>2?SIMPLEX_VERBOSE_LEVEL2:0)+
-		       (optimization_data->startFromSimplexVertex1?SIMPLEX_START_FROM_VERTEX1:0))<0) {
+		       (optimization_data->startFromSimplexVertex1?SIMPLEX_START_FROM_VERTEX1:0))<0) { 
           if (result>optimization_data->tolerance) {
             if (!optimization_data->soft_failure)
               bombElegant("optimization unsuccessful--aborting", NULL);
@@ -897,6 +910,29 @@ void do_optimize(NAMELIST_TEXT *nltext, RUN *run1, VARY *control1, ERRORVAL *err
 #if MPI_DEBUG
 	  fprintf (stdout, "minimal value is %g on %d\n", result, myid);
 #endif
+	  if (optimization_data->print_all_individuals)
+	    SDDS_PrintPopulations(&(optimization_data->popLog), result, variables->varied_quan_value, variables->n_variables);
+          if (population_log) {
+	    /* Compute statistics of the results over all processors */
+	    MPI_Reduce(&result, &worst_result, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+	    MPI_Reduce(&result, &average, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+	    if (isMaster) {
+	      average /= n_processors;
+	      if (!result_array)	      
+		result_array = tmalloc (n_processors*sizeof(*result_array));
+	    }
+	    MPI_Gather(&result, 1, MPI_DOUBLE, result_array, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+	    if(isMaster){
+	      compute_median(&median, result_array, n_processors);
+	      spread = 0.0;
+	      for (i=0; i<n_processors; i++) {
+		if (!isnan(result_array[i]) && !isinf(result_array[i]))
+		  spread += sqr(result_array[i]-average);
+ 	      }
+	      spread = sqrt(spread/n_processors);
+	    }
+	  }
+
    	  find_global_min_index (&result, &min_location, MPI_COMM_WORLD);
 	  MPI_Bcast(variables->varied_quan_value, variables->n_variables, MPI_DOUBLE, min_location, MPI_COMM_WORLD);
 
@@ -990,13 +1026,14 @@ void do_optimize(NAMELIST_TEXT *nltext, RUN *run1, VARY *control1, ERRORVAL *err
       case OPTIM_METHOD_GENETIC:
 	fputs("Starting genetic optimization.\n", stdout);
 	n_total_evaluations_made = geneticMin(&result, variables->varied_quan_value, 
-					variables->lower_limit, variables->upper_limit, variables->step,
-					variables->n_variables, optimization_data->target, 
-					optimization_function, optimization_data->n_iterations,
-					optimization_data->max_no_change,
-					optimization_data->population_size, output_sparsing_factor,
-					optimization_data->print_all_individuals, population_log,
-					      &(optimization_data->popLog), optimization_data->verbose, variables, covariables);
+					      variables->lower_limit, variables->upper_limit, variables->step,
+					      variables->n_variables, optimization_data->target, 
+					      optimization_function, optimization_data->n_iterations,
+					      optimization_data->max_no_change,
+					      optimization_data->population_size, output_sparsing_factor,
+					      optimization_data->print_all_individuals, population_log,
+					      &(optimization_data->popLog), optimization_data->verbose, 
+					      optimization_data->crossover_type, variables, covariables);
         if (optimAbort(0))
           stopOptimization = 1;
 	break;
@@ -1014,57 +1051,36 @@ void do_optimize(NAMELIST_TEXT *nltext, RUN *run1, VARY *control1, ERRORVAL *err
 #if MPI_DEBUG
           fprintf (stdout, "minimal value is %g for iteration %ld on %d\n", result, optimization_data->n_restarts+1-startsLeft, myid);
 #endif
+	  if (optimization_data->print_all_individuals)
+	    SDDS_PrintPopulations(&(optimization_data->popLog), result, variables->varied_quan_value, variables->n_variables);
+           if (population_log) { 
+	    /* Compute statistics of the results over all processors */
+	    MPI_Reduce(&result, &worst_result, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+	    MPI_Reduce(&result, &average, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+	    if (isMaster) {
+	      average /= n_processors;
+	      if (!result_array)	      
+		result_array = tmalloc (n_processors*sizeof(*result_array));
+	    }
+	    MPI_Gather(&result, 1, MPI_DOUBLE, result_array, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+	    if (isMaster) {
+	      compute_median(&median, result_array, n_processors);
+	      spread = 0.0;
+	      for (i=0; i<n_processors; i++) {
+		if (!isnan(result_array[i]) && !isinf(result_array[i]))
+		  spread += sqr(result_array[i]-average);
+ 	      }
+	      spread = sqrt(spread/n_processors);
+	    }
+	  }
+
           find_global_min_index (&result, &min_location, MPI_COMM_WORLD);
 #if MPI_DEBUG
 	  fprintf (stdout, "min_location=%d\n", min_location);
 #endif
           MPI_Bcast(variables->varied_quan_value, variables->n_variables, MPI_DOUBLE, min_location, MPI_COMM_WORLD);
 
-#if MPI_DEBUG 
-	  if (isSlave) {
-	      fprintf (stdout, "Minimal value is %.15g after %ld iterations.\n", result, optimization_data->n_restarts+1-startsLeft);
-	      fprintf(stdout, "new variable values for iteration %ld\n", optimization_data->n_restarts+1-startsLeft);
-	      fflush(stdout);
-	      for (i=0; i<variables->n_variables; i++)
-		  fprintf(stdout, "    %10s: %23.15e\n", variables->varied_quan_name[i], variables->varied_quan_value[i]);
-	      fflush(stdout);
-	     
-	      if (covariables->n_covariables) {
-		if (optimization_data->n_restarts==startsLeft)
-		  covariables_global = trealloc(covariables_global, sizeof(*covariables_global)*(covariables->n_covariables+1));	
-                if (result<lastResult || (optimization_data->n_restarts==startsLeft)) {  
-	          for (i=0; i<covariables->n_covariables; i++)
-		    covariables_global[i] = covariables->varied_quan_value[i];	
-                }
-		fprintf(stdout, "new covariable values:\n");
-		  for (i=0; i<covariables->n_covariables; i++) 
-		    fprintf(stdout, "    %10s: %23.15e\n", covariables->varied_quan_name[i], covariables_global[i]);
-	      }
-	      fflush(stdout);
-          }
-#endif
-	  if ((optimization_data->verbose>1) && optimization_data->fp_log) {
-	      fprintf (optimization_data->fp_log, "Minimal value is %.15g after %ld iterations.\n", result, optimization_data->n_restarts+1-startsLeft);
-	      fprintf(optimization_data->fp_log, "new variable values for iteration %ld\n", optimization_data->n_restarts+1-startsLeft);
-	      fflush(optimization_data->fp_log);
-	      for (i=0; i<variables->n_variables; i++)
-		  fprintf(optimization_data->fp_log, "    %10s: %23.15e\n", variables->varied_quan_name[i], variables->varied_quan_value[i]);
-	      fflush(optimization_data->fp_log);
-	     
-	      if (covariables->n_covariables) {
-		if (optimization_data->n_restarts==startsLeft)
-		  covariables_global = trealloc(covariables_global, sizeof(*covariables_global)*(covariables->n_covariables+1));	
-                if (result<lastResult || (optimization_data->n_restarts==startsLeft)) {  
-	          for (i=0; i<covariables->n_covariables; i++)
-		    covariables_global[i] = covariables->varied_quan_value[i];	
-                }
-		fprintf(optimization_data->fp_log, "new covariable values:\n");
-		  for (i=0; i<covariables->n_covariables; i++) 
-		    fprintf(optimization_data->fp_log, "    %10s: %23.15e\n", covariables->varied_quan_name[i], covariables_global[i]);
-	      }
-	      fflush(optimization_data->fp_log);
-          }
-        }
+        }	 
         if (optimAbort(0))
           stopOptimization = 1;
         break;
@@ -1083,21 +1099,63 @@ void do_optimize(NAMELIST_TEXT *nltext, RUN *run1, VARY *control1, ERRORVAL *err
 	/* The covariables are updated locally after each optimization_function call no matter if a better result 
 	   is achieved, which might not match the optimal variables for current iteration. So we keep the global best 
 	   covariable values in a separate array. */
-	if (covariables->n_covariables && (optimization_data->verbose>1) && (result<lastResult || (optimization_data->n_restarts==startsLeft))) 
-	  MPI_Bcast(covariables->varied_quan_value, covariables->n_covariables, MPI_DOUBLE, min_location, MPI_COMM_WORLD);
-	
 	if (covariables->n_covariables) {
-	  if (optimization_data->n_restarts==startsLeft)
-	    covariables_global = trealloc(covariables_global, sizeof(*covariables_global)*(covariables->n_covariables+1));	
+	  if ((optimization_data->verbose>1) && optimization_data->fp_log && (optimization_data->n_restarts==startsLeft)) 
+	    fprintf(optimization_data->fp_log, "Warning: The covariable values might not match the calculated result from the variable values when there are more "
+		    "than one individual per processor. While the correctness of the final result is not affected.\n"); 
+	  /* Only one memory is allocated for each covariable on each processor. It is updated as needed in the optimization function. */
+	}
+	if (covariables->n_covariables && (optimization_data->verbose>1) && (result<lastResult || (optimization_data->n_restarts==startsLeft))) 
+	  MPI_Bcast(covariables->varied_quan_value, covariables->n_covariables, MPI_DOUBLE, min_location, MPI_COMM_WORLD);    
+	if ((optimization_data->verbose>1) && optimization_data->fp_log) {
+	  fprintf (optimization_data->fp_log, "Minimal value is %.15g after %ld iterations.\n", result, optimization_data->n_restarts+1-startsLeft);
+	  fprintf(optimization_data->fp_log, "new variable values for iteration %ld\n", optimization_data->n_restarts+1-startsLeft);
+	  fflush(optimization_data->fp_log);
+	  for (i=0; i<variables->n_variables; i++)
+	    fprintf(optimization_data->fp_log, "    %10s: %23.15e\n", variables->varied_quan_name[i], variables->varied_quan_value[i]);
+	  fflush(optimization_data->fp_log);
+	}
+	if (covariables->n_covariables) {
+	  if (optimization_data->n_restarts==startsLeft) {
+	    covariables_global = trealloc(covariables_global, sizeof(*covariables_global)*(covariables->n_covariables+1));
+	  }	
 	  if (result<lastResult || (optimization_data->n_restarts==startsLeft)) {  
 	    for (i=0; i<covariables->n_covariables; i++)
 	      covariables_global[i] = covariables->varied_quan_value[i];	
 	  }
+	  if ((optimization_data->verbose>1) && optimization_data->fp_log) {
+	    fprintf(optimization_data->fp_log, "new covariable values:\n");
+	    for (i=0; i<covariables->n_covariables; i++) 
+	      fprintf(optimization_data->fp_log, "    %10s: %23.15e\n", covariables->varied_quan_name[i], covariables_global[i]);
+	    fflush(optimization_data->fp_log);
+	  }
 	}
+#if MPI_DEBUG
+	if ((isSlave || !notSinglePart)&& (optimization_data->verbose>1)) {
+	  fprintf (stdout, "Minimal value is %.15g after %ld iterations.\n", result, optimization_data->n_restarts+1-startsLeft);
+	  fprintf(stdout, "new variable values for iteration %ld\n", optimization_data->n_restarts+1-startsLeft);
+	  fflush(stdout);
+	  for (i=0; i<variables->n_variables; i++)
+	    fprintf(stdout, "    %10s: %23.15e\n", variables->varied_quan_name[i], variables->varied_quan_value[i]);
+	  fflush(stdout);
+	  if (covariables->n_covariables) {
+	    if (optimization_data->n_restarts==startsLeft)
+	      covariables_global = trealloc(covariables_global, sizeof(*covariables_global)*(covariables->n_covariables+1));	
+	    if (result<lastResult || (optimization_data->n_restarts==startsLeft)) {  
+	      for (i=0; i<covariables->n_covariables; i++)
+		covariables_global[i] = covariables->varied_quan_value[i];	
+	    }
+	    fprintf(stdout, "new covariable values:\n");
+	    for (i=0; i<covariables->n_covariables; i++) 
+	      fprintf(stdout, "    %10s: %23.15e\n", covariables->varied_quan_name[i], covariables_global[i]);
+	  }
+	  fflush(stdout);
+	}
+#endif
 	if (population_log)
-	  SDDS_PrintPopulations(&(optimization_data->popLog), optimization_data->n_restarts+1-startsLeft, result, variables->varied_quan_value, variables->n_variables, covariables_global, covariables->n_covariables);
+	  SDDS_PrintStatistics(&(optimization_data->popLog), optimization_data->n_restarts+1-startsLeft, result, worst_result, median, average, spread, variables->varied_quan_value, variables->n_variables, covariables_global, covariables->n_covariables, optimization_data->print_all_individuals);
       }
-#else
+#else 
       /* This part looks like redundant, as this is repeated after exiting the while loop. -- Y. Wang */
       /* evaluate once more at the optimimum point to get all parameters right and to get additional output */
       force_output = 1;
@@ -1263,7 +1321,8 @@ void do_optimize(NAMELIST_TEXT *nltext, RUN *run1, VARY *control1, ERRORVAL *err
 #if !USE_MPI
         fprintf(stdout, "    A total of %ld function evaluations were made.\n", n_evaluations_made);
 #else
-	fprintf(optimization_data->fp_log, "    A total of %ld function evaluations were made with an average of %ld function evaluations per processor\n", n_total_evaluations_made, n_total_evaluations_made/n_processors);
+	if (isMaster)
+	  fprintf(stdout, "    A total of %ld function evaluations were made with an average of %ld function evaluations per processor\n", n_total_evaluations_made, n_total_evaluations_made/n_processors);
 #endif
         fflush(stdout);
         if (constraints->n_constraints) {
@@ -1325,7 +1384,7 @@ void do_optimize(NAMELIST_TEXT *nltext, RUN *run1, VARY *control1, ERRORVAL *err
 #define SET_BUNCHED_BEAM 6
 #define SET_SDDS_BEAM   33
 
-#define N_TWISS_QUANS 88
+#define N_TWISS_QUANS (88+18)
 static char *twiss_name[N_TWISS_QUANS] = {
     "betax", "alphax", "nux", "etax", "etapx", 
     "betay", "alphay", "nuy", "etay", "etapy", 
@@ -1354,7 +1413,13 @@ static char *twiss_name[N_TWISS_QUANS] = {
     "dnux/dJx", "dnux/dJy", "dnuy/dJy",
     "h11001", "h00111", "h20001", "h00201", "h10002",
     "h22000", "h11110", "h00220", "h31000", "h40000",
-    "h20110", "h11200", "h20020", "h20200", "h00310", "h00400"
+    "h20110", "h11200", "h20020", "h20200", "h00310", "h00400",
+    "p99.betax", "p99.etax", "p99.etapx", 
+    "p99.betay", "p99.etay", "p99.etapy",
+    "p98.betax", "p98.etax", "p98.etapx", 
+    "p98.betay", "p98.etay", "p98.etapy",
+    "p96.betax", "p96.etax", "p96.etapx", 
+    "p96.betay", "p96.etay", "p96.etapy",
     };
 static long twiss_mem[N_TWISS_QUANS] = {
   -1, -1, -1, -1, -1,  
@@ -1382,6 +1447,12 @@ static long twiss_mem[N_TWISS_QUANS] = {
   -1, -1, -1, -1, -1,
   -1, -1, -1,
   -1, -1, -1, -1, -1,
+  -1, -1, -1,  
+  -1, -1, -1, 
+  -1, -1, -1,  
+  -1, -1, -1, 
+  -1, -1, -1,  
+  -1, -1, -1, 
     };
 
 static char *radint_name[13] = {
@@ -1433,9 +1504,13 @@ double optimization_function(double *value, long *invalid)
   unsigned long unstable;
   VMATRIX *M;
   TWISS twiss_ave, twiss_min, twiss_max;
+  TWISS twiss_p99, twiss_p98, twiss_p96;
   double XYZ[3], Angle[3], XYZMin[3], XYZMax[3];
   double startingOrbitCoord[6] = {0,0,0,0,0,0};
   long rpnError = 0;
+#if USE_MPI
+  long beamNoToTrack;
+#endif
   
   log_entry("optimization_function");
   
@@ -1446,7 +1521,7 @@ double optimization_function(double *value, long *invalid)
 #endif
 
   if (restart_random_numbers)
-    seedElegantRandomNumbers(0, 1);
+    seedElegantRandomNumbers(0, RESTART_RN_ALL);
   
   *invalid = 0;
   unstable = 0;
@@ -1722,30 +1797,50 @@ double optimization_function(double *value, long *invalid)
     rpn_store(beamline->couplingFactor[0], NULL, twiss_mem[62]);
     rpn_store(beamline->couplingFactor[2], NULL, twiss_mem[63]);
     /* geometric driving terms */
-    rpn_store(beamline->drivingTerms.h21000, NULL, twiss_mem[64]);
-    rpn_store(beamline->drivingTerms.h30000, NULL, twiss_mem[65]);
-    rpn_store(beamline->drivingTerms.h10110, NULL, twiss_mem[66]);
-    rpn_store(beamline->drivingTerms.h10020, NULL, twiss_mem[67]);
-    rpn_store(beamline->drivingTerms.h10200, NULL, twiss_mem[68]);
+    rpn_store(beamline->drivingTerms.h21000[0], NULL, twiss_mem[64]);
+    rpn_store(beamline->drivingTerms.h30000[0], NULL, twiss_mem[65]);
+    rpn_store(beamline->drivingTerms.h10110[0], NULL, twiss_mem[66]);
+    rpn_store(beamline->drivingTerms.h10020[0], NULL, twiss_mem[67]);
+    rpn_store(beamline->drivingTerms.h10200[0], NULL, twiss_mem[68]);
     rpn_store(beamline->drivingTerms.dnux_dJx, NULL, twiss_mem[69]);
     rpn_store(beamline->drivingTerms.dnux_dJy, NULL, twiss_mem[70]);
     rpn_store(beamline->drivingTerms.dnuy_dJy, NULL, twiss_mem[71]);
-    rpn_store(beamline->drivingTerms.h11001, NULL, twiss_mem[72]);
-    rpn_store(beamline->drivingTerms.h00111, NULL, twiss_mem[73]);
-    rpn_store(beamline->drivingTerms.h20001, NULL, twiss_mem[74]);
-    rpn_store(beamline->drivingTerms.h00201, NULL, twiss_mem[75]);
-    rpn_store(beamline->drivingTerms.h10002, NULL, twiss_mem[76]);
-    rpn_store(beamline->drivingTerms.h22000, NULL, twiss_mem[77]); 
-    rpn_store(beamline->drivingTerms.h11110, NULL, twiss_mem[78]);
-    rpn_store(beamline->drivingTerms.h00220, NULL, twiss_mem[79]);
-    rpn_store(beamline->drivingTerms.h31000, NULL, twiss_mem[80]);
-    rpn_store(beamline->drivingTerms.h40000, NULL, twiss_mem[81]);
-    rpn_store(beamline->drivingTerms.h20110, NULL, twiss_mem[82]);
-    rpn_store(beamline->drivingTerms.h11200, NULL, twiss_mem[83]);
-    rpn_store(beamline->drivingTerms.h20020, NULL, twiss_mem[84]); 
-    rpn_store(beamline->drivingTerms.h20200, NULL, twiss_mem[85]);
-    rpn_store(beamline->drivingTerms.h00310, NULL, twiss_mem[86]); 
-    rpn_store(beamline->drivingTerms.h00400, NULL, twiss_mem[87]);
+    rpn_store(beamline->drivingTerms.h11001[0], NULL, twiss_mem[72]);
+    rpn_store(beamline->drivingTerms.h00111[0], NULL, twiss_mem[73]);
+    rpn_store(beamline->drivingTerms.h20001[0], NULL, twiss_mem[74]);
+    rpn_store(beamline->drivingTerms.h00201[0], NULL, twiss_mem[75]);
+    rpn_store(beamline->drivingTerms.h10002[0], NULL, twiss_mem[76]);
+    rpn_store(beamline->drivingTerms.h22000[0], NULL, twiss_mem[77]); 
+    rpn_store(beamline->drivingTerms.h11110[0], NULL, twiss_mem[78]);
+    rpn_store(beamline->drivingTerms.h00220[0], NULL, twiss_mem[79]);
+    rpn_store(beamline->drivingTerms.h31000[0], NULL, twiss_mem[80]);
+    rpn_store(beamline->drivingTerms.h40000[0], NULL, twiss_mem[81]);
+    rpn_store(beamline->drivingTerms.h20110[0], NULL, twiss_mem[82]);
+    rpn_store(beamline->drivingTerms.h11200[0], NULL, twiss_mem[83]);
+    rpn_store(beamline->drivingTerms.h20020[0], NULL, twiss_mem[84]); 
+    rpn_store(beamline->drivingTerms.h20200[0], NULL, twiss_mem[85]);
+    rpn_store(beamline->drivingTerms.h00310[0], NULL, twiss_mem[86]); 
+    rpn_store(beamline->drivingTerms.h00400[0], NULL, twiss_mem[87]);
+
+    compute_twiss_percentiles(beamline, &twiss_p99, &twiss_p98, &twiss_p96);
+    rpn_store(twiss_p99.betax, NULL, twiss_mem[88]);
+    rpn_store(twiss_p99.etax, NULL,  twiss_mem[89]);
+    rpn_store(twiss_p99.etapx, NULL, twiss_mem[90]);
+    rpn_store(twiss_p99.betay, NULL, twiss_mem[91]);
+    rpn_store(twiss_p99.etay, NULL,  twiss_mem[92]);
+    rpn_store(twiss_p99.etapy, NULL, twiss_mem[93]);
+    rpn_store(twiss_p98.betax, NULL, twiss_mem[94]);
+    rpn_store(twiss_p98.etax, NULL,  twiss_mem[95]);
+    rpn_store(twiss_p98.etapx, NULL, twiss_mem[96]);
+    rpn_store(twiss_p98.betay, NULL, twiss_mem[97]);
+    rpn_store(twiss_p98.etay, NULL,  twiss_mem[98]);
+    rpn_store(twiss_p98.etapy, NULL, twiss_mem[99]);
+    rpn_store(twiss_p96.betax, NULL, twiss_mem[100]);
+    rpn_store(twiss_p96.etax, NULL,  twiss_mem[101]);
+    rpn_store(twiss_p96.etapx, NULL, twiss_mem[102]);
+    rpn_store(twiss_p96.betay, NULL, twiss_mem[103]);
+    rpn_store(twiss_p96.etay, NULL,  twiss_mem[104]);
+    rpn_store(twiss_p96.etapy, NULL, twiss_mem[105]);
 
 #if DEBUG
     fprintf(stdout, "Twiss parameters done.\n");
@@ -1822,6 +1917,8 @@ double optimization_function(double *value, long *invalid)
 	MPI_Abort(MPI_COMM_WORLD, 2);    
       }
 #endif
+    if (center_on_orbit) 
+      center_beam_on_coords(beam->particle, beam->n_to_track, startingOrbitCoord, center_momentum_also);
     track_beam(run, control, error, variables, beamline, beam, output, optim_func_flags, 1,
                &charge);
 
@@ -1846,11 +1943,23 @@ double optimization_function(double *value, long *invalid)
 #endif
       if (!output->sums_vs_z)
         bombElegant("sums_vs_z element of output structure is NULL--programming error (optimization_function)", NULL);
+#if USE_MPI
+      if (notSinglePart)
+	beamNoToTrack = beam->n_to_track_total;
+      else
+	beamNoToTrack = beam->n_to_track;
+      if ((i=compute_final_properties(final_property_value, output->sums_vs_z+output->n_z_points, 
+				      beamNoToTrack, beam->p0, M, beam->particle, 
+				      control->i_step, control->indexLimitProduct*control->n_steps,
+				      charge))
+	  != final_property_values) {
+#else
       if ((i=compute_final_properties(final_property_value, output->sums_vs_z+output->n_z_points, 
                                       beam->n_to_track, beam->p0, M, beam->particle, 
                                       control->i_step, control->indexLimitProduct*control->n_steps,
                                       charge))
           != final_property_values) {
+#endif
         fprintf(stdout, "error: compute_final_properties computed %ld quantities when %ld were expected (optimization_function)\n",
                 i, final_property_values);
         fflush(stdout);
@@ -1962,7 +2071,7 @@ double optimization_function(double *value, long *invalid)
 	  if (isnan(result) || isinf(result)) {
 	    *invalid = 1;
 	  } else {
-#if !USE_MPI /* The information here is from a processor locally, we print the result across all the processors after an iteration */
+#if !USE_MPI  /* The information here is from a processor locally, we print the result across all the processors after an iteration */
 	    if (optimization_data->verbose && optimization_data->fp_log) {
 	      fprintf(optimization_data->fp_log, "equation evaluates to %23.15e\n", result);
 	      fflush(optimization_data->fp_log);
@@ -2009,11 +2118,14 @@ double optimization_function(double *value, long *invalid)
 	optimization_data->mode==OPTIM_MODE_MAXIMUM?-1*bestResult:bestResult;
 
 #if USE_MPI
-      if (notSinglePart) /* Disable the beam output when all the processors track independently */
+      if (notSinglePart || enableOutput) /* Disable the beam output (except for simplex) when all the processors track independently */
 #endif
-	if (!*invalid && (force_output || (control->i_step-2)%output_sparsing_factor==0))
+	if (!*invalid && (force_output || (control->i_step-2)%output_sparsing_factor==0)) {
+          if (center_on_orbit)
+            center_beam_on_coords(beam->particle, beam->n_to_track, startingOrbitCoord, center_momentum_also);
 	  do_track_beam_output(run, control, error, variables, beamline, beam, output, optim_func_flags,
 			   charge);
+        }
   }
   
   
@@ -2030,7 +2142,7 @@ double optimization_function(double *value, long *invalid)
 #endif
  
     storeOptimRecord(value, variables->n_variables, *invalid, result);
-    
+
     log_exit("optimization_function");
     return(result);
 }
@@ -2217,33 +2329,77 @@ void SDDS_PopulationSetup(char *population_log, SDDS_TABLE *popLogPtr, OPTIM_VAR
       if (!SDDS_InitializeOutput(popLogPtr, SDDS_BINARY, 1, NULL, NULL, population_log) ||
 	  !SDDS_DefineSimpleParameter(popLogPtr, "Iteration", NULL, SDDS_LONG) ||
 	  !SDDS_DefineSimpleParameter(popLogPtr, "OptimizationValue", NULL, SDDS_DOUBLE) ||
+	  !SDDS_DefineSimpleParameter(popLogPtr, "WorstOptimizationValue", NULL, SDDS_DOUBLE) ||
+	  !SDDS_DefineSimpleParameter(popLogPtr, "MedianOptimizationValue", NULL, SDDS_DOUBLE) ||
+	  !SDDS_DefineSimpleParameter(popLogPtr, "AverageOptimizationValue", NULL, SDDS_DOUBLE) ||
+	  !SDDS_DefineSimpleParameter(popLogPtr, "OptimizationValueSpread", NULL, SDDS_DOUBLE) ||
 	  !SDDS_DefineSimpleParameters(popLogPtr, optim->n_variables, optim->varied_quan_name, 
+				       optim->varied_quan_unit, SDDS_DOUBLE) ||
+	  !SDDS_DefineSimpleColumn(popLogPtr, "OptimizationValue", NULL, SDDS_DOUBLE) ||
+	  !SDDS_DefineSimpleColumns(popLogPtr,  optim->n_variables, optim->varied_quan_name, 
 				    optim->varied_quan_unit, SDDS_DOUBLE) ||
-	  !SDDS_DefineSimpleParameters(popLogPtr, co_optim->n_covariables,co_optim->varied_quan_name, 
-				    co_optim->varied_quan_unit, SDDS_DOUBLE) ||
 	  !SDDS_WriteLayout(popLogPtr)) {
-	    fprintf(stdout, "Problem setting up population output file %s\n", population_log);
-	    fflush(stdout);
-	    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
-	    exitElegant(1);
+	fprintf(stdout, "Problem setting up population output file %s\n", population_log);
+	fflush(stdout);
+	SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+	exitElegant(1);
       }
     }
   }
 }
 
 /* Function to print populations */
-void SDDS_PrintPopulations(SDDS_TABLE *popLogPtr, long iteration, double best_value, double *best_individual, long dimensions, double *covariable, long n_covariables) {
-  int i;
-  long offset = 2;
-  
-  if (isMaster && log_file) {
-    if (!SDDS_StartPage(popLogPtr, 1))
-      SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors|SDDS_VERBOSE_PrintErrors);
+void SDDS_PrintPopulations(SDDS_TABLE *popLogPtr, double result, double *variable, long dimensions) {
+  static double **individuals=NULL, *results=NULL;
+  /* For both the swarm and hybrid simplex methods, only one best individual from each process will be printed */
+  long pop_size = n_processors;
+  long row, j;
+  printf (" SDDS_PrintPopulations is called\n");
+  if (!individuals)
+    individuals = (double**)czarray_2d(sizeof(double), pop_size, dimensions);
+  if (!results)
+    results = (double*)tmalloc(sizeof(double)*pop_size);
 
+  MPI_Gather(variable, dimensions, MPI_DOUBLE, &individuals[0][0], dimensions, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+  MPI_Gather(&result, 1, MPI_DOUBLE, results, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+  if (isMaster && log_file) {
+    if (!SDDS_StartPage(popLogPtr, pop_size))
+      SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors|SDDS_VERBOSE_PrintErrors);
+    
+    for(row=0; row<pop_size; row++) {
+      if (!SDDS_SetRowValues(popLogPtr, SDDS_SET_BY_INDEX|SDDS_PASS_BY_VALUE, row, 0, results[row], -1))
+	SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors|SDDS_VERBOSE_PrintErrors); fflush(stderr);
+      for(j=0; j<dimensions; j++) {
+	if (!SDDS_SetRowValues(popLogPtr, SDDS_SET_BY_INDEX|SDDS_PASS_BY_VALUE, row,  j+1, individuals[row][j], -1))
+	  SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors|SDDS_VERBOSE_PrintErrors); fflush(stderr);	
+      }
+    }
+  }
+}
+
+/* Function to print the statistics of the populations after each optimization iteration */ 
+void SDDS_PrintStatistics(SDDS_TABLE *popLogPtr, long iteration, double best_value, double worst_value, double median, double average, double spread, double *best_individual, long dimensions, double *covariable, long n_covariables, long print_all) {
+  int i;
+  long offset = 6;
+
+  if (isMaster && log_file) {
+    if (!print_all)
+      if (!SDDS_StartPage(popLogPtr, 1))
+	SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors|SDDS_VERBOSE_PrintErrors);
+    
     if (!SDDS_SetParameters(popLogPtr, SDDS_SET_BY_NAME|SDDS_PASS_BY_VALUE,
 			    "Iteration", iteration , NULL) ||
 	!SDDS_SetParameters(popLogPtr, SDDS_SET_BY_NAME|SDDS_PASS_BY_VALUE,
-			    "OptimizationValue", best_value, NULL))
+			    "OptimizationValue", best_value, NULL) ||
+	!SDDS_SetParameters(popLogPtr, SDDS_SET_BY_NAME|SDDS_PASS_BY_VALUE,
+			    "WorstOptimizationValue", worst_value, NULL) ||
+	!SDDS_SetParameters(popLogPtr, SDDS_SET_BY_NAME|SDDS_PASS_BY_VALUE,
+			    "MedianOptimizationValue", median, NULL) ||
+	!SDDS_SetParameters(popLogPtr, SDDS_SET_BY_NAME|SDDS_PASS_BY_VALUE,
+			    "AverageOptimizationValue", average, NULL) ||
+	!SDDS_SetParameters(popLogPtr, SDDS_SET_BY_NAME|SDDS_PASS_BY_VALUE,
+			    "OptimizationValueSpread", spread, NULL))
       SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors|SDDS_VERBOSE_PrintErrors);
 
     for(i=0; i<dimensions; i++) {
@@ -2251,12 +2407,14 @@ void SDDS_PrintPopulations(SDDS_TABLE *popLogPtr, long iteration, double best_va
 	SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors|SDDS_VERBOSE_PrintErrors);
     }
 
+    /* The covariable information won't be printed to be consistent with the genetic optimization
     if (n_covariables) {
       for (i=0; i<n_covariables; i++) {
 	if (!SDDS_SetParameters(popLogPtr, SDDS_SET_BY_INDEX|SDDS_PASS_BY_VALUE, offset+dimensions+i, covariable[i], -1))
 	  SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors|SDDS_VERBOSE_PrintErrors);
       }
-    }
+    } 
+    */
 
     if (!SDDS_WritePage(popLogPtr))
       SDDS_PrintErrors(stderr, SDDS_EXIT_PrintErrors|SDDS_VERBOSE_PrintErrors);

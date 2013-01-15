@@ -3,10 +3,7 @@
 exec oagwish "$0" "$@"
 
 #
-# $Log: beamLifetimeCalc,v $
-# Revision 1.2  2007/08/07 19:15:17  shang
-# fixed bugs that referenceValue(dampingTimeH), referenceValue(damppingTimeV) are not being computed before recompute the lifetime and these caused the error when a recomputing request was issused.
-#
+# $Log: not supported by cvs2svn $
 # Revision 1.1  2007/03/30 16:50:28  soliday
 # Moved from directory above.
 #

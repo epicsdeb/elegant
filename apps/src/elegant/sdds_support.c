@@ -98,7 +98,7 @@ void SDDS_ElegantOutputSetup(SDDS_TABLE *SDDS_table, char *filename, long mode, 
 #if SDDS_MPI_IO 
   /* In the case of parallel IO, the WiteLayout will be called at the time it dumps data or setups the output,
      as the communicator information is required */
-    if (!SDDS_table->parallel_io)
+    if (!SDDS_table->parallel_io && isMaster)
 #endif
     if (flags&SDDS_EOS_COMPLETE) {
         if (!SDDS_WriteLayout(SDDS_table)) {
@@ -151,9 +151,12 @@ void SDDS_PhaseSpaceSetup(SDDS_TABLE *SDDS_table, char *filename, long mode, lon
 {
     log_entry("SDDS_PhaseSpaceSetup");
 #if SDDS_MPI_IO
-    SDDS_table->parallel_io = 1;
+    if (notSinglePart)	
+      SDDS_table->parallel_io = 1;
+    else
+      SDDS_table->parallel_io = 0;
     /* set up parallel IO information */      
-    SDDS_MPI_Setup(SDDS_table, 1, n_processors, myid, MPI_COMM_WORLD, 0);
+    SDDS_MPI_Setup(SDDS_table, SDDS_table->parallel_io, n_processors, myid, MPI_COMM_WORLD, 0);  
 #endif
     SDDS_ElegantOutputSetup(SDDS_table, filename, mode, lines_per_row, contents, command_file, lattice_file,
                             phase_space_parameter, PHASE_SPACE_PARAMETERS, phase_space_column, PHASE_SPACE_COLUMNS,
@@ -223,7 +226,7 @@ void SDDS_CentroidOutputSetup(SDDS_TABLE *SDDS_table, char *filename, long mode,
     log_exit("SDDS_CentroidOutputSetup");
     }
 
-#define SIGMA_MATRIX_COLUMNS 57
+#define SIGMA_MATRIX_COLUMNS 68
 static SDDS_DEFINITION sigma_matrix_column[SIGMA_MATRIX_COLUMNS] = {
     {"s1",    "&column name=s1, symbol=\"$gs$r$b1$n\", units=m, type=double, description=\"sqrt(<x*x>)\" &end"},
     {"s12",    "&column name=s12, symbol=\"$gs$r$b12$n\", units=m, type=double, description=\"<x*xp'>\" &end"},
@@ -231,45 +234,56 @@ static SDDS_DEFINITION sigma_matrix_column[SIGMA_MATRIX_COLUMNS] = {
     {"s14",    "&column name=s14, symbol=\"$gs$r$b14$n\", units=m, type=double, description=\"<x*y'>\" &end"},
     {"s15",    "&column name=s15, symbol=\"$gs$r$b15$n\", units=\"m$a2$n\", type=double, description=\"<x*s>\" &end"},
     {"s16",    "&column name=s16, symbol=\"$gs$r$b16$n\", units=m, type=double, description=\"<x*delta>\" &end"},
+    {"s17",    "&column name=s17, symbol=\"$gs$r$b17$n\", units=m*s, type=double, description=\"<x*t>\" &end"},
     {"s2",    "&column name=s2, symbol=\"$gs$r$b2$n\", type=double, description=\"sqrt(<x'*x'>)\" &end"},
     {"s23",    "&column name=s23, symbol=\"$gs$r$b23$n\", units=m, type=double, description=\"<x'*y>\" &end"},
     {"s24",    "&column name=s24, symbol=\"$gs$r$b24$n\", type=double, description=\"<x'*y'>\" &end"},
     {"s25",    "&column name=s25, symbol=\"$gs$r$b25$n\", units=m, type=double, description=\"<x'*s>\" &end"},
     {"s26",    "&column name=s26, symbol=\"$gs$r$b26$n\", type=double, description=\"<x'*delta>\" &end"},
+    {"s27",    "&column name=s27, symbol=\"$gs$r$b27$n\", units=s, type=double, description=\"<x'*t>\" &end"},
     {"s3",    "&column name=s3, symbol=\"$gs$r$b3$n\", units=m, type=double, description=\"sqrt(<y*y>)\" &end"},
     {"s34",    "&column name=s34, symbol=\"$gs$r$b34$n\", units=m, type=double, description=\"<y*y'>\" &end"},
     {"s35",    "&column name=s35, symbol=\"$gs$r$b35$n\", units=\"m$a2$n\", type=double, description=\"<y*s>\" &end"},
     {"s36",    "&column name=s36, symbol=\"$gs$r$b36$n\", units=m, type=double, description=\"<y*delta>\" &end"},
+    {"s37",    "&column name=s37, symbol=\"$gs$r$b37$n\", units=m*s, type=double, description=\"<y*t>\" &end"},
     {"s4",    "&column name=s4, symbol=\"$gs$r$b4$n\", type=double, description=\"sqrt(<y'*y')>\" &end"},
     {"s45",    "&column name=s45, symbol=\"$gs$r$b45$n\", units=m, type=double, description=\"<y'*s>\" &end"},
-    {"s46",    "&column name=s46, symbol=\"$gs$r$b46$n\", type=double, description=\"<s'*delta>\" &end"},
+    {"s46",    "&column name=s46, symbol=\"$gs$r$b46$n\", type=double, description=\"<y'*delta>\" &end"},
+    {"s47",    "&column name=s47, symbol=\"$gs$r$b47$n\", units=s, type=double, description=\"<y'*t>\" &end"},
     {"s5",    "&column name=s5, symbol=\"$gs$r$b5$n\", units=m, type=double, description=\"sqrt(<s*s>)\" &end"},
     {"s56",    "&column name=s56, symbol=\"$gs$r$b56$n\", units=m, type=double, description=\"<s*delta>\" &end"},
+    {"s57",    "&column name=s57, symbol=\"$gs$r$b57$n\", units=m*s, type=double, description=\"<s*t>\" &end"},
     {"s6",    "&column name=s6, symbol=\"$gs$r$b6$n\", type=double, description=\"sqrt(<delta*delta>)\" &end"},
+    {"s67",    "&column name=s67, symbol=\"$gs$r$b67$n\", units=s, type=double, description=\"<delta*t>\" &end"},
+    {"s7",    "&column name=s7, symbol=\"$gs$r$b7$n\", type=double, description=\"sqrt(<t*t>)\" &end"},
     {"ma1",    "&column name=ma1, symbol=\"max$sb$ex$sb$e\", units=m, type=double, description=\"maximum absolute value of x\" &end"},
     {"ma2",    "&column name=ma2, symbol=\"max$sb$ex'$sb$e\", type=double, description=\"maximum absolute value of x'\" &end"},
     {"ma3",    "&column name=ma3, symbol=\"max$sb$ey$sb$e\", units=m, type=double, description=\"maximum absolute value of y\" &end"},
     {"ma4",    "&column name=ma4, symbol=\"max$sb$ey'$sb$e\", type=double, description=\"maximum absolute value of y'\" &end"},
-    {"ma5",    "&column name=ma5, symbol=\"max$sb$e$gD$rs$sb$e\", type=double, units=m, description=\"maximum absolute value of s\" &end"},
+    {"ma5",    "&column name=ma5, symbol=\"max$sb$e$gD$rs$sb$e\", type=double, units=m, description=\"maximum absolute deviation of s\" &end"},
     {"ma6",    "&column name=ma6, symbol=\"max$sb$e$gd$r$sb$e\", type=double, description=\"maximum absolute value of delta\" &end"},
+    {"ma7",    "&column name=ma7, symbol=\"max$sb$e$gD$rt$sb$e\", units=s, type=double, description=\"maximum absolute deviation of t\" &end"},
     {"minimum1",   "&column name=minimum1, symbol=\"x$bmin$n\", type=double, units=m &end"},
     {"minimum2",   "&column name=minimum2, symbol=\"x'$bmin$n\", type=double, units=m &end"},
     {"minimum3",   "&column name=minimum3, symbol=\"y$bmin$n\", type=double, units=m &end"},
     {"minimum4",   "&column name=minimum4, symbol=\"y'$bmin$n\", type=double, units=m &end"},
     {"minimum5",   "&column name=minimum5, symbol=\"$gD$rs$bmin$n\", type=double, units=m &end"},
     {"minimum6",   "&column name=minimum6, symbol=\"$gd$r$bmin$n\", type=double, units=m &end"},
+    {"minimum7",   "&column name=minimum7, symbol=\"t$bmin$n\", type=double, units=s &end"},
     {"maximum1",   "&column name=maximum1, symbol=\"x$bmax$n\", type=double, units=m &end"},
     {"maximum2",   "&column name=maximum2, symbol=\"x'$bmax$n\", type=double, units=m &end"},
     {"maximum3",   "&column name=maximum3, symbol=\"y$bmax$n\", type=double, units=m &end"},
     {"maximum4",   "&column name=maximum4, symbol=\"y'$bmax$n\", type=double, units=m &end"},
     {"maximum5",   "&column name=maximum5, symbol=\"$gD$rs$bmax$n\", type=double, units=m &end"},
     {"maximum6",   "&column name=maximum6, symbol=\"$gd$r$bmax$n\", type=double, units=m &end"},
+    {"maximum7",   "&column name=maximum7, symbol=\"t$bmax$n\", type=double, units=s &end"},
     {"Sx",    "&column name=Sx, symbol=\"$gs$r$bx$n\", units=m, type=double, description=\"sqrt(<(x-<x>)^2>)\" &end"},
     {"Sxp",    "&column name=Sxp, symbol=\"$gs$r$bx'$n\", type=double, description=\"sqrt(<(x'-<x'>)^2>)\" &end"},
     {"Sy",    "&column name=Sy, symbol=\"$gs$r$by$n\", units=m, type=double, description=\"sqrt(<(y-<y>)^2>)\" &end"},
     {"Syp",    "&column name=Syp, symbol=\"$gs$r$by'$n\", type=double, description=\"sqrt(<(y'-<y'>)^2>)\" &end"},
     {"Ss",    "&column name=Ss, units=m, symbol=\"$gs$r$bs$n\", type=double, description=\"sqrt(<(s-<s>)^2>)\" &end"},
     {"Sdelta",    "&column name=Sdelta, symbol=\"$gs$bd$n$r\", type=double, description=\"sqrt(<(delta-<delta>)^2>)\" &end"},
+    {"St",    "&column name=St, units=s, symbol=\"$gs$r$bt$n\", type=double, description=\"sqrt(<(t-<t>)^2>)\" &end"},
     {"ex", "&column name=ex, symbol=\"$ge$r$bx$n\", units=m, type=double, description=\"geometric horizontal emittance\" &end"},
     {"enx", "&column name=enx, symbol=\"$ge$r$bx,n$n\", type=double, units=m, description=\"normalized horizontal emittance\"  &end"},
     {"ecx", "&column name=ecx, symbol=\"$ge$r$bx,c$n\", units=m, type=double, description=\"geometric horizontal emittance less dispersive contributions\" &end"},
@@ -305,12 +319,13 @@ void SDDS_SigmaOutputSetup(SDDS_TABLE *SDDS_table, char *filename, long mode, lo
     }
 
 
-#define WATCH_PARAMETER_MODE_COLUMNS 26
-#define WATCH_CENTROID_MODE_COLUMNS 16
+#define WATCH_PARAMETER_MODE_COLUMNS 27
+#define WATCH_CENTROID_MODE_COLUMNS 17
 static SDDS_DEFINITION watch_parameter_mode_column[WATCH_PARAMETER_MODE_COLUMNS] = {
     {"Step", "&column name=Step, type=long &end"},
     {"Pass", "&column name=Pass, type=long &end"},
     {"ElapsedTime", "&column name=ElapsedTime, type=long, units=s &end"},
+    {"ElapsedCoreTime", "&column name=ElapsedCoreTime, type=long, units=s &end"},
     {"Cx", "&column name=Cx, symbol=\"<x>\", units=m, type=double, description=\"x centroid\" &end"},
     {"Cxp", "&column name=Cxp, symbol=\"<x'>\", type=double, description=\"x' centroid\" &end"},
     {"Cy", "&column name=Cy, symbol=\"<y>\", units=m, type=double, description=\"y centroid\" &end"},
@@ -431,6 +446,7 @@ void SDDS_WatchPointSetup(WATCH *watch, long mode, long lines_per_row,
         !SDDS_DefineSimpleParameter(SDDS_table, "PassLength", "m", SDDS_DOUBLE) ||
 	!SDDS_DefineSimpleParameter(SDDS_table, "PassCentralTime", "s", SDDS_DOUBLE) ||
 	!SDDS_DefineSimpleParameter(SDDS_table, "ElapsedTime", "s", SDDS_LONG) ||	
+	!SDDS_DefineSimpleParameter(SDDS_table, "ElapsedCoreTime", "s", SDDS_LONG) ||	
 	!SDDS_DefineSimpleParameter(SDDS_table, "s", "m", SDDS_DOUBLE)) {
       fprintf(stdout, "Unable define SDDS parameter for file %s (%s)\n", filename, caller);
       fflush(stdout);
@@ -472,7 +488,22 @@ void SDDS_WatchPointSetup(WATCH *watch, long mode, long lines_per_row,
                             command_file, lattice_file,
                             standard_parameter, STANDARD_PARAMETERS,
                             watch_parameter_mode_column, WATCH_CENTROID_MODE_COLUMNS,
-                            caller, SDDS_EOS_NEWFILE|SDDS_EOS_COMPLETE);
+                            caller, SDDS_EOS_NEWFILE);
+    if (!SDDS_DefineSimpleParameter(SDDS_table, "s", "m", SDDS_DOUBLE) ||
+	SDDS_DefineParameter(SDDS_table, "PreviousElementName", NULL, NULL, NULL, "%s", SDDS_STRING, 
+                             previousElementName?previousElementName:"_BEG_")<0) {
+      fprintf(stdout, "Unable define SDDS parameter for file %s (%s)\n", filename, caller);
+      fflush(stdout);
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+      exitElegant(1);
+    }
+    if (isMaster)
+    if (!SDDS_WriteLayout(SDDS_table)) {
+      fprintf(stdout, "Unable to write SDDS layout for file %s (%s)\n", filename, caller);
+      fflush(stdout);
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+      exitElegant(1);
+    }
     break;
   case WATCH_PARAMETERS:
     if (isMaster)
@@ -480,7 +511,22 @@ void SDDS_WatchPointSetup(WATCH *watch, long mode, long lines_per_row,
                             command_file, lattice_file,
                             standard_parameter, STANDARD_PARAMETERS, 
                             watch_parameter_mode_column, WATCH_PARAMETER_MODE_COLUMNS,
-                            caller, SDDS_EOS_NEWFILE|SDDS_EOS_COMPLETE);
+                            caller, SDDS_EOS_NEWFILE);
+    if (!SDDS_DefineSimpleParameter(SDDS_table, "s", "m", SDDS_DOUBLE) ||
+	SDDS_DefineParameter(SDDS_table, "PreviousElementName", NULL, NULL, NULL, "%s", SDDS_STRING, 
+                             previousElementName?previousElementName:"_BEG_")<0) {
+      fprintf(stdout, "Unable define SDDS parameter for file %s (%s)\n", filename, caller);
+      fflush(stdout);
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+      exitElegant(1);
+    }
+    if (isMaster)
+    if (!SDDS_WriteLayout(SDDS_table)) {
+      fprintf(stdout, "Unable to write SDDS layout for file %s (%s)\n", filename, caller);
+      fflush(stdout);
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+      exitElegant(1);
+    }
     break;
   case WATCH_FFT:
     if (isMaster) {
@@ -698,6 +744,11 @@ void dump_watch_particles(WATCH *watch, long step, long pass, double **particle,
                           "Charge", charge,
                           "PassCentralTime", t0, "s", z,
 		          "ElapsedTime", (long)delapsed_time(),
+#if SDDS_MPI_IO
+		          "ElapsedCoreTime", (long)(delapsed_time()*n_processors),
+#else
+		          "ElapsedCoreTime", (long)delapsed_time(),
+#endif
                           NULL)) {
     SDDS_SetError("Problem setting SDDS parameters (dump_watch_particles)");
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
@@ -733,7 +784,7 @@ double tmp_safe_sqrt;
 
 void dump_watch_parameters(WATCH *watch, long step, long pass, long n_passes, double **particle, 
                            long particles, long original_particles,  double Po, 
-                           double revolutionLength)
+                           double revolutionLength, double z)
 {
     long sample, i, j, watchStartPass=watch->start_pass;
     double tc, tc0, p_sum, gamma_sum, sum, p=0.0;
@@ -966,9 +1017,11 @@ void dump_watch_parameters(WATCH *watch, long step, long pass, long n_passes, do
 #if SDDS_MPI_IO
 			     "Particles", particles_total,
 			     "Transmission", (original_particles?((double)particles_total)/original_particles:(double)0.0),
+			     "ElapsedCoreTime", (long)(delapsed_time()*n_processors),
 #else 
 			     "Particles", particles,
 			     "Transmission", (original_particles?((double)particles)/original_particles:(double)0.0),
+			     "ElapsedCoreTime", (long)delapsed_time(),
 #endif
 	                     "ElapsedTime", (long)delapsed_time(),
 			     "Pass", pass, 
@@ -977,7 +1030,7 @@ void dump_watch_parameters(WATCH *watch, long step, long pass, long n_passes, do
 	SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
       }
       if (!SDDS_SetParameters(&watch->SDDS_table, SDDS_SET_BY_NAME|SDDS_PASS_BY_VALUE, 
-			      "Step", step, NULL)) {
+			      "Step", step, "s", z, NULL)) {
 	SDDS_SetError("Problem setting parameter values for SDDS table (dump_watch_parameters)");
 	SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
       }
@@ -1321,6 +1374,9 @@ void dump_phase_space(SDDS_TABLE *SDDS_table, double **particle, long particles,
 #if SDDS_MPI_IO
     long total_particles;
 
+    if (!SDDS_table->parallel_io && isSlave)
+      return;
+
     /* Open file here for parallel IO */
     if (!SDDS_table->layout.layout_written) { /* Check if the file has been opened already */
       if (!SDDS_MPI_File_Open(SDDS_table->MPI_dataset, SDDS_table->layout.filename, SDDS_MPI_WRITE_ONLY)) 
@@ -1328,6 +1384,7 @@ void dump_phase_space(SDDS_TABLE *SDDS_table, double **particle, long particles,
       if (!SDDS_MPI_WriteLayout(SDDS_table))  
 	SDDS_MPI_BOMB("SDDS_MPI_WriteLayout failed.", &SDDS_table->MPI_dataset->MPI_file);
     }
+
 #endif
 
     log_entry("dump_phase_space");
@@ -1377,7 +1434,7 @@ void dump_phase_space(SDDS_TABLE *SDDS_table, double **particle, long particles,
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
         }
 #if SDDS_MPI_IO
-    if (!SDDS_MPI_WriteTable(SDDS_table) || !SDDS_ShortenTable(SDDS_table, 1))
+    if ((notSinglePart && !SDDS_MPI_WriteTable(SDDS_table)) || (!notSinglePart&&!SDDS_WriteTable(SDDS_table)) || !SDDS_ShortenTable(SDDS_table, 1))
 #else
     if (!SDDS_WriteTable(SDDS_table) || !SDDS_ShortenTable(SDDS_table, 1))
 #endif
@@ -1410,11 +1467,7 @@ void dump_lost_particles(SDDS_TABLE *SDDS_table, double **particle, long *lostOn
 			 long particles, long step)
 {
     long i;
-#ifdef SORT   /* sort for comparing the serial and parallel versions */
-    long **tmp, j;
-#endif
 #if SDDS_MPI_IO
-
     /* Open file here for parallel IO */
     if (!SDDS_table->layout.layout_written) { /* Check if the file has been opened already */
       if (!SDDS_MPI_File_Open(SDDS_table->MPI_dataset, SDDS_table->layout.filename, SDDS_MPI_WRITE_ONLY)) 
@@ -1430,32 +1483,14 @@ void dump_lost_particles(SDDS_TABLE *SDDS_table, double **particle, long *lostOn
         bombElegant("NULL coordinate pointer passed to dump_lost_particles", NULL);
     }
 
-#ifdef SORT   /* sort for comparing the serial and parallel versions */
-    if (SORT && particles) {
-        tmp = tmalloc(sizeof(*tmp) * particles);
-        for (j=0; j<particles; j++) {
-          tmp[j] = tmalloc(sizeof(*(tmp[j])) * 2);
-	  tmp[j][0] = lostOnPass[j]; 
-          tmp[j][1] = particle[j][6];
-	}    
+#ifdef SORT   /* Sort for comparing the serial and parallel versions. Disabled for parallel I/O version */
+    if (SORT && particles) { 
         /* This call looks strange, but works because the particle data is contiguous.  The sort
          * actually moves the data around without changing the pointers.
          */
-	qsort(particle[0], particles, COORDINATES_PER_PARTICLE*sizeof(double), comp_IDs); 
-        /* This call is more standard.  We sort the pointers and leave the data in place. */
-	qsort(tmp, particles, sizeof(long*), comp_IDs1);
-	for (j=0; j<particles; j++) {
-	  lostOnPass[j] = tmp[j][0];
-	}
+	qsort(particle[0], particles, (COORDINATES_PER_PARTICLE+1)*sizeof(double), comp_IDs); 
       }
-    if (SORT && particles) {
-      for (j=0; j<particles; j++) {
-	free(tmp[j]);
-      }
-      free(tmp);
-    }
 #endif
-
     for (i=0; i<particles; i++)
         if (!particle[i]) {
             fprintf(stdout, "error: coordinate slot %ld is NULL (dump_lost_particles)\n", i);
@@ -1471,7 +1506,7 @@ void dump_lost_particles(SDDS_TABLE *SDDS_table, double **particle, long *lostOn
         if (!SDDS_SetRowValues(SDDS_table, SDDS_SET_BY_INDEX|SDDS_PASS_BY_VALUE, i,
                                0, particle[i][0], 1, particle[i][1], 2, particle[i][2], 3, particle[i][3],
                                4, particle[i][4], 5, particle[i][5],
-                               6, (long)particle[i][6], 7, lostOnPass[i], -1)) {
+                               6, (long)particle[i][6], 7, (long) particle[i][7], -1)) {
             SDDS_SetError("Problem setting SDDS row values (dump_lost_particles)");
             SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
             }
@@ -1610,7 +1645,7 @@ void dump_sigma(SDDS_TABLE *SDDS_table, BEAM_SUMS *sums, LINE_LIST *beamline, lo
   double emit, emitNorm, emitc, emitcNorm, beta, alpha;
   char *name, *type_name;
   long s_index=0, ma1_index=0, min1_index=0, max1_index=0, Sx_index=0, occurence, ex_index=0, betax_index=0;
-  long sNIndex[6]={0,0,0,0,0,0};
+  long sNIndex[7]={0,0,0,0,0,0,0};
 
 #if USE_MPI  
     if (myid<0)
@@ -1632,6 +1667,7 @@ void dump_sigma(SDDS_TABLE *SDDS_table, BEAM_SUMS *sums, LINE_LIST *beamline, lo
       (sNIndex[3]=SDDS_GetColumnIndex(SDDS_table, "s4"))<0 ||
       (sNIndex[4]=SDDS_GetColumnIndex(SDDS_table, "s5"))<0 ||
       (sNIndex[5]=SDDS_GetColumnIndex(SDDS_table, "s6"))<0 ||
+      (sNIndex[6]=SDDS_GetColumnIndex(SDDS_table, "s7"))<0 ||
       (ma1_index=SDDS_GetColumnIndex(SDDS_table, "ma1"))<0 ||
       (min1_index=SDDS_GetColumnIndex(SDDS_table, "minimum1"))<0 ||
       (max1_index=SDDS_GetColumnIndex(SDDS_table, "maximum1"))<0 ||
@@ -1668,36 +1704,36 @@ void dump_sigma(SDDS_TABLE *SDDS_table, BEAM_SUMS *sums, LINE_LIST *beamline, lo
       exitElegant(1);
     }
     if (beam->n_part) {
-      for (i=0; i<6; i++) {
+      for (i=0; i<7; i++) {
         if (!SDDS_SetRowValues(SDDS_table, SDDS_SET_BY_INDEX|SDDS_PASS_BY_VALUE, ie, 
                                Sx_index+i, sqrt(beam->sigma[i][i]),
                                sNIndex[i], sqrt(beam->sigma[i][i]),
                                -1)) {
-          SDDS_SetError("Problem setting SDDS row values (dump_sigma)");
+          SDDS_SetError("Problem setting SDDS row values (dump_sigma 1)");
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
         }
         offset = 1;
-        for (j=i+1; j<6; j++, offset++) {
+        for (j=i+1; j<7; j++, offset++) {
           if (!SDDS_SetRowValues(SDDS_table, SDDS_SET_BY_INDEX|SDDS_PASS_BY_VALUE, ie, 
                                  sNIndex[i]+offset, beam->sigma[i][j], -1)) {
-            SDDS_SetError("Problem setting SDDS row values (dump_sigma)");
+            SDDS_SetError("Problem setting SDDS row values (dump_sigma 2)");
             SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
           }
         }
       }
       
       /* Set values for maximum amplitudes of coordinates */
-      for (i=0; i<6; i++) {
+      for (i=0; i<7; i++) {
         if (!SDDS_SetRowValues(SDDS_table, SDDS_SET_BY_INDEX|SDDS_PASS_BY_VALUE, ie, ma1_index+i, beam->maxabs[i], -1)) {
-          SDDS_SetError("Problem setting SDDS row values (dump_sigma)");
+          SDDS_SetError("Problem setting SDDS row values (dump_sigma 3)");
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
         }
         if (!SDDS_SetRowValues(SDDS_table, SDDS_SET_BY_INDEX|SDDS_PASS_BY_VALUE, ie, min1_index+i, beam->min[i], -1)) {
-          SDDS_SetError("Problem setting SDDS row values (dump_sigma)");
+          SDDS_SetError("Problem setting SDDS row values (dump_sigma 4)");
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
         }
         if (!SDDS_SetRowValues(SDDS_table, SDDS_SET_BY_INDEX|SDDS_PASS_BY_VALUE, ie, max1_index+i, beam->max[i], -1)) {
-          SDDS_SetError("Problem setting SDDS row values (dump_sigma)");
+          SDDS_SetError("Problem setting SDDS row values (dump_sigma 5)");
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
         }
       }
@@ -1714,30 +1750,30 @@ void dump_sigma(SDDS_TABLE *SDDS_table, BEAM_SUMS *sums, LINE_LIST *beamline, lo
                                betax_index+plane+0, beta,
                                betax_index+plane+1, alpha,
                                -1)) {
-          SDDS_SetError("Problem setting SDDS row values (dump_sigma)");
+          SDDS_SetError("Problem setting SDDS row values (dump_sigma 6)");
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
         }
       }
     }
     else {
-      for (index=sNIndex[0]; index<sNIndex[0]+21; index++) 
+      for (index=sNIndex[0]; index<sNIndex[0]+28; index++) 
         if (!SDDS_SetRowValues(SDDS_table, SDDS_SET_BY_INDEX|SDDS_PASS_BY_VALUE, ie, index, (double)0.0, -1)) {
-          SDDS_SetError("Problem setting SDDS row values (dump_sigma)");
+          SDDS_SetError("Problem setting SDDS row values (dump_sigma 7)");
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
         }
       for (index=ma1_index; index<ma1_index+4; index++) 
         if (!SDDS_SetRowValues(SDDS_table, SDDS_SET_BY_INDEX|SDDS_PASS_BY_VALUE, ie, index, (double)0.0, -1)) {
-          SDDS_SetError("Problem setting SDDS row values (dump_sigma)");
+          SDDS_SetError("Problem setting SDDS row values (dump_sigma 8)");
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
         }
-      for (index=Sx_index; index<Sx_index+6; index++) 
+      for (index=Sx_index; index<Sx_index+7; index++) 
         if (!SDDS_SetRowValues(SDDS_table, SDDS_SET_BY_INDEX|SDDS_PASS_BY_VALUE, ie, index, (double)0.0, -1)) {
-          SDDS_SetError("Problem setting SDDS row values (dump_sigma)");
+          SDDS_SetError("Problem setting SDDS row values (dump_sigma 9)");
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
         }
       for (index=ex_index; index<ex_index+4; index++)
         if (!SDDS_SetRowValues(SDDS_table, SDDS_SET_BY_INDEX|SDDS_PASS_BY_VALUE, ie, index, (double)0.0, -1)) {
-          SDDS_SetError("Problem setting SDDS row values (dump_sigma)");
+          SDDS_SetError("Problem setting SDDS row values (dump_sigma 10)");
           SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
         }
     }
@@ -1745,7 +1781,7 @@ void dump_sigma(SDDS_TABLE *SDDS_table, BEAM_SUMS *sums, LINE_LIST *beamline, lo
     if (!SDDS_SetRowValues(SDDS_table,  SDDS_SET_BY_INDEX|SDDS_PASS_BY_VALUE, ie, 
                            s_index, beam->z, s_index+1, name, s_index+2, occurence,
                            s_index+3, type_name, -1)) {
-      SDDS_SetError("Problem setting row values for SDDS table (dump_sigma)");
+      SDDS_SetError("Problem setting row values for SDDS table (dump_sigma 11)");
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
     }
     
@@ -1761,13 +1797,13 @@ void dump_sigma(SDDS_TABLE *SDDS_table, BEAM_SUMS *sums, LINE_LIST *beamline, lo
   }
 
   if (!SDDS_WriteTable(SDDS_table)) {
-    SDDS_SetError("Unable to write sigma data (dump_sigma)");
+    SDDS_SetError("Unable to write sigma data (dump_sigma 12)");
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
   }
   if (!inhibitFileSync)
     SDDS_DoFSync(SDDS_table);
   if (!SDDS_EraseData(SDDS_table)) {
-    SDDS_SetError("Unable to erase sigma data (dump_sigma)");
+    SDDS_SetError("Unable to erase sigma data (dump_sigma 13)");
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
   }
 }
@@ -1886,14 +1922,13 @@ void dump_scattered_particles(SDDS_TABLE *SDDS_table, double **particle,
        
     if (!inhibitFileSync)
       SDDS_DoFSync(SDDS_table);
-    if (!SDDS_Terminate(SDDS_table)) {
-      SDDS_SetError("Problem terminating 'distribution' file (TouschekDistribution)");
-      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
-    }
     log_exit("dump_scattered_particles");    
 }
-  
-#define BEAM_SCATTER_LOSS_COLUMNS 13
+
+#define BEAM_SCATTER_LOSS_X0 0
+#define BEAM_SCATTER_LOSS_X1 (BEAM_SCATTER_LOSS_X0+7)
+#define BEAM_SCATTER_LOSS_PASS (BEAM_SCATTER_LOSS_X1+6)
+#define BEAM_SCATTER_LOSS_COLUMNS 16
 static SDDS_DEFINITION beam_scatter_loss_column[BEAM_SCATTER_LOSS_COLUMNS] = {
     {"x0", "&column name=x0, units=m, type=double &end"},
     {"xp0", "&column name=xp0, symbol=\"x'\", type=double &end"},
@@ -1903,8 +1938,11 @@ static SDDS_DEFINITION beam_scatter_loss_column[BEAM_SCATTER_LOSS_COLUMNS] = {
     {"p0", "&column name=p0, units=\"m$be$nc\", type=double &end"},
     {"particleID", "&column name=particleID, type=long &end"},
     {"x", "&column name=x, units=m, type=double &end"},
+    {"xp", "&column name=xp, type=double &end"},
     {"y", "&column name=y, units=m, type=double &end"},
+    {"yp", "&column name=yp, units=m, type=double &end"},
     {"s", "&column name=s, units=m, type=double &end"},
+    {"p", "&column name=p, units=\"m$be$nc\", type=double &end"},
     {"Pass", "&column name=Pass, type=long &end"},
     {"LRate", "&column name=LRate, units=\"1/s\", type=double, description=\"represents local scattering rate\" &end"},
     {"TRate", "&column name=TRate, units=\"1/s\", type=double, description=\"represents total scattering rate\" &end"},
@@ -1961,10 +1999,22 @@ void dump_scattered_loss_particles(SDDS_TABLE *SDDS_table, double **particleLos,
         rate = weight[j]/tsptr->s_rate*tsptr->total_scatter;
         intLossRate += rate;
         if (!SDDS_SetRowValues(SDDS_table, SDDS_SET_BY_INDEX|SDDS_PASS_BY_VALUE, i,
-                               0, particleOri[j][0], 1, particleOri[j][1], 2, particleOri[j][2], 3, particleOri[j][3],
-                               4, tsptr->s, 5, (1.+particleOri[j][5])*tsptr->betagamma, 6, (long)particleOri[j][6],
-                               7, particleLos[i][0],8, particleLos[i][2],9, particleLos[i][4],
-                               10, lostOnPass[i], 11, weight[j], 12, rate, -1)) {
+                               BEAM_SCATTER_LOSS_X0  , particleOri[j][0],
+                               BEAM_SCATTER_LOSS_X0+1, particleOri[j][1],
+                               BEAM_SCATTER_LOSS_X0+2, particleOri[j][2], 
+                               BEAM_SCATTER_LOSS_X0+3, particleOri[j][3],
+                               BEAM_SCATTER_LOSS_X0+4, tsptr->s, 
+                               BEAM_SCATTER_LOSS_X0+5, (1.+particleOri[j][5])*tsptr->betagamma, 
+                               BEAM_SCATTER_LOSS_X0+6, (long)particleOri[j][6],
+                               BEAM_SCATTER_LOSS_X1+0, particleLos[i][0],
+                               BEAM_SCATTER_LOSS_X1+1, particleLos[i][1],
+                               BEAM_SCATTER_LOSS_X1+2, particleLos[i][2], 
+                               BEAM_SCATTER_LOSS_X1+3, particleLos[i][3],
+                               BEAM_SCATTER_LOSS_X1+4, particleLos[i][4],
+                               BEAM_SCATTER_LOSS_X1+5, particleLos[i][5],
+                               BEAM_SCATTER_LOSS_PASS+0, (long) particleLos[i][7], 
+                               BEAM_SCATTER_LOSS_PASS+1, weight[j],
+                               BEAM_SCATTER_LOSS_PASS+2, rate, -1)) {
             SDDS_SetError("Problem setting SDDS row values (dump_scattered_loss_particles)");
             SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
             }
@@ -1992,7 +2042,7 @@ void dump_scattered_loss_particles(SDDS_TABLE *SDDS_table, double **particleLos,
     
 }
 
-void computeEmitTwissFromSigmaMatrix(double *emit, double *emitc, double *beta, double *alpha, double sigma[6][6], long plane)
+void computeEmitTwissFromSigmaMatrix(double *emit, double *emitc, double *beta, double *alpha, double sigma[7][7], long plane)
 {
   if (plane<0 || plane>4 || plane%2!=0)
     bombElegant("invalid value for plane in computeEmitTwissFromSigmaMatrix", NULL);

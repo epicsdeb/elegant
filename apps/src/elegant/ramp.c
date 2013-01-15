@@ -241,6 +241,7 @@ long applyElementRamps(RAMP_DATA *rampData, double pCentral, RUN *run, long iPas
       if (rampData->element[iMod]->matrix) {
         free_matrices(rampData->element[iMod]->matrix);
         tfree(rampData->element[iMod]->matrix);
+        rampData->element[iMod]->matrix = NULL;
         compute_matrix(rampData->element[iMod], run, NULL);
         matricesUpdated ++;
       }

@@ -15,7 +15,7 @@
  *
  * Michael Borland, 1999
  *
- $Log: sddssasefel.c,v $
+ $Log: not supported by cvs2svn $
  Revision 1.12  2010/08/12 15:32:21  borland
  Added exitElegant() routine so that any exit will result in creation of
  semaphore files if requested.
@@ -64,6 +64,8 @@
 #include "mdb.h"
 #include "scan.h"
 #include "SDDS.h"
+
+void exitElegant(long status);
 
 #define DEBUG 0
 

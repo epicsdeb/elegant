@@ -47,6 +47,8 @@ void cm2bunch(double *p1, double *p2, double *q, double *beta, double *gamma);
 double moeller(double beta0, double theta);
 void pickPart(double *weight, long *index, long start, long end, 
               long *iTotal, double *wTotal, double weight_limit, double weight_ave);
+void determineOccurenceInFilenames(short *occurenceSeen, short*noOccurenceSeen, 
+				   char *initial, char *distribution, char *output, char *loss, char *bunch);
 
 void TouschekEffect(RUN *run,
                     VARY *control,
@@ -291,41 +293,98 @@ void TouschekDistribution(RUN *run, VARY *control, LINE_LIST *beamline)
   double ran1[11];
   long *index, iTotal, sTotal;
   double weight_limit, weight_ave, wTotal;
- 
+  double **fiducialParticle, pCentral;
+  long iProcessing = 0;
+  short occurenceSeen = 0, noOccurenceSeen = 0, skip;
+
+  fiducialParticle = (double**)czarray_2d(sizeof(**fiducialParticle), 1, COORDINATES_PER_PARTICLE);
   eptr = &(beamline->elem);
   beam0 = &Beam0;
   beam = &Beam;
   sTotal = (long)beamline->revolution_length+1;
 
+  determineOccurenceInFilenames(&occurenceSeen, &noOccurenceSeen,
+				initial, distribution, output, loss, bunch);
+  if (occurenceSeen && noOccurenceSeen)
+    bombElegant("Some output files have occurence field and some don't.  Use only one method.", NULL);
+  if (verbosity)
+    printf("Output filenames will%s have occurence index\n", occurenceSeen?"":" not");
+  
+  iTotal = 0;  /* Suppress compiler warning */
+  
   while (eptr) {
     if (eptr->type == T_TSCATTER) {
       iElement++;
-      if(iElement < i_start) {
+      if (i_start>=0 && iElement < i_start) {
+        if (verbosity)
+          printf("Skipping %s#%ld at s=%le (outside index range)\n",
+                 eptr->name, eptr->occurence, eptr->end_pos);
         eptr = eptr->succ; 
         continue;
       }
-      if(iElement > i_end)
+      if (i_end>=0 && iElement > i_end) {
+        if (verbosity)
+          printf("Breaking at %s#%ld at s=%le (outside index range)\n",
+                 eptr->name, eptr->occurence, eptr->end_pos);
         break;
-
+      }
+      
       tsptr = initTSCATTER (eptr, iElement);
+      skip = 0;
+      if (initial) {
+	tsptr->iniFile = compose_filename_occurence(initial, run->rootname, eptr->occurence);
+	if (occurenceSeen && !overwrite_files && fexists(tsptr->iniFile))
+	  skip = 1;
+      }
+      if (distribution) {
+        tsptr->disFile = compose_filename_occurence(distribution, run->rootname, eptr->occurence);
+	if (occurenceSeen && !overwrite_files && fexists(tsptr->disFile))
+	  skip = 1;
+      }
+      if (output) {
+        tsptr->outFile = compose_filename_occurence(output, run->rootname, eptr->occurence);
+	if (occurenceSeen && !overwrite_files && fexists(tsptr->outFile))
+	  skip = 1;
+      }
+      if (loss) {
+        tsptr->losFile = compose_filename_occurence(loss, run->rootname, eptr->occurence);
+	if (occurenceSeen && !overwrite_files && fexists(tsptr->losFile))
+	  skip = 1;
+      }
+      if (bunch) {
+        tsptr->bunFile = compose_filename_occurence(bunch, run->rootname, eptr->occurence);
+	if (occurenceSeen && !overwrite_files && fexists(tsptr->bunFile))
+	  skip = 1;
+      }
+      if (skip) {
+	if (verbosity)
+	  printf("Skipping %s#%ld at s=%le (some files exist)\n",
+		 eptr->name, eptr->occurence, eptr->end_pos);
+	eptr = eptr->succ;
+	continue;
+      }
+      if (verbosity)
+	printf("Working on %s#%ld at s=%le\n",
+	       eptr->name, eptr->occurence, eptr->end_pos);
+
+      iProcessing ++;
+
       weight = (double*)malloc(sizeof(double)*n_simulated);
-      beam0->particle = (double**)czarray_2d(sizeof(double), n_simulated, 7);
-      beam0->original = (double**)czarray_2d(sizeof(double), n_simulated, 7);
+      beam0->particle = (double**)czarray_2d(sizeof(double), n_simulated, COORDINATES_PER_PARTICLE);
+      beam0->original = (double**)czarray_2d(sizeof(double), n_simulated, COORDINATES_PER_PARTICLE);
       beam0->accepted = NULL;
       beam0->n_original = beam0->n_to_track = beam0->n_particle = n_simulated;
       beam0->n_accepted = beam0->n_saved = 0;
       beam0->p0_original = beam0->p0 = tsptr->betagamma;
       beam0->bunchFrequency = 0.;
-      beam0->lostOnPass = tmalloc(sizeof(*(beam0->lostOnPass))*beam0->n_to_track);
+      beam0->lost = (double**)czarray_2d(sizeof(double), n_simulated, (COORDINATES_PER_PARTICLE+1));
 
       if (initial) {
-        tsptr->iniFile = compose_filename_occurence(initial, run->rootname, eptr->occurence);
         for (i=0; i<6; i++)
           bookBins[i] = tsSpec->nbins;
         iniBook = chbook1m(Name, Units, tsptr->xmin, tsptr->xmax, bookBins, 6);
       }
       if (distribution) {
-        tsptr->disFile = compose_filename_occurence(distribution, run->rootname, eptr->occurence);
         for (i=0; i<6; i++)
           bookBins[i] = tsSpec->nbins;
         tsptr->xmin[5] = -0.1;
@@ -333,22 +392,30 @@ void TouschekDistribution(RUN *run, VARY *control, LINE_LIST *beamline)
         disBook = chbook1m(Name, Units, tsptr->xmin, tsptr->xmax, bookBins, 6);
       }
       if (output) {
-        tsptr->outFile = compose_filename_occurence(output, run->rootname, eptr->occurence);
         lossDis = chbook1("s", "m", 0, sTotal, sTotal);
       }
+#if USE_MPI
+      if (isMaster)
+#endif
       if (loss) {
-        tsptr->losFile = compose_filename_occurence(loss, run->rootname, eptr->occurence);
-        SDDS_BeamScatterLossSetup(&SDDS_loss, tsptr->losFile, SDDS_BINARY, 1, 
-                                  "lost particle coordinates", run->runfile,
-                                  run->lattice, "touschek_scatter");
+	if (occurenceSeen || iProcessing==1) {
+          if (verbosity)
+            printf("Setting up loss file\n");
+	  SDDS_BeamScatterLossSetup(&SDDS_loss, tsptr->losFile, SDDS_BINARY, 1, 
+				    "lost particle coordinates", run->runfile,
+				    run->lattice, "touschek_scatter");
+        }
       }
+#if USE_MPI
+      if (isMaster)
+#endif
       if (bunch) {
-        tsptr->bunFile = compose_filename_occurence(bunch, run->rootname, eptr->occurence);
-        SDDS_BeamScatterSetup(&SDDS_bunch, tsptr->bunFile, SDDS_BINARY, 1, 
-                              "scattered-beam phase space", run->runfile,
-                              run->lattice, "touschek_scatter");
+	if (occurenceSeen || iProcessing==1)
+	  SDDS_BeamScatterSetup(&SDDS_bunch, tsptr->bunFile, SDDS_BINARY, 1, 
+				"scattered-beam phase space", run->runfile,
+				run->lattice, "touschek_scatter");
       }
-
+      report_stats(stdout, "Before particle generation: "); 
       i = 0; j=0; total_event=0;
       while(1) {
         if(i>=n_simulated)
@@ -357,7 +424,7 @@ void TouschekDistribution(RUN *run, VARY *control, LINE_LIST *beamline)
         for (j=0; j<11; j++) {
           ran1[j] = random_1_elegant(1);
         }
-        randomizeOrder((char*)ran1, sizeof(ran1[0]), 11, 0, random_4);
+	randomizeOrder((char*)ran1, sizeof(ran1[0]), 11, 0, random_4);
           
         total_event++;
         if (!tsSpec->distIn)
@@ -445,11 +512,12 @@ void TouschekDistribution(RUN *run, VARY *control, LINE_LIST *beamline)
           break;
         }
       }
+      report_stats(stdout, "After particle generation: ");
       if (total_event/tsptr->simuCount > 20) {
         if (distribution_cutoff[0]<5 || distribution_cutoff[1]<5 ) 
-          fprintf(stdout, "waring: Scattering rate is low, please use 5 sigma beam for better simulation.\n");
+          fprintf(stdout, "warning: Scattering rate is low, please use 5 sigma beam for better simulation.\n");
         else
-          fprintf(stdout, "waring: Scattering rate is very low, please ignore the rate from Monte Carlo simulation. Use Piwinski's rate only\n"); 
+          fprintf(stdout, "warning: Scattering rate is very low, please ignore the rate from Monte Carlo simulation. Use Piwinski's rate only\n"); 
       }
       tsptr->factor = tsptr->factor / (double)(total_event);
       tsptr->s_rate = tsptr->totalWeight * tsptr->factor;
@@ -466,18 +534,38 @@ void TouschekDistribution(RUN *run, VARY *control, LINE_LIST *beamline)
         wTotal =0.;
         weight_limit = tsptr->totalWeight*(1-tsSpec->ignoredPortion);
         weight_ave = tsptr->totalWeight/tsptr->simuCount;
-        pickPart(weight, index, 0, tsptr->simuCount,  
-                 &iTotal, &wTotal, weight_limit, weight_ave);
+#if USE_MPI
+	if (isMaster)
+#endif
+	  pickPart(weight, index, 0, tsptr->simuCount,  
+		   &iTotal, &wTotal, weight_limit, weight_ave);
       }
-        
-      beam->particle = (double**)czarray_2d(sizeof(double), iTotal, 7);
-      beam->original = (double**)czarray_2d(sizeof(double), iTotal, 7);
+      if (verbosity)
+	printf("%ld of %ld particles selected for tracking\n", iTotal, tsptr->simuCount);
+
+      report_stats(stdout, "After particle selection: ");
+#if USE_MPI
+      if (USE_MPI) {
+	long iTotal_orig;
+	long work_processors = n_processors-1;
+	
+	MPI_Bcast(&iTotal, 1, MPI_LONG, 0, MPI_COMM_WORLD);
+	iTotal_orig = iTotal;
+	if (isSlave) {
+	  iTotal = iTotal_orig/work_processors;
+	  if (myid <= iTotal_orig%work_processors)
+	    iTotal++;
+	}
+      }
+#endif
+      beam->particle = (double**)czarray_2d(sizeof(double), iTotal, COORDINATES_PER_PARTICLE);
+      beam->original = (double**)czarray_2d(sizeof(double), iTotal, COORDINATES_PER_PARTICLE);
       beam->accepted = NULL;
       beam->n_original = beam->n_to_track = beam->n_particle = iTotal;
       beam->n_accepted = beam->n_saved = 0;
       beam->p0_original = beam->p0 = tsptr->betagamma;
       beam->bunchFrequency = 0.;
-      beam->lostOnPass = tmalloc(sizeof(*(beam->lostOnPass))*beam->n_to_track);
+      beam->lost = (double**)czarray_2d(sizeof(double), iTotal, (COORDINATES_PER_PARTICLE+1));
 	  
       for (i=0; i<iTotal; i++) {
         beam->original[i][0] = beam->particle[i][0] = beam0->particle[index[i]][0];
@@ -491,10 +579,17 @@ void TouschekDistribution(RUN *run, VARY *control, LINE_LIST *beamline)
       }
       if (tsSpec->distIn)
         tsptr->total_scatter *= tsptr->s_rate/tsptr->p_rate;
-
-      if (bunch)
-        dump_scattered_particles(&SDDS_bunch, beam->particle, (long)iTotal,
+#if USE_MPI
+      if (isMaster)
+#endif
+      if (bunch) {
+	  dump_scattered_particles(&SDDS_bunch, beam->particle, (long)iTotal,
                                  weight, tsptr);
+          if (occurenceSeen && !SDDS_Terminate(&SDDS_bunch)) {
+            SDDS_SetError("Problem terminating 'bunch' file (finish_output)");
+            SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+          }
+      }
       if (distribution || initial) {
         part_dist_paraValue[0] = (void*)(&tsptr->name);
         part_dist_paraValue[1] = (void*)(&tsptr->s);
@@ -503,44 +598,148 @@ void TouschekDistribution(RUN *run, VARY *control, LINE_LIST *beamline)
         part_dist_paraValue[4] = (void*)(&tsptr->s_rate);
         part_dist_paraValue[5] = (void*)(&tsptr->i_rate);
         part_dist_paraValue[6] = (void*)(&bookBins[0]);
-        
+#if USE_MPI
+	if (isMaster)
+#endif        
         if (distribution) {
           chprint1m(disBook, tsptr->disFile, "Simulated scattered particle final distribution", part_dist_para, 
-                    part_dist_paraValue, PART_DIST_PARAMETERS, 1, 0, 0);
+                    part_dist_paraValue, PART_DIST_PARAMETERS, 1, 0, noOccurenceSeen && iProcessing!=1);
           free_hbook1m(disBook);
         }
+#if USE_MPI
+	if (isMaster)
+#endif
         if (initial) {
           chprint1m(iniBook, tsptr->iniFile, "Simulated scattered particle original distribution", part_dist_para, 
-                    part_dist_paraValue, PART_DIST_PARAMETERS, 1, 0, 0);
+                    part_dist_paraValue, PART_DIST_PARAMETERS, 1, 0, noOccurenceSeen && iProcessing!=1);
           free_hbook1m(iniBook);
         }
       }
-
+#if USE_MPI
+      notSinglePart = 0;
+      parallelStatus = notParallel;
+#endif
       if (do_track) {
+	memset(fiducialParticle[0], 0, sizeof(**fiducialParticle)*COORDINATES_PER_PARTICLE);
+	delete_phase_references();
+	reset_special_elements(beamline, 1);
+	pCentral = run->p_central;
+	if (!do_tracking(NULL, fiducialParticle, 1, NULL, beamline, 
+			 &pCentral, NULL, NULL, NULL, NULL, run, control->i_step,
+			 FIRST_BEAM_IS_FIDUCIAL+(verbosity>1?0:SILENT_RUNNING)+INHIBIT_FILE_OUTPUT, 1, 0, NULL, NULL, NULL, NULL, NULL)) {
+	  bombElegant("Fiducial particle was lost", NULL);
+	}
+        if (verbosity>1) {
+          printf("fiducial particle tracked.\n");
+          fflush(stdout);
+        }
+        
+#if USE_MPI
+      notSinglePart = 1;
+      parallelStatus = notParallel;
+#endif
         n_left = do_tracking(beam, NULL, (long)iTotal, NULL, beamline, 
                              &beam->p0, NULL, NULL, NULL, NULL, run, control->i_step,
-                             0, control->n_passes, 0, NULL,
-                             NULL, NULL, beam->lostOnPass, eptr);
+                             SILENT_RUNNING+FIRST_BEAM_IS_FIDUCIAL+FIDUCIAL_BEAM_SEEN+INHIBIT_FILE_OUTPUT, control->n_passes, 0, NULL,
+                             NULL, NULL, beam->lost, eptr);
+#if USE_MPI
+	if (USE_MPI) {
+	  MPI_Status status;
+	  long nLost, n_left_total; 
+	  long *nLostCounts = (long *)tmalloc(n_processors*sizeof(*nLostCounts));
+
+	  /* Gather the lost particles to let the Master dump the results */
+	  MPI_Reduce(&n_left, &n_left_total, 1, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+	  if (isMaster) {
+	    nLost = 0;
+	    n_left = n_left_total;
+	  }
+	  else
+	    nLost = beam->n_to_track-n_left;
+
+	  MPI_Gather(&nLost, 1, MPI_LONG, nLostCounts, 1, MPI_LONG, 0, MPI_COMM_WORLD); 
+	  if (isMaster) {
+            if (verbosity>2) {
+              for (i=0; i<n_processors; i++) 
+                printf("nLostCounts[%ld] = %ld\n", i, nLostCounts[i]);
+              printf("i=0, nLost = %ld\n", nLost);
+            }
+	    for (i=1; i<n_processors; i++) {
+	      MPI_Recv (&(beam->lost+n_left)[nLost][0],nLostCounts[i]*(COORDINATES_PER_PARTICLE+1), MPI_DOUBLE, i, 100, MPI_COMM_WORLD, &status);
+	      nLost += nLostCounts[i];
+              if (verbosity>2)
+                printf("i=%ld, nLost = %ld\n", i, nLost);
+	    }
+            fflush(stdout);
+	  }
+	  else {
+	    MPI_Send (&(beam->lost[n_left][0]), nLost*(COORDINATES_PER_PARTICLE+1), MPI_DOUBLE, 0, 100, MPI_COMM_WORLD);
+	  }
+          free(nLostCounts);
+	}	
+        if (verbosity>1) {
+          printf("%ld particles survived tracking\n", n_left);
+          fflush(stdout);
+        }
+
+#else
+        if (verbosity>1) {
+          printf("%ld of %ld particles survived tracking\n", n_left, iTotal);
+          fflush(stdout);
+        }
+#endif        
+
+#if USE_MPI
+	if (isMaster)
+#endif
         if (loss) {
-          dump_scattered_loss_particles(&SDDS_loss, beam->particle+n_left, beam->original,  
-                                        beam->lostOnPass+n_left, beam->n_to_track-n_left, weight, tsptr);
-          if (!SDDS_Terminate(&SDDS_loss)) {
+          if (verbosity>2) {
+            printf("dumping \"loss\" file: %ld particles of %ld\n", n_left, beam->n_to_track);
+            fflush(stdout);
+          }
+          dump_scattered_loss_particles(&SDDS_loss, beam->lost+n_left, beam->original,  
+                                        NULL, beam->n_to_track-n_left, weight, tsptr);
+          if (occurenceSeen && !SDDS_Terminate(&SDDS_loss)) {
             SDDS_SetError("Problem terminating 'losses' file (finish_output)");
             SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
           }
         }
+
+#if USE_MPI
+	if (isMaster)
+#endif
         if (output) {
+          if (verbosity>2) {
+            printf("Dumping \"output\" file\n");
+            fflush(stdout);
+          }
           for (i=0; i< beam->n_to_track-n_left; i++) {
-            j = (beam->particle+n_left)[i][6]-1;
-            chfill1(lossDis, (beam->particle+n_left)[i][4], weight[j]*tsptr->total_scatter/tsptr->s_rate);
+            j = (beam->lost+n_left)[i][6]-1;
+/*
+            printf("lost particle %ld has original index %ld, weight %e, coordinates %e, %e, %e, %e, %e, %e\n",
+                   i, j, weight[j],
+                   (beam->lost+n_left)[i][0], (beam->lost+n_left)[i][1], (beam->lost+n_left)[i][2],
+                   (beam->lost+n_left)[i][3], (beam->lost+n_left)[i][4], (beam->lost+n_left)[i][5]);
+*/
+            chfill1(lossDis, (beam->lost+n_left)[i][4], weight[j]*tsptr->total_scatter/tsptr->s_rate);
           }
           chprint1(lossDis, tsptr->outFile, "Beam loss distribution in particles/s/m", NULL,
-                   NULL, 0, 0, verbosity, 0);
+                   NULL, 0, 0, verbosity, noOccurenceSeen && iProcessing!=1);
           free_hbook1(lossDis);
         }
       }
+
+      if (verbosity>2) {
+        printf("Freeing beam data\n");
+        fflush(stdout);
+      }
       free_beamdata(beam);
       free_beamdata(beam0);
+
+      if (verbosity>2) {
+        printf("Freeing other data\n");
+        fflush(stdout);
+      }
       free(weight);
       free(index);
       if (tsSpec->distIn==1) {
@@ -554,8 +753,25 @@ void TouschekDistribution(RUN *run, VARY *control, LINE_LIST *beamline)
         free_hbookn(tsptr->zhis);
       }        
     }
+#if USE_MPI
+    if (isMaster)
+#endif
+    if (verbosity>2) {
+      printf("Advancing to next element\n");
+      fflush(stdout);
+    }
     eptr = eptr->succ; 
   }
+
+  if (!occurenceSeen && !SDDS_Terminate(&SDDS_loss)) {
+    SDDS_SetError("Problem terminating 'losses' file");
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+  }
+  if (!occurenceSeen && !SDDS_Terminate(&SDDS_bunch)) {
+    SDDS_SetError("Problem terminating 'bunch' file");
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+  }
+
   return;
 }
 
@@ -775,21 +991,27 @@ long get_MAInput(char *filename, LINE_LIST *beamline, long nElement)
   long result, i, iTotal;
   ELEMENT_LIST *eptr;
   SDDS_DATASET input;
-  char **Name, **Type;
-  double *s, *dpp, *dpm, eps=1e-7;
-  int32_t *Occurence;
+  char **Name = NULL, **Type = NULL;
+  double *s = NULL, *dpp = NULL, *dpm = NULL, eps=1e-7;
+  int32_t *Occurence = NULL;
 
   if (!SDDS_InitializeInput(&input, filename))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
   if (SDDS_ReadPage(&input) <=0)
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
   iTotal = SDDS_CountRowsOfInterest(&input);
-  s = SDDS_GetColumnInDoubles(&input, "s");
-  dpp = SDDS_GetColumnInDoubles(&input, "deltaPositive");
-  dpm = SDDS_GetColumnInDoubles(&input, "deltaNegative");
-  Occurence = SDDS_GetColumnInLong(&input, "ElementOccurence");
-  Name = (char **)SDDS_GetColumn(&input, "ElementName");
-  Type = (char **)SDDS_GetColumn(&input, "ElementType");
+  if (!(s = SDDS_GetColumnInDoubles(&input, "s")) ||
+      !(dpp = SDDS_GetColumnInDoubles(&input, "deltaPositive")) ||
+      !(dpm = SDDS_GetColumnInDoubles(&input, "deltaNegative")) ||
+      !(Occurence = SDDS_GetColumnInLong(&input, "ElementOccurence")) ||
+      !(Name = (char **)SDDS_GetColumn(&input, "ElementName")) ||
+      !(Type = (char **)SDDS_GetColumn(&input, "ElementType"))) {
+    bombElegant("Momentum aperture file lacks required columns (s, deltaPositive, deltaNegative, ElementOccurence, ElementName, ElementType)", NULL);
+  }
+
+  for (i=1; i<iTotal; i++) 
+    if (s[i-1]>s[i])
+      bombElegant("Momentum aperture data is not sorted in order of increasing s.", NULL);
 
   i = 0;
   result = -nElement;
@@ -797,20 +1019,28 @@ long get_MAInput(char *filename, LINE_LIST *beamline, long nElement)
 
   while (eptr) {
     if (eptr->type == T_TSCATTER) {
+      if (verbosity>1)
+	printf("Looking for data for TSCATTER %s#%ld at s=%21.15e\n",
+	       eptr->name, eptr->occurence, eptr->end_pos);
       while (1) {
         if (fabs(*s - eptr->end_pos) < eps &&
-            *Occurence == eptr->occurence &&
-            strcmp(*Name,eptr->name) == 0 &&
-            strcmp(*Type,entity_name[eptr->type]) == 0) {
+	    (match_position_only || 
+	     (*Occurence == eptr->occurence &&
+	      strcmp(*Name,eptr->name) == 0 &&
+	      strcmp(*Type,entity_name[eptr->type]) == 0))) {
           ((TSCATTER*)eptr->p_elem)->delta = ((*dpp < -(*dpm)) ? *dpp : -(*dpm))
             * Momentum_Aperture_scale;
+	  if (verbosity>1)
+	    printf("Matched by \"%s\"#%ld at s=%21.15e\n",
+		   *Name, (long)*Occurence, *s);
           i++;
           s++; dpp++; dpm++; Name++; Type++; Occurence++;
           break;
         }
         s++; dpp++; dpm++; Name++; Type++; Occurence++;
-        if (i++ > iTotal)
-          bombElegant("Momentum aperture file end earlier than required", NULL);
+        if (i++ > iTotal) {
+          bombElegant("Momentum aperture file ends earlier than required", NULL);
+	}
       }
       result++;
     }
@@ -1087,4 +1317,63 @@ void pickPart(double *weight, long *index, long start, long end,
   pickPart(weight, index, i2+start, end,
            iTotal, wTotal, weight_limit, weight_ave);
   return;
+}
+
+#if defined(_WIN32)
+short has_occurence_string(char *template);
+#else
+#include <sys/types.h>
+#include <regex.h>
+
+short has_occurence_string(char *template)
+{
+  static regex_t regExpr;
+  static short first = 1;
+  if (first) {
+    int code;
+    if ((code=regcomp(&regExpr, ".*%[0-9]*ld.*", REG_NOSUB))) {
+      char errbuf[1000];
+      regerror(code, &regExpr, errbuf, (size_t)1000);
+      fprintf(stdout, "%s\n", errbuf);
+      bombElegant("problem compiling regular expression for filename occurence determination (has_occurence_string)", NULL);
+    }
+    first = 0;
+  }
+  return !regexec (&regExpr, template, 0, NULL, 0);
+}
+#endif
+
+void determineOccurenceInFilenames(short *occurenceSeen, short*noOccurenceSeen, 
+				   char *initial, char *distribution, char *output, char *loss, char *bunch)
+{
+  if (initial) {
+    if (has_occurence_string(initial))
+      *occurenceSeen = 1;
+    else
+      *noOccurenceSeen = 1;
+  }
+  if (distribution) {
+    if (has_occurence_string(distribution))
+      *occurenceSeen = 1;
+    else
+      *noOccurenceSeen = 1;
+  }
+  if (output) {
+    if (has_occurence_string(output))
+      *occurenceSeen = 1;
+    else
+      *noOccurenceSeen = 1;
+  }
+  if (loss) {
+    if (has_occurence_string(loss))
+      *occurenceSeen = 1;
+    else
+      *noOccurenceSeen = 1;
+  }
+  if (bunch) {
+    if (has_occurence_string(bunch))
+      *occurenceSeen = 1;
+    else
+      *noOccurenceSeen = 1;
+  }
 }

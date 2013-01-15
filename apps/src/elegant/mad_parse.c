@@ -115,10 +115,10 @@ extern ELEMENT_LIST *expand_line(
     )
 {
     register char *ptr, *ptr1;
-    char *ptrs;
+    char *ptrs=NULL, *ptr2=NULL;
     register long i, l;
     long multiplier=1, reverse=0, simple, count1;
-    char *line_save;
+    char *line_save=NULL;
 
     log_entry("expand_line");
 
@@ -130,86 +130,88 @@ extern ELEMENT_LIST *expand_line(
 #endif
 
     count1 = 0;
-    while ((ptr1 = get_token_tq(s, ",", ",", "(\"", ")\""))) {
-        ptr = ptr1+strlen(ptr1)-1;
-        while (isspace(*ptr))
-            ptr--;
-        if (*ptr==')')
-            *ptr = 0;
-        delete_bounding(ptr1, "\"");
+    while ((ptr2 = get_token_tq(s, ",", ",", "(\"", ")\""))) {
+      ptr1 = ptr2;
+      ptr = ptr1+strlen(ptr1)-1;
+      while (isspace(*ptr))
+        ptr--;
+      if (*ptr==')')
+        *ptr = 0;
+      delete_bounding(ptr1, "\"");
 #ifdef DEBUG 
-        fprintf(stdout, "ptr1 = %s\n", ptr1);
-        fflush(stdout);
+      fprintf(stdout, "ptr1 = %s\n", ptr1);
+      fflush(stdout);
 #endif
-        reverse = 0;
-    	if (*ptr1=='-') {
-            reverse = 1;
-            ptr1++;
-            }
-
-        multiplier = 1;
-        if (isdigit(*ptr1)) {
-            if ((ptr=strchr(ptr1, '*'))) {
-                *ptr = 0;
-                if (1!=sscanf(ptr1, "%ld", &multiplier)) {
-                    fprintf(stdout, "problem with line: %s\n", line_save);
-                    fflush(stdout);
-                    fprintf(stdout, "position is %s\n", ptr1);
-                    fflush(stdout);
-                    bombElegant("improper element multiplication", NULL);
-                    }
-                ptr1 = ptr+1;
-                if (*ptr1=='(')
-                    ptr1++;
-                }
-            }
-#ifdef DEBUG
-        fprintf(stdout, "reverse = %ld, multiplier = %ld\n", reverse, multiplier);
-        fflush(stdout);
-        fprintf(stdout, "ptr1 = %s\n",ptr1);
-        fflush(stdout);
-#endif
-
-        simple = is_simple(ptr1);
-#ifdef DEBUG
-            fprintf(stdout, "simple = %ld\n", simple);
+      reverse = 0;
+      if (*ptr1=='-') {
+        reverse = 1;
+        ptr1++;
+      }
+      
+      multiplier = 1;
+      if (isdigit(*ptr1)) {
+        if ((ptr=strchr(ptr1, '*'))) {
+          *ptr = 0;
+          if (1!=sscanf(ptr1, "%ld", &multiplier)) {
+            fprintf(stdout, "problem with line: %s\n", line_save);
             fflush(stdout);
-#endif
-        count1 += multiplier;
-        if (simple) {
-            /* add simple elements to the line's element list */
-            lptr->n_elems += 
-	      (l=expand_phys(leptr, ptr1, elem, ne, line, nl, reverse, multiplier, part_of));
-#ifdef DEBUG
-            fprintf(stdout, "number of elements now %ld\n", lptr->n_elems);
-#endif
-            for (i=0; i<l; i++) 
-                leptr = leptr->succ;
-            }
-        else {
-            /* add elements from a parenthesized list to the line's element list */
-            cp_str(&ptrs, ptr1);
-            for (i=0; i<multiplier; i++) {
-                strcpy_ss(ptr1, ptrs);
-                leptr = expand_line(leptr, lptr, ptr1, line, nl, elem, ne, part_of);
-                }
-#ifdef DEBUG
-            fprintf(stdout, "number of elements now %ld\n", lptr->n_elems);
-#endif
-            tfree(ptrs);
-            ptrs = NULL;
-            }
+            fprintf(stdout, "position is %s\n", ptr1);
+            fflush(stdout);
+            bombElegant("improper element multiplication", NULL);
+          }
+          ptr1 = ptr+1;
+          if (*ptr1=='(' || *ptr1=='"')
+            ptr1++;
         }
+      }
+#ifdef DEBUG
+      fprintf(stdout, "reverse = %ld, multiplier = %ld\n", reverse, multiplier);
+      fflush(stdout);
+      fprintf(stdout, "ptr1 = %s\n",ptr1);
+      fflush(stdout);
+#endif
+      
+      simple = is_simple(ptr1);
+#ifdef DEBUG
+      fprintf(stdout, "simple = %ld\n", simple);
+      fflush(stdout);
+#endif
+      count1 += multiplier;
+      if (simple) {
+        /* add simple elements to the line's element list */
+        lptr->n_elems += 
+          (l=expand_phys(leptr, ptr1, elem, ne, line, nl, reverse, multiplier, part_of));
+#ifdef DEBUG
+        fprintf(stdout, "number of elements now %ld\n", lptr->n_elems);
+#endif
+        for (i=0; i<l; i++) 
+          leptr = leptr->succ;
+      }
+      else {
+        /* add elements from a parenthesized list to the line's element list */
+        cp_str(&ptrs, ptr1);
+        for (i=0; i<multiplier; i++) {
+          strcpy_ss(ptr1, ptrs);
+          leptr = expand_line(leptr, lptr, ptr1, line, nl, elem, ne, part_of);
+        }
+#ifdef DEBUG
+        fprintf(stdout, "number of elements now %ld\n", lptr->n_elems);
+#endif
+        tfree(ptrs);
+        ptrs = NULL;
+      }
+      free(ptr2);
+    }
 
     if (count1>lptr->n_elems) {
       fprintf(stdout, "Problem with line parsing: expected at least %ld elements, but got %ld\n",
               count1, lptr->n_elems);
       print_line(stdout, lptr);
     }
-
+    if (line_save) free(line_save);
     log_exit("fill_line");
     return(leptr);
-    }
+}
 
 long is_simple(char *s)
 {
@@ -623,17 +625,18 @@ long copy_line(ELEMENT_LIST *e1, ELEMENT_LIST *e2, long ne, long reverse, char *
 long tell_type(char *s, ELEMENT_LIST *elem)
 {
     long i, l, match_found, return_value, comparison;
-    char *ptr, *name, *buffer;
+    char *ptr, *ptr1, *name, *name1, *buffer;
     
     match_found = 0;
     return_value = T_NODEF;
 
     log_entry("tell_type");
 
-    if (!(name=get_token_tq(s, "", ":", " \"", " \""))) {
+    if (!(name1=get_token_tq(s, "", ":", " \"", " \""))) {
         log_exit("tell_type");
         return(T_NODEF);
         }
+    name = name1;
     delete_bounding(name, "\"");
 #ifdef DEBUG
     fprintf(stdout, "first token on line: >%s<\n", name);
@@ -641,7 +644,8 @@ long tell_type(char *s, ELEMENT_LIST *elem)
     fprintf(stdout, "remainder of line: >%s<\n", s);
     fflush(stdout);
 #endif
-    ptr = get_token_tq(s, "", ",=", " \"", " \"");
+    ptr1 = get_token_tq(s, "", ",=", " \"", " \"");
+    ptr = ptr1;
     delete_bounding(ptr, "\"");
 #ifdef DEBUG
     fprintf(stdout, "second token: >%s<\n", ptr);
@@ -683,6 +687,8 @@ long tell_type(char *s, ELEMENT_LIST *elem)
                 exitElegant(1);
                 }
             if (l==entity_name_length[i]) {
+                if (name1) free(name1);
+                if (ptr1) free(ptr1);
                 log_exit("tell_type");
                 return(i);
                 }
@@ -706,6 +712,8 @@ long tell_type(char *s, ELEMENT_LIST *elem)
                 exitElegant(1);
                 }
             if (l==((long)strlen(madcom_name[i]))) {
+                if (name1) free(name1);
+                if (ptr1) free(ptr1);
                 log_exit("tell_type");
                 return(-i-1);
                 }
@@ -750,6 +758,8 @@ long tell_type(char *s, ELEMENT_LIST *elem)
             fprintf(stdout, "modified input text for element %s:\n%s\n", name, s);
             fflush(stdout);
 #endif
+            if (name1) free(name1);
+            if (ptr1) free(ptr1);
             log_exit("tell_type");
             return(elem->type);
             }
@@ -757,6 +767,8 @@ long tell_type(char *s, ELEMENT_LIST *elem)
             break;
         elem = elem->succ;
         }
+    if (name1) free(name1);
+    if (ptr1) free(ptr1);
     log_exit("tell_type");
     return(return_value);
     }
@@ -770,7 +782,7 @@ long tell_type(char *s, ELEMENT_LIST *elem)
 
 char *get_param_name(char *s)
 {
-    char *ptr, *ptr1;
+    char *ptr, *ptr1=NULL;
 
     log_entry("get_param_name");
 
@@ -836,7 +848,7 @@ void parse_element(
     )
 {
   long i, difference, isGroup, pType=0;
-  char *ptr, *ptr1, *rpn_token;
+  char *ptr, *ptr1=NULL, *rpn_token;
 
   log_entry("parse_element");
 
@@ -932,6 +944,7 @@ void parse_element(
       }
       exitElegant(1);
     }
+    free(ptr1);
     if (!*ptr) {
       fprintf(stdout, "Error: missing value for parameter %s of %s\n",
               parameter[i].name, eptr->name);

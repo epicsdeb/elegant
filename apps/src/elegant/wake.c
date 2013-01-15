@@ -400,3 +400,123 @@ long binTimeDistribution(double *Itime, long *pbin, double tmin,
   }
   return n_binned;
 }
+
+
+void track_through_corgpipe(double **part, long np, CORGPIPE *corgpipe, double *Pcentral, 
+                             RUN *run, long i_pass, CHARGE *charge)
+/* This is basically a copy of P. Emma's MATLAB, with some additional checking and warnings 
+ * See also K. Bane, SLAC-PUB-14925.
+ */
+{
+  double Z0, k, kappa, dt, omega;
+  WAKE wakeData;
+  long i, n_bins;
+
+#if USE_MPI
+  if (myid==1) {
+#endif
+    if (corgpipe->radius<=0)
+      bombElegant("Error: RADIUS parameter on CORGPIPE must be greater than zero", NULL);
+    if (corgpipe->period<=0)
+      bombElegant("Error: PERIOD parameter on CORGPIPE must be greater than zero", NULL);
+    if (corgpipe->gap<=0)
+      bombElegant("Error: GAP parameter on CORGPIPE must be greater than zero", NULL);
+    if (corgpipe->depth<=0)
+      bombElegant("Error: DEPTH parameter on CORGPIPE must be greater than zero", NULL);
+    if (corgpipe->tmax<0)
+      bombElegant("Error: TMAX parameter on CORGPIPE must be greater than or equal to zero", NULL);
+    if (charge==NULL)
+      bombElegant("Error: supply CHARGE element prior to CORGPIPE element", NULL);  
+    if (corgpipe->gap>=corgpipe->period)
+      bombElegant("Error: Must have GAP<PERIOD for CORGPIPE element", NULL);
+    
+    if (corgpipe->period*6>=corgpipe->radius)
+      fprintf(stderr, "*** Warning: CORGPIPE PERIOD should be << RADIUS\n");
+    if (corgpipe->depth*6>=corgpipe->radius)
+      fprintf(stderr, "*** Warning: CORGPIPE DEPTH should be << RADIUS\n");
+    if (corgpipe->depth<corgpipe->period/1.5)
+      fprintf(stderr, "** Warning: CORGPIPE DEPTH should be >~ PERIOD\n");
+#if USE_MPI
+  }
+#endif
+
+  /* E = -2*L*kappa*cos(k*s) */
+  Z0 = 4*PI*1e-7*c_mks;
+  k = sqrt(2*corgpipe->period/(corgpipe->radius*corgpipe->depth*corgpipe->gap));
+  kappa = Z0*c_mks/(2*PI*sqr(corgpipe->radius));
+  
+  dt = 0.1/(k*c_mks);
+  if (corgpipe->dt>0) {
+    if (corgpipe->dt>dt) {
+      fprintf(stderr, "Error: CORGPIPE DT value should be less than %e\n", dt);
+    }
+    dt = corgpipe->dt;
+  }
+
+  if ((n_bins = corgpipe->n_bins) == 0) {
+    if (corgpipe->tmax==0) {
+      double beta, gamma, sMin, sMax, dtBeam, result;
+      sMax = -(sMin = DBL_MAX);
+      for (i=0; i<np; i++) {
+        if (part[i][4]>sMax)
+          sMax = part[i][4];
+        if (part[i][4]<sMin)
+          sMin = part[i][4];
+      }
+#if USE_MPI
+      MPI_Allreduce(&sMin, &result, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+      sMin = result;
+      MPI_Allreduce(&sMax, &result, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+      sMax = result;
+#endif
+      if (sMin!=sMax) {
+        gamma = sqrt(sqr(*Pcentral)+1);
+        beta = *Pcentral/gamma;
+        dtBeam = (sMax-sMin)/(beta*c_mks);
+        if (dtBeam<30*dt)
+          dt = dtBeam/30;
+        n_bins = 1.5*dtBeam/dt;
+        if (n_bins<10)
+          n_bins = 10;
+      } else
+        n_bins = 10;
+    } else {
+      if ((n_bins = corgpipe->tmax/dt)<10)
+        n_bins = 10;
+    }
+  }
+
+  if ((1.0*np)/n_bins<100)
+    printf("*** Warning: less than 100 particles per bin on average for CORGPIPE. Considering increasing the number of particles.\n");
+  
+  wakeData.factor = 1;
+  wakeData.n_bins = n_bins;
+  wakeData.interpolate = corgpipe->interpolate;
+  wakeData.smoothing = corgpipe->smoothing;
+  wakeData.SGHalfWidth = corgpipe->SGHalfWidth;
+  wakeData.SGOrder = corgpipe->SGOrder;
+  wakeData.change_p0 = corgpipe->change_p0;
+  wakeData.allowLongBeam = corgpipe->allowLongBeam;
+  wakeData.rampPasses = corgpipe->rampPasses;
+  wakeData.initialized = 1;
+  wakeData.wakePoints = n_bins;
+  wakeData.isCopy = 0;
+  wakeData.W = tmalloc(sizeof(double)*n_bins);
+  wakeData.t = tmalloc(sizeof(double)*n_bins);
+  wakeData.dt = dt;
+
+  for (i=0; i<n_bins; i++) {
+    wakeData.t[i] = i*dt;
+    wakeData.W[i] = 2*kappa*corgpipe->length*cos(omega*wakeData.t[i]);
+  }
+  wakeData.macroParticleCharge = charge->macroParticleCharge;
+
+  exactDrift(part, np, corgpipe->length/2);
+  track_through_wake(part, np, &wakeData, Pcentral, run, i_pass, charge);
+  exactDrift(part, np, corgpipe->length/2);
+  
+  free(wakeData.t);
+  free(wakeData.W);
+
+}
+

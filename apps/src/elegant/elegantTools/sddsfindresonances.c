@@ -10,10 +10,7 @@
 /* program: sddsfindresonances.c
    Hairong Shang, Oct 2005
    *
-   $Log: sddsfindresonances.c,v $
-   Revision 1.3  2010/10/19 00:14:12  borland
-   Now processes each page separately, so multi-page FMA files can be handled.
-
+   $Log: not supported by cvs2svn $
    Revision 1.2  2010/07/13 21:37:07  borland
    Added ability to increase the number of multipoles using all=<number> syntax.
 

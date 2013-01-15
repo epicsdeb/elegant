@@ -13,6 +13,7 @@
     STRING filename = NULL;
     STRING time_column = NULL;
     STRING amplitude_column = NULL;
+    long refresh_matrix = 0;
     long differential = 1;
     long multiplicative = 0;
     long start_occurence = 0;
@@ -22,5 +23,6 @@
     STRING before = NULL;
     STRING after = NULL;
     long verbose = 0;
+    STRING record = NULL;
 #end
 

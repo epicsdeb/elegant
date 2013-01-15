@@ -33,18 +33,18 @@ B_z = B_0 k_u y \cos k_u z.
 \end{equation}
 In most cases, this gives results that are very close to the exact fields,
 at a savings of 10\% in computation time.
+This is the default mode.
 
 \item The ``ideal'' field:
 \begin{equation}
 B_y = B_0 \cos k_u z,
 \end{equation}
 \begin{equation}
-B_z = 0.
+B_z = B_0 k_u y \cos k_u z.
 \end{equation}
 This is about 10\% faster than the leading-order mode, but less
-precise.  Small differences from results with the exact field may be
-seen.  Generally, these are too small to be a concern.  As a result,
-this is the default mode.
+precise.  Also, {\em it does not include vertical focusing}, so it is
+not generally recommended.
 \end{itemize}
 
 The expressions for the laser field used by this element are from
@@ -68,6 +68,11 @@ poles (a result of the implementation of the undulator terminations).
 Hence, the default integrator is non-adaptive Runge-Kutta.  The
 integration accuracy is controlled via the N\_STEPS parameter.
 N\_STEPS should be about 100 times the number of undulator periods.
+
+The three pole factors are defined so that the trajectory is centered
+about $x=0$ and $x^\prime=0$ with zero dispersion.  This wouldn't be
+true with the standard two-pole termination, which might cause problems 
+overlapping the laser with the electron beam.
 
 The laser time profile can be specified using the \verb|TIME_PROFILE|
 parameter to specify the name of an SDDS file containing the

@@ -13,7 +13,13 @@
  *
  * Michael Borland, 2000
  *
- $Log: sddsmatchtwiss.c,v $
+ $Log: not supported by cvs2svn $
+ Revision 1.5  2011/06/10 16:04:51  shang
+ added -saveMatrices option to save matrices in a file, and -loadMatrices option to load matrices from a file.
+
+ Revision 1.4  2011/06/07 20:51:56  borland
+ Fixed computation of S12 (in some cases it wasn't computed).
+
  Revision 1.3  2010/03/13 22:45:07  borland
  Fixed bug in loading data from twiss file when element name is given.
 
@@ -107,14 +113,17 @@
 #define SET_ONETRANSFORM 4
 #define SET_VERBOSE 5
 #define SET_ZPLANE 6
-#define N_OPTIONS 7
+#define SET_SAVE_MATRICES 7
+#define SET_LOAD_MATRICES 8
+#define N_OPTIONS 9
 
 char *option[N_OPTIONS] = {
-  "pipe", "xplane", "yplane", "nowarnings", "oneTransform", "verbose", 
-  "zplane",
+  "pipe", "xplane", "yplane", "nowarnings", "oneTransform", "verbose",
+  "zplane",  "saveMatrices", "loadMatrices",
 } ;
 
 char *USAGE1="sddsmatchtwiss [-pipe=[input][,output]] [<SDDSinputfile>] [<SDDSoutputfile>]\n\
+  [-saveMatrices=<filename>] [-loadMatrices=<filename>] \
   [-xPlane=[beta=<meters>,alpha=<value>][,{nemittance=<meters>|emittance=<meters>}]\n\
            [,etaValue=<meters>][,etaSlope=<value>]\n\
            [,filename=<filename>[,element=<name>[,occurrence=<number>]]]]\n\
@@ -149,7 +158,7 @@ Program by Michael Borland.  ("__DATE__")\n";
 
 typedef struct {
   double beta, alpha, eta, etap, normEmittance, emittance;
-  unsigned long flags;
+  uint32_t flags;
   double R11, R12, R21, R22;
   double etaBeam, etapBeam;
   char *filename, *element;
@@ -167,7 +176,7 @@ typedef struct {
 
 typedef struct {
   double deltaStDev, tStDev, correlation, alpha, betaGamma, chirp;
-  unsigned long flags;
+  uint32_t flags;
   double R11, R12, R21, R22;
 #define DELTASTDEV_GIVEN  0x0001U
 #define TSTDEV_GIVEN      0x0002U
@@ -184,12 +193,16 @@ long PerformZTransformation(double *t, double *p, double *x, double *xp,
 
 long check_sdds_beam_column(SDDS_TABLE *SDDS_table, char *name, char *units);
 long LoadTwissFromFile(PLANE_SPEC *spec, long yPlane);
+void SetupMatrixFile(char *saveNatrixFile, SDDS_DATASET *save_matrix);
+void SaveMatrix(SDDS_DATASET *save_matrix, PLANE_SPEC xSpec, PLANE_SPEC ySpec, ZPLANE_SPEC zSpec);
+long LoadMatrix(SDDS_DATASET *load_matrix, PLANE_SPEC *xSpec, PLANE_SPEC *ySpec, ZPLANE_SPEC *zSpec, long *xCompute, long *yCompute, long *zCompute);
+void Initialize_Spec(PLANE_SPEC *xSpec, PLANE_SPEC *ySpec, ZPLANE_SPEC *zSpec);
 
 int main(int argc, char **argv)
 {
-  SDDS_DATASET SDDSin, SDDSout;
-  char *inputfile, *outputfile;
-  long i_arg, rows, readCode, noWarnings;
+  SDDS_DATASET SDDSin, SDDSout, save_matrix, load_matrix;
+  char *inputfile, *outputfile, *saveMatricesFile=NULL, *loadMatricesFile=NULL;
+  long i_arg, rows, readCode, noWarnings, saveMatrix=0, xCompute, yCompute, zCompute;
   SCANNED_ARG *s_arg;
   unsigned long pipeFlags;
   PLANE_SPEC xSpec, ySpec;
@@ -208,7 +221,7 @@ int main(int argc, char **argv)
   pipeFlags = noWarnings = 0;
   xSpec.flags = ySpec.flags = zSpec.flags = 0;
   verbose = oneTransform = 0;
-  
+  Initialize_Spec(&xSpec, &ySpec, &zSpec);
   for (i_arg=1; i_arg<argc; i_arg++) {
     if (s_arg[i_arg].arg_type==OPTION) {
       switch (match_string(s_arg[i_arg].list[0], option, N_OPTIONS, 0)) {
@@ -292,6 +305,16 @@ int main(int argc, char **argv)
       case SET_ONETRANSFORM:
         oneTransform = 1;
         break;
+      case SET_SAVE_MATRICES:
+	if (s_arg[i_arg].n_items!=2)
+	  SDDS_Bomb("invalid -saveMatrices syntax");
+	saveMatricesFile = s_arg[i_arg].list[1];
+	break;
+      case SET_LOAD_MATRICES:
+	if (s_arg[i_arg].n_items!=2)
+	  SDDS_Bomb("invalid -loadMatrices syntax");
+	loadMatricesFile = s_arg[i_arg].list[1];
+	break;
       case SET_VERBOSE:
         verbose = 1;
         break;
@@ -311,7 +334,9 @@ int main(int argc, char **argv)
         SDDS_Bomb("too many filenames");
     }
   }
-
+  if (saveMatricesFile && loadMatricesFile)
+    SDDS_Bomb("Save and load matrices can not show up at the same time. (not needed).");
+  
   processFilenames("sddsmatchbeam", &inputfile, &outputfile, pipeFlags, noWarnings, NULL);
 
   if (!SDDS_InitializeInput(&SDDSin, inputfile))
@@ -330,13 +355,28 @@ int main(int argc, char **argv)
   if (!SDDS_InitializeCopy(&SDDSout, &SDDSin, outputfile, "w") ||
       !SDDS_SaveLayout(&SDDSout) || !SDDS_WriteLayout(&SDDSout))
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
-  
+
+  if (saveMatricesFile && (xSpec.flags || ySpec.flags || zSpec.flags)) {
+    SetupMatrixFile(saveMatricesFile, &save_matrix);
+    saveMatrix = 1;
+  }
+  if (loadMatricesFile) {
+    if (!SDDS_InitializeInput(&load_matrix, loadMatricesFile))
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+  }
+  xCompute = yCompute = zCompute = 1;
   while ((readCode=SDDS_ReadPage(&SDDSin))>0) {
     if ((rows=SDDS_RowCount(&SDDSin))==0) {
       if (!SDDS_CopyPage(&SDDSin, &SDDSout) || !SDDS_WritePage(&SDDSout))
         SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
       continue;
     }
+    if (loadMatricesFile && (readCode==1 || !oneTransform)) {
+      if (!LoadMatrix(&load_matrix, &xSpec, &ySpec, &zSpec, &xCompute, &yCompute, &zCompute))
+	SDDS_Bomb("Error -- matrix file has less pages than input file.");
+    } else 
+      xCompute = yCompute = zCompute = readCode==1?1:!oneTransform;
+    
     if (!(x = SDDS_GetColumnInDoubles(&SDDSin, "x")) ||
         !(xp = SDDS_GetColumnInDoubles(&SDDSin, "xp")) ||
         !(y = SDDS_GetColumnInDoubles(&SDDSin, "y")) ||
@@ -344,12 +384,14 @@ int main(int argc, char **argv)
         !(t = SDDS_GetColumnInDoubles(&SDDSin, "t")) ||
         !(p = SDDS_GetColumnInDoubles(&SDDSin, "p")))
       SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
-    if (xSpec.flags)
-      PerformTransformation(x, xp, p, rows, &xSpec, readCode==1?1:!oneTransform);
-    if (ySpec.flags)
-      PerformTransformation(y, yp, p, rows, &ySpec, readCode==1?1:!oneTransform);
     if (zSpec.flags)
-      PerformZTransformation(t, p, x, xp, y, yp, rows, &zSpec, readCode==1?1:!oneTransform);
+      PerformZTransformation(t, p, x, xp, y, yp, rows, &zSpec, zCompute);
+    if (xSpec.flags)
+      PerformTransformation(x, xp, p, rows, &xSpec, xCompute);
+    if (ySpec.flags)
+      PerformTransformation(y, yp, p, rows, &ySpec, yCompute);
+    if (saveMatrix)
+      SaveMatrix(&save_matrix, xSpec, ySpec, zSpec);
     if (verbose) {
       if (xSpec.flags)
         fprintf(stderr, "x transformation: %le, %le, %le, %le, %le, %le\n",
@@ -379,8 +421,15 @@ int main(int argc, char **argv)
     free(t);
     free(p);
   }
+  if (!SDDS_Terminate(&SDDSout) || !SDDS_Terminate(&SDDSin))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+  if (saveMatrix && !SDDS_Terminate(&save_matrix))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+  if (loadMatricesFile && !SDDS_Terminate(&load_matrix))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
   if (readCode==0)
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+  free_scanargs(&s_arg,argc);
   return 0;
 }
 
@@ -452,7 +501,7 @@ long PerformTransformation(double *x, double *xp, double *p, long rows, PLANE_SP
 	factor = sqrt(match->normEmittance/(emit*pAve));
 	match->R11 = (R11 *= factor);
 	match->R12 = (R12 *= factor);
-	match->R22 = (R22 *= factor);
+  	match->R22 = (R22 *= factor);
 	match->R21 = (R21 *= factor);
       }
     }
@@ -472,17 +521,22 @@ long PerformTransformation(double *x, double *xp, double *p, long rows, PLANE_SP
 
   if (match->flags&ETA_GIVEN)
     eta2 = match->eta;
-  else
+  else {
     eta2 = eta1;
+    match->eta = eta2;
+  }
   if (match->flags&ETAP_GIVEN)
     etap2 = match->etap;
-  else
+  else {
     etap2 = etap1;
+    match->etap = etap2;
+  }
   for (i=0; i<rows; i++) {
     x[i] += eta2*p[i];
     xp[i] += etap2*p[i];
     p[i] = (p[i]+1)*pAve;
   }
+  
   return 1;
 }
 
@@ -524,6 +578,8 @@ long PerformZTransformation(double *t, double *p,
       S12 = match->correlation*sqrt(S11*S22);
     else if (match->flags&ALPHAZ_GIVEN)
       S12 = -match->alpha*sqrt(S11*S22)/sqrt(1+sqr(match->alpha));
+    else
+      S12 = -alpha1*sqrt(S11*S22)/sqrt(1+sqr(alpha1));
     if ((emit2 = S11*S22-sqr(S12))<=0)
       SDDS_Bomb("longitudinal emittance is zero");
     else
@@ -546,7 +602,6 @@ long PerformZTransformation(double *t, double *p,
     R21 = match->R21;
     R22 = match->R22;
   }
-
   for (i=0; i<rows; i++) {
     t0 = t[i];
     delta0 = p[i];
@@ -558,7 +613,6 @@ long PerformZTransformation(double *t, double *p,
     for (i=0; i<rows; i++)
       p[i] += t[i]*match->chirp;
   }
-
   if (match->flags&BETAGAMMA_GIVEN) {
     double ratio;
     ratio = sqrt(pAve/match->betaGamma);
@@ -679,3 +733,150 @@ long LoadTwissFromFile(PLANE_SPEC *spec, long yPlane)
   return 1;
 }
 
+void Initialize_Spec(PLANE_SPEC *xSpec, PLANE_SPEC *ySpec, ZPLANE_SPEC *zSpec)
+{
+  xSpec->beta = xSpec->alpha = xSpec->eta = xSpec->etap = xSpec->normEmittance = xSpec->emittance = xSpec->etaBeam = xSpec->etapBeam = 0;
+  ySpec->beta = ySpec->alpha = ySpec->eta = ySpec->etap = ySpec->normEmittance = ySpec->emittance = ySpec->etaBeam = ySpec->etapBeam = 0;
+  zSpec->deltaStDev = zSpec->tStDev = zSpec->correlation = zSpec->alpha = zSpec->betaGamma = zSpec->chirp =0;
+}
+
+void SetupMatrixFile(char *saveMatrixFile, SDDS_DATASET *save_matrix) {
+  if (!SDDS_InitializeOutput(save_matrix, SDDS_BINARY, 1, "Matrix data", "Matrix data", saveMatrixFile))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+  if (!SDDS_DefineSimpleParameter(save_matrix, "xMatrixFlag", NULL, SDDS_ULONG) ||
+      !SDDS_DefineSimpleParameter(save_matrix, "yMatrixFlag", NULL, SDDS_ULONG) ||
+      !SDDS_DefineSimpleParameter(save_matrix, "zMatrixFlag", NULL, SDDS_ULONG) ||
+      !SDDS_DefineSimpleParameter(save_matrix, "betax", NULL, SDDS_DOUBLE) ||
+      !SDDS_DefineSimpleParameter(save_matrix, "alphax", NULL, SDDS_DOUBLE) ||
+      !SDDS_DefineSimpleParameter(save_matrix, "etax", NULL, SDDS_DOUBLE) ||
+      !SDDS_DefineSimpleParameter(save_matrix, "etapx", NULL, SDDS_DOUBLE) ||
+      !SDDS_DefineSimpleParameter(save_matrix, "normEmittancex", NULL, SDDS_DOUBLE) ||
+      !SDDS_DefineSimpleParameter(save_matrix, "emittancex", NULL, SDDS_DOUBLE) ||
+      !SDDS_DefineSimpleParameter(save_matrix, "etaBeamx", NULL, SDDS_DOUBLE) ||
+      !SDDS_DefineSimpleParameter(save_matrix, "etapBeamx", NULL, SDDS_DOUBLE) ||
+      !SDDS_DefineSimpleParameter(save_matrix, "betay", NULL, SDDS_DOUBLE) ||
+      !SDDS_DefineSimpleParameter(save_matrix, "alphay", NULL, SDDS_DOUBLE) ||
+      !SDDS_DefineSimpleParameter(save_matrix, "etay", NULL, SDDS_DOUBLE) ||
+      !SDDS_DefineSimpleParameter(save_matrix, "etapy", NULL, SDDS_DOUBLE) ||
+      !SDDS_DefineSimpleParameter(save_matrix, "normEmittancey", NULL, SDDS_DOUBLE) ||
+      !SDDS_DefineSimpleParameter(save_matrix, "emittancey", NULL, SDDS_DOUBLE) ||
+      !SDDS_DefineSimpleParameter(save_matrix, "etaBeamy", NULL, SDDS_DOUBLE) ||
+      !SDDS_DefineSimpleParameter(save_matrix, "etapBeamy", NULL, SDDS_DOUBLE) ||
+      !SDDS_DefineSimpleParameter(save_matrix, "deltaStDev", NULL, SDDS_DOUBLE) ||
+      !SDDS_DefineSimpleParameter(save_matrix, "tStDev", NULL, SDDS_DOUBLE) ||
+      !SDDS_DefineSimpleParameter(save_matrix, "correlation", NULL, SDDS_DOUBLE) ||
+      !SDDS_DefineSimpleParameter(save_matrix, "alphaz", NULL, SDDS_DOUBLE) ||
+      !SDDS_DefineSimpleParameter(save_matrix, "betaGamma", NULL, SDDS_DOUBLE) ||
+      !SDDS_DefineSimpleParameter(save_matrix, "chirp", NULL, SDDS_DOUBLE) ||
+      !SDDS_DefineSimpleColumn(save_matrix, "plane", NULL, SDDS_STRING) ||
+      !SDDS_DefineSimpleColumn(save_matrix, "m1", NULL, SDDS_DOUBLE) ||
+      !SDDS_DefineSimpleColumn(save_matrix, "m2", NULL, SDDS_DOUBLE) ||
+      !SDDS_WriteLayout(save_matrix))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+}
+      
+void SaveMatrix(SDDS_DATASET *save_matrix, PLANE_SPEC xSpec, PLANE_SPEC ySpec, ZPLANE_SPEC zSpec)
+{
+  /*matrix file has 6 rows, first 2 rows for x matrix, middle 2 rows for y matrix, and the last 2 rows for z matrix */
+  if (!SDDS_StartPage(save_matrix, 6) ||
+      !SDDS_SetParameters(save_matrix, SDDS_SET_BY_NAME | SDDS_PASS_BY_VALUE, 
+			  "xMatrixFlag", xSpec.flags, 
+			  "yMatrixFlag", ySpec.flags, "zMatrixFlag", zSpec.flags,
+			  "betax", xSpec.flags?xSpec.beta:0, "alphax", xSpec.flags?xSpec.alpha:0,
+			  "etax", xSpec.flags?xSpec.eta:0, "etapx", xSpec.flags?xSpec.etap:0,
+			  "normEmittancex", xSpec.flags?xSpec.normEmittance:0, "emittancex", xSpec.flags?xSpec.emittance:0,
+			  "etaBeamx", xSpec.flags?xSpec.etaBeam:0, "etapBeamx", xSpec.flags?xSpec.etapBeam:0,
+			  "betay", ySpec.flags?ySpec.beta:0, "alphay", ySpec.flags?ySpec.alpha:0,
+			  "etay", ySpec.flags?ySpec.eta:0, "etapy", ySpec.flags?ySpec.etap:0,
+			  "normEmittancey", ySpec.flags?ySpec.normEmittance:0, "emittancey", ySpec.flags?ySpec.emittance:0,
+			  "etaBeamy", ySpec.flags?ySpec.etaBeam:0, "etapBeamy", ySpec.flags?ySpec.etapBeam:0,
+			  "deltaStDev",zSpec.flags?zSpec.deltaStDev:0, "tStDev", zSpec.flags?zSpec.tStDev:0,
+			  "correlation", zSpec.flags?zSpec.correlation:0, "alphaz", zSpec.flags?zSpec.alpha:0,
+			  "betaGamma", zSpec.flags?zSpec.betaGamma:0, "chirp", zSpec.flags?zSpec.chirp:0,
+			  NULL) ||
+      !SDDS_SetRowValues(save_matrix, SDDS_SET_BY_NAME|SDDS_PASS_BY_VALUE, 0,
+			 "plane", "x1", "m1", xSpec.R11, "m2", xSpec.R12, NULL) ||
+      
+      !SDDS_SetRowValues(save_matrix, SDDS_SET_BY_NAME|SDDS_PASS_BY_VALUE, 1,
+			 "plane", "x2", "m1", xSpec.R21, "m2", xSpec.R22, NULL) ||
+      !SDDS_SetRowValues(save_matrix, SDDS_SET_BY_NAME|SDDS_PASS_BY_VALUE, 2,
+			 "plane", "y1", "m1", ySpec.R11, "m2", ySpec.R12, NULL) ||
+      !SDDS_SetRowValues(save_matrix, SDDS_SET_BY_NAME|SDDS_PASS_BY_VALUE, 3,
+			 "plane", "y2", "m1", ySpec.R21, "m2", ySpec.R22, NULL) ||
+      !SDDS_SetRowValues(save_matrix, SDDS_SET_BY_NAME|SDDS_PASS_BY_VALUE, 4,
+			 "plane", "z1", "m1", zSpec.R11, "m2", zSpec.R12, NULL) ||
+      !SDDS_SetRowValues(save_matrix, SDDS_SET_BY_NAME|SDDS_PASS_BY_VALUE, 5,
+			 "plane", "z2", "m1", zSpec.R21, "m2", zSpec.R22, NULL) ||
+      !SDDS_WritePage(save_matrix))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+}
+
+long LoadMatrix(SDDS_DATASET *load_matrix, PLANE_SPEC *xSpec, PLANE_SPEC *ySpec, ZPLANE_SPEC *zSpec, long *xCompute,
+		long *yCompute, long *zCompute)
+{
+  uint32_t xFlag, yFlag, zFlag;
+  long rows;
+  double *m1=NULL, *m2=NULL;
+  if (SDDS_ReadPage(load_matrix)<=0)
+    return 0;
+  
+  if ((rows=SDDS_CountRowsOfInterest(load_matrix))!=6)
+    SDDS_Bomb("Matrix file should have 6 rows per page!");
+  
+  if (!SDDS_GetParameterAsLong(load_matrix, "xMatrixFlag", &xFlag) ||
+      !SDDS_GetParameterAsLong(load_matrix, "yMatrixFlag", &yFlag) ||
+      !SDDS_GetParameterAsLong(load_matrix, "zMatrixFlag", &zFlag) ||
+      !(m1=SDDS_GetColumnInDoubles(load_matrix, "m1")) ||
+      !(m2=SDDS_GetColumnInDoubles(load_matrix, "m2")))
+    SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+  if (xFlag) {
+    xSpec->flags = xFlag;
+    if (!SDDS_GetParameterAsDouble(load_matrix, "betax", &(xSpec->beta)) ||
+	!SDDS_GetParameterAsDouble(load_matrix, "alphax", &(xSpec->alpha)) ||
+	!SDDS_GetParameterAsDouble(load_matrix, "etax", &(xSpec->eta)) ||
+	!SDDS_GetParameterAsDouble(load_matrix, "etapx", &(xSpec->etap)) ||
+	!SDDS_GetParameterAsDouble(load_matrix, "normEmittancex", &(xSpec->normEmittance)) ||
+	!SDDS_GetParameterAsDouble(load_matrix, "emittancex", &(xSpec->emittance)) ||
+	!SDDS_GetParameterAsDouble(load_matrix, "etaBeamx", &(xSpec->etaBeam)) ||
+	!SDDS_GetParameterAsDouble(load_matrix, "etapBeamx", &(xSpec->etapBeam)))
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+    xSpec->R11 = m1[0];
+    xSpec->R12 = m2[0];
+    xSpec->R21 = m1[1];
+    xSpec->R22 = m2[1];
+    *xCompute = 0;
+  }
+  if (yFlag) {
+    ySpec->flags = yFlag;
+    if (!SDDS_GetParameterAsDouble(load_matrix, "betay", &(ySpec->beta)) ||
+	!SDDS_GetParameterAsDouble(load_matrix, "alphay", &(ySpec->alpha)) ||
+	!SDDS_GetParameterAsDouble(load_matrix, "etay", &(ySpec->eta)) ||
+	!SDDS_GetParameterAsDouble(load_matrix, "etapy", &(ySpec->etap)) ||
+	!SDDS_GetParameterAsDouble(load_matrix, "normEmittancey", &(ySpec->normEmittance)) ||
+	!SDDS_GetParameterAsDouble(load_matrix, "emittancey", &(ySpec->emittance)) ||
+	!SDDS_GetParameterAsDouble(load_matrix, "etaBeamy", &(ySpec->etaBeam)) ||
+	!SDDS_GetParameterAsDouble(load_matrix, "etapBeamy", &(ySpec->etapBeam)))
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+    ySpec->R11 = m1[2];
+    ySpec->R12 = m2[2];
+    ySpec->R21 = m1[3];
+    ySpec->R22 = m2[3];
+    *yCompute = 0;
+  }
+  if (zFlag) {
+    zSpec->flags = zFlag;
+    if (!SDDS_GetParameterAsDouble(load_matrix, "deltaStDev", &(zSpec->deltaStDev)) ||
+	!SDDS_GetParameterAsDouble(load_matrix, "tStDev", &(zSpec->tStDev)) ||
+	!SDDS_GetParameterAsDouble(load_matrix, "correlation", &(zSpec->correlation)) ||
+	!SDDS_GetParameterAsDouble(load_matrix, "alphaz", &(zSpec->alpha)) ||
+	!SDDS_GetParameterAsDouble(load_matrix, "betaGamma", &(zSpec->betaGamma)) ||
+	!SDDS_GetParameterAsDouble(load_matrix, "chirp", &(zSpec->chirp)))
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+    zSpec->R11 = m1[4];
+    zSpec->R12 = m2[4];
+    zSpec->R21 = m1[5];
+    zSpec->R22 = m2[5];
+    *zCompute = 0;
+  }
+  return 1;
+}

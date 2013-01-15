@@ -2,7 +2,10 @@
 # \
 exec oagtclsh "$0" "$@"
 
-# $Log: correctCoupling,v $
+# $Log: not supported by cvs2svn $
+# Revision 1.7  2011/06/14 18:09:04  borland
+# Added use of "failed" semaphores.
+#
 # Revision 1.6  2010/01/25 22:51:52  borland
 # Copy the correct parameter file for case with emittance target.
 #
@@ -23,7 +26,7 @@ set auto_path [linsert $auto_path 0  /usr/local/oag/apps/lib/$env(HOST_ARCH)]
 set auto_path [linsert $auto_path 0 /usr/local/oag/lib_patch/$env(HOST_ARCH)]
 APSStandardSetup
 
-set usage {usage: correctCoupling -rootname <string> -input <parameterFile> -eyTarget <pm>  -inverse <filename> -diagnostic <markerName> -skewLimit <K1Value> -iterations <num> -order {1|2}}
+set usage {usage: correctCoupling -rootname <string> -input <parameterFile> -eyTarget <pm>  -inverse <filename> -diagnostic <markerName> -skewLimit <K1Value> -fraction <value> -iterations <num> -order {1|2} -energy <MeV>}
 set inverse ""
 set rootname ""
 set input ""
@@ -33,9 +36,10 @@ set iterations 1
 set diagnostic S35BM#1
 set skewLimit 0.12
 set order 2
+set energy 7e3
 set srcDir $OAGGlobal(OAGAppConfigDataDirectory)/elegant
 set args $argv
-if {[APSStrictParseArguments {rootname iterations input eyTarget fraction inverse diagnostic skewLimit srcDir order}] || ![string length $rootname] || ![string length $input] || \
+if {[APSStrictParseArguments {rootname iterations input eyTarget fraction inverse diagnostic skewLimit srcDir order energy}] || ![string length $rootname] || ![string length $input] || \
     ![string length $inverse]} {
     return -code error "$usage"
 }
@@ -67,9 +71,12 @@ flush $fdo
 set input0 $input
 for {set iteration 1} {$iteration<=$iterations} {incr iteration} {
     # Compute moments and response matrix with input errors
-    catch {exec elegant $srcDir/etayCPCorrTemplate.ele -macro=rootname=${rootname}-original,inputParameters=$input,hcPattern=$hcPattern,vcPattern=$vcPattern,lattice=$lattice,beamline=$beamline,bpmPattern=$bpmPattern,order=$order > ${rootname}-original.log} result
+    catch {exec elegant $srcDir/etayCPCorrTemplate.ele -macro=pCentralMeV=$energy,rootname=${rootname}-original,inputParameters=$input,hcPattern=$hcPattern,vcPattern=$vcPattern,lattice=$lattice,beamline=$beamline,bpmPattern=$bpmPattern,order=$order > ${rootname}-original.log} result
     puts $fdo "Compute moments with input errors: $result"
     flush $fdo
+    if [file exists ${rootname}-original.failed] {
+        return -code error "correction failed"
+    }
     if $iteration==1 {
         # Want to keep the actual original values for later review
         file copy -force $rootname-original.mom $rootname-original.mom0
@@ -131,11 +138,11 @@ file delete -force $rootname-original.mom0 $rootname-original.twi0
 
 # In the next step, we evaluate the correction.
 catch {exec elegant $srcDir/couplingCorrTemplate1.ele \
-         -macro=lattice=$lattice,beamline=$beamline,rootname=${rootname},inputParameters=$input,eyTarget=$eyTarget \
+         -macro=pCentralMeV=$energy,lattice=$lattice,beamline=$beamline,rootname=${rootname},inputParameters=$input,eyTarget=$eyTarget \
          -macro=bpmPattern=$bpmPattern,hcPattern=$hcPattern,vcPattern=$vcPattern \
          -macro=order=$order > $rootname.log} result
 puts $fdo "$result"
-if ![file exists $rootname.done] {
+if {![file exists $rootname.done] || [file exists $rootname.failed]} {
     puts stderr "Run failed."
     exit 1
 }
@@ -168,13 +175,13 @@ if ![string match "*#*" $diagnostic] {
 }
 set diagnostic0 [os editstring "S/#/10D" $diagnostic]
 catch {exec elegant $rootname.ele \
-         -macro=lattice=$lattice,beamline=$beamline,rootname=${rootname},inputParameters=$input,eyTarget=$eyTarget \
+         -macro=pCentralMeV=$energy,lattice=$lattice,beamline=$beamline,rootname=${rootname},inputParameters=$input,eyTarget=$eyTarget \
          -macro=bpmPattern=$bpmPattern,hcPattern=$hcPattern,vcPattern=$vcPattern \
          -macro=diagnostic0=$diagnostic0,diagnostic=$diagnostic,order=$order > $rootname.log} result
 puts $fdo "Correct coupling: $result"
 flush $fdo
 
-if ![file exists $rootname.done] {
+if {![file exists $rootname.done] || [file exists $rootname.failed]} {
     puts stderr "Run failed."
     exit 1
 }

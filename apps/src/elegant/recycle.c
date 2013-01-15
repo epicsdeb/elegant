@@ -19,6 +19,9 @@ This also decreases memory fragmentation, and freeing structures
 #ifndef RECYCLE
 # include "recycle.h"
 #endif
+
+void exitElegant(long status);
+
 reroot *remkroot(size)
 size_t  size;
 {

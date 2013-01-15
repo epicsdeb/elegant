@@ -60,3 +60,30 @@ command will be imposed inside this element, with the following rules/limitation
 \item The apertures are assumed to be rectangular, even if the \verb|ELLIPTICAL| qualifier
  is set for \verb|MAXAMP|.
 \end{itemize}
+
+Fringe field effects  are based on publications of D.  Zhuo {\em et al.} \cite{Zhou-IPAC10} and  J. Irwin {\em et
+  al.} \cite{Irwin-PAC95}, as well as unpublished work of C. X. Wang (ANL).  The fringe field is characterized by 
+10 integrals given in equations 19, 20, and 21 of \cite{Zhou-IPAC10}.  However, the values input into {\tt elegant}
+should be normalized by $K_1$ or $K_1^2$, as appropriate.
+
+For the exit-side fringe field, let $s_1$ be the center of the magnet, $s_0$ be the location of the nominal end of the magnet
+(for a hard-edge model), and let $s_2$ be a point well outside the magnet.  
+Using $K_{1,he}(s)$ to represent the hard edge model and $K_1(s)$ the actual field profile, we 
+define the normalized difference as $\tilde{k}(s) = (K_1(s) - K_{1,he}(s))/K_1(s_1)$.  (Thus, $\tilde{k}(s) = \tilde{K}(s)/K_0$, using
+the notation of Zhou {\em et al.})
+
+The integrals to be input to {\tt elegant} are defined as 
+\begin{eqnarray}
+i_0^- = \int_{s_1}^{s_0} \tilde{k}(s) ds & & i_0^+ = \int_{s_0}^{s_2} \tilde{k}(s) ds \\
+i_1^- = \int_{s_1}^{s_0} \tilde{k}(s) (s-s_0) ds & & i_1^+ = \int_{s_0}^{s_2} \tilde{k}(s) (s-s_0) ds \\
+i_2^- = \int_{s_1}^{s_0} \tilde{k}(s) (s-s_0)^2 ds & & i_2^+ = \int_{s_0}^{s_2} \tilde{k}(s) (s-s_0)^2 ds \\
+i_3^- = \int_{s_1}^{s_0} \tilde{k}(s) (s-s_0)^3 ds & & i_3^+ = \int_{s_0}^{s_2} \tilde{k}(s) (s-s_0)^3 ds \\
+\lambda_2^- = \int_{s_1}^{s_0} ds \int_s^{s_0} ds\prime \tilde{k}(s) \tilde{k}(s\prime) (s\prime-s) & & 
+\lambda_2^+ = \int_{s_0}^{s_2} ds \int_s^{s_2} ds\prime \tilde{k}(s) \tilde{k}(s\prime) (s\prime-s) 
+\end{eqnarray}
+
+Normally, the effects are dominated by $i_1^-$ and $i_1^+$.  
+
+The \verb|EDGE1_EFFECTS| and \verb|EDGE2_EFFECTS| parameters can be used to turn fringe field effects on and off, but also
+to control the order of the implementation.  If the value is 1, linear fringe effects are included.  If the value is 2, 
+leading-order (cubic) nonlinear effects are included.  If the value is 3 or higher, higher order effects are included.

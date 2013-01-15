@@ -235,14 +235,14 @@ void zero_beam_sums(
 {
   long i, j, k;
   for (i=0; i<n; i++) {
-    for (j=0; j<6; j++)
+    for (j=0; j<7; j++)
       sums[i].maxabs[j] = 0;
-    for (j=0; j<6; j++)
+    for (j=0; j<7; j++)
       sums[i].min[j] = -(sums[i].max[j] = -DBL_MAX);
-    for (j=0; j<6; j++)
+    for (j=0; j<7; j++)
       sums[i].centroid[j] = 0;
-    for (j=0; j<6; j++)
-      for (k=j; k<6; k++)
+    for (j=0; j<7; j++)
+      for (k=j; k<7; k++)
         sums[i].sigma[j][k] = 0;
     sums[i].n_part = sums[i].z = sums[i].p0 = 0;
   }
@@ -256,16 +256,16 @@ void accumulate_beam_sums(
                           )
 {
   long i_part, i, j;
-  double centroid[6];
+  double centroid[7], part[7], *timeCoord;
   double value;
   long active = 1;
   double Sij;
 #ifdef USE_KAHAN
-  double errorCen[6], errorSig[21];
+  double errorCen[7], errorSig[28];
 #endif
 
 #if USE_MPI  /* In the non-parallel mode, it will be same with the serial version */ 
-  double buffer[6], Sij_p[21], Sij_total[21];
+  double buffer[7], Sij_p[28], Sij_total[28];
   long n_total, offset=0, index;  
 #ifdef USE_KAHAN
   double error_sum=0.0, error_total=0.0,
@@ -273,13 +273,14 @@ void accumulate_beam_sums(
     **sumMatrixSig, **errorMatrixSig,
     *sumArray, *errorArray;
   long k;
-  sumMatrixCen = (double**)czarray_2d(sizeof(**sumMatrixCen), n_processors, 6); 
-  errorMatrixCen = (double**)czarray_2d(sizeof(**errorMatrixCen), n_processors, 6);
-  sumMatrixSig = (double**)czarray_2d(sizeof(**sumMatrixSig), n_processors, 21);
-  errorMatrixSig = (double**)czarray_2d(sizeof(**errorMatrixSig), n_processors, 21);
+  sumMatrixCen = (double**)czarray_2d(sizeof(**sumMatrixCen), n_processors, 7); 
+  errorMatrixCen = (double**)czarray_2d(sizeof(**errorMatrixCen), n_processors, 7);
+  sumMatrixSig = (double**)czarray_2d(sizeof(**sumMatrixSig), n_processors, 28);
+  errorMatrixSig = (double**)czarray_2d(sizeof(**errorMatrixSig), n_processors, 28);
   sumArray = malloc(sizeof(double) * n_processors);
   errorArray = malloc(sizeof(double) * n_processors);
 #endif
+
   if (notSinglePart) {
     if (((parallelStatus==trueParallel) && isSlave) || ((parallelStatus!=trueParallel) && isMaster))
       active = 1;
@@ -287,7 +288,10 @@ void accumulate_beam_sums(
       active = 0;
   }
 #endif
-    
+
+  timeCoord = malloc(sizeof(double)*n_part);
+  computeTimeCoordinates(timeCoord, p_central, coord, n_part);
+  
   if (!sums->n_part)
     sums->p0 = p_central;
 
@@ -307,15 +311,15 @@ void accumulate_beam_sums(
 	}
       }
       /* compute centroids for present beam and add in to existing centroid data */
-      for (i=0; i<6; i++) {
+      for (i=0; i<7; i++) {
 #ifdef USE_KAHAN
         errorCen[i] = 0.0;
 #endif
 	for (centroid[i]=i_part=0; i_part<n_part; i_part++) {
 #ifndef USE_KAHAN
-	  centroid[i] += coord[i_part][i];
+	  centroid[i] += i<6 ? coord[i_part][i] : timeCoord[i_part];
 #else
-	centroid[i] = KahanPlus(centroid[i], coord[i_part][i], &errorCen[i]); 
+	centroid[i] = KahanPlus(centroid[i], i<6 ? coord[i_part][i] : timeCoord[i_part], &errorCen[i]); 
 #endif
 	}
 	if (!USE_MPI || !notSinglePart) {	
@@ -344,13 +348,13 @@ void accumulate_beam_sums(
 	}
 	/* compute centroid sum over processors */
 #ifndef USE_KAHAN 
-	MPI_Allreduce(centroid, buffer, 6, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-	memcpy(centroid, buffer, sizeof(double)*6);
+	MPI_Allreduce(centroid, buffer, 7, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+	memcpy(centroid, buffer, sizeof(double)*7);
 #else
-	MPI_Allgather(centroid,6,MPI_DOUBLE,&sumMatrixCen[0][0],6,MPI_DOUBLE,MPI_COMM_WORLD);
+	MPI_Allgather(centroid,7,MPI_DOUBLE,&sumMatrixCen[0][0],7,MPI_DOUBLE,MPI_COMM_WORLD);
 	/* compute error sum over processors */
-      	MPI_Allgather(errorCen,6,MPI_DOUBLE,&errorMatrixCen[0][0],6,MPI_DOUBLE,MPI_COMM_WORLD); 
-	for (i=0; i<6; i++) {
+      	MPI_Allgather(errorCen,7,MPI_DOUBLE,&errorMatrixCen[0][0],7,MPI_DOUBLE,MPI_COMM_WORLD); 
+	for (i=0; i<7; i++) {
 	  error_sum = 0.0;
           centroid[i] = 0.0;
           /* extract the columnwise array from the matrix */
@@ -363,7 +367,7 @@ void accumulate_beam_sums(
 	/* compute total number of particles over processors */
 	MPI_Allreduce(&n_part, &n_total, 1, MPI_LONG, MPI_SUM, MPI_COMM_WORLD);
 	if (n_total)
-	  for (i=0; i<6; i++) {
+	  for (i=0; i<7; i++) {
 	    sums->centroid[i] = (sums->centroid[i]*sums->n_part+centroid[i])/(sums->n_part+n_total);
 	    centroid[i] /= n_total;
 	  }     
@@ -380,35 +384,44 @@ void accumulate_beam_sums(
         if ((value=fabs(coord[i_part][i]-centroid[i]))>sums->maxabs[i])
           sums->maxabs[i] = value;
         if ((value=coord[i_part][i]-centroid[i])>sums->max[i])
-  	  sums->max[i] = value;
+          sums->max[i] = value;
         if ((value=coord[i_part][i]-centroid[i])<sums->min[i])
-	  sums->min[i] = value;
+          sums->min[i] = value;
+      }
+      i = 6;  /* time coordinate */
+      for (i_part=0; i_part<n_part; i_part++) {
+        if ((value=fabs(timeCoord[i_part]-centroid[i]))>sums->maxabs[i])
+          sums->maxabs[i] = value;
+        if ((value=timeCoord[i_part]-centroid[i])>sums->max[i])
+          sums->max[i] = value;
+        if ((value=timeCoord[i_part]-centroid[i])<sums->min[i])
+          sums->min[i] = value;
       }
     }
 #if USE_MPI
     if (notSinglePart) {
       if (parallelStatus==trueParallel) {
 	/* compute sums->maxabs over processors*/
-	MPI_Allreduce(sums->maxabs, buffer, 6, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD); 
-	memcpy(sums->maxabs, buffer, sizeof(double)*6);     
+	MPI_Allreduce(sums->maxabs, buffer, 7, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD); 
+	memcpy(sums->maxabs, buffer, sizeof(double)*7);     
 	/* compute sums->max over processors */
-	MPI_Allreduce(sums->max, buffer, 6, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD); 
-	memcpy(sums->max, buffer, sizeof(double)*6);      
+	MPI_Allreduce(sums->max, buffer, 7, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD); 
+	memcpy(sums->max, buffer, sizeof(double)*7);      
 	/* compute sums->min over processors */
-	MPI_Allreduce(sums->min, buffer, 6, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD); 
-	memcpy(sums->min, buffer, sizeof(double)*6);  
+	MPI_Allreduce(sums->min, buffer, 7, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD); 
+	memcpy(sums->min, buffer, sizeof(double)*7);  
       }    
     }
 #endif    
     /* compute Sigma[i][j] for present beam and add to existing data */
     if (active) {
-      for (i=0; i<6; i++) {
+      for (i=0; i<7; i++) {
 #if USE_MPI
 	if ((parallelStatus==trueParallel) && notSinglePart)
 	  if (i>=1)        
 	    offset += i-1;
 #endif
-	for (j=i; j<6; j++) {
+	for (j=i; j<7; j++) {
 #ifdef USE_KAHAN
           errorSig[j]=0.0;
 #endif
@@ -416,34 +429,34 @@ void accumulate_beam_sums(
 #if (!USE_MPI) 
 	  for (Sij=i_part=0; i_part<n_part; i_part++) {
 #ifndef USE_KAHAN
-	    Sij += (coord[i_part][i]-centroid[i])*(coord[i_part][j]-centroid[j]);
+	    Sij += ((i<6?coord[i_part][i]:timeCoord[i_part])-centroid[i])*((j<6?coord[i_part][j]:timeCoord[i_part])-centroid[j]);
 #else
-	    Sij = KahanPlus(Sij, (coord[i_part][i]-centroid[i])*(coord[i_part][j]-centroid[j]), &errorSig[j]); 
+	    Sij = KahanPlus(Sij, ((i<6?coord[i_part][i]:timeCoord[i_part])-centroid[i])*((j<6?coord[i_part][j]:timeCoord[i_part])-centroid[j]), &errorSig[j]); 
 #endif
 	  }
 	  sums->sigma[i][j] = (sums->sigma[i][j]*sums->n_part+Sij)/(sums->n_part+n_part);
 #else 
 	  if (notSinglePart) {
 	    if (parallelStatus==trueParallel) {
-	      index = 5*i+j-offset;
+	      index = 6*i+j-offset;
 	      Sij_p[index] = 0;
 #ifdef USE_KAHAN
               errorSig[index] = 0.0;
 #endif
 	      for (i_part=0; i_part<n_part; i_part++) {
 #ifndef USE_KAHAN
-		Sij_p[index] += (coord[i_part][i]-centroid[i])*(coord[i_part][j]-centroid[j]);
+		Sij_p[index] += ((i<6?coord[i_part][i]:timeCoord[i_part])-centroid[i])*((j<6?coord[i_part][j]:timeCoord[i_part])-centroid[j]);
 #else
-	        Sij_p[index] = KahanPlus(Sij_p[index], (coord[i_part][i]-centroid[i])*(coord[i_part][j]-centroid[j]), &errorSig[index]); 
+	        Sij_p[index] = KahanPlus(Sij_p[index], ((i<6?coord[i_part][i]:timeCoord[i_part])-centroid[i])*((j<6?coord[i_part][j]:timeCoord[i_part])-centroid[j]), &errorSig[index]); 
 #endif
 	      }
 	    }
 	    else if (isMaster) {
 	      for (Sij=i_part=0; i_part<n_part; i_part++) {
 #ifndef USE_KAHAN
-		Sij += (coord[i_part][i]-centroid[i])*(coord[i_part][j]-centroid[j]);
+		Sij += ((i<6?coord[i_part][i]:timeCoord[i_part])-centroid[i])*((j<6?coord[i_part][j]:timeCoord[i_part])-centroid[j]);
 #else
-		Sij = KahanPlus(Sij, (coord[i_part][i]-centroid[i])*(coord[i_part][j]-centroid[j]), &errorSig[j]); 
+		Sij = KahanPlus(Sij, ((i<6?coord[i_part][i]:timeCoord[i_part])-centroid[i])*((j<6?coord[i_part][j]:timeCoord[i_part])-centroid[j]), &errorSig[j]); 
 #endif
 	      }
 	      if (n_part)
@@ -453,9 +466,9 @@ void accumulate_beam_sums(
 	  else { /* Single particle case */
 	    for (Sij=i_part=0; i_part<n_part; i_part++) {
 #ifndef USE_KAHAN
-	      Sij += (coord[i_part][i]-centroid[i])*(coord[i_part][j]-centroid[j]);
+	      Sij += ((i<6?coord[i_part][i]:timeCoord[i_part])-centroid[i])*((j<6?coord[i_part][j]:timeCoord[i_part])-centroid[j]);
 #else
-	      Sij = KahanPlus(Sij, (coord[i_part][i]-centroid[i])*(coord[i_part][j]-centroid[j]), &errorSig[j]); 
+	      Sij = KahanPlus(Sij, ((i<6?coord[i_part][i]:timeCoord[i_part])-centroid[i])*((j<6?coord[i_part][j]:timeCoord[i_part])-centroid[j]), &errorSig[j]); 
 #endif
 	    }
 	    if (n_part)
@@ -469,24 +482,24 @@ void accumulate_beam_sums(
     if (notSinglePart) {
       if (parallelStatus==trueParallel) {
 	if (isMaster) {
-	  memset(Sij_p, 0.0,  sizeof(double)*21);
+	  memset(Sij_p, 0.0,  sizeof(double)*28);
 #ifdef USE_KAHAN
-          memset(errorSig, 0.0,  sizeof(double)*21);
+          memset(errorSig, 0.0,  sizeof(double)*28);
 #endif
 	}
 	/* compute Sij sum over processors */
 #ifndef USE_KAHAN
-	MPI_Allreduce(Sij_p, Sij_total, 21, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+	MPI_Allreduce(Sij_p, Sij_total, 28, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 #else
-        MPI_Allgather(Sij_p, 21, MPI_DOUBLE, &sumMatrixSig[0][0], 21, MPI_DOUBLE, MPI_COMM_WORLD);
+        MPI_Allgather(Sij_p, 28, MPI_DOUBLE, &sumMatrixSig[0][0], 28, MPI_DOUBLE, MPI_COMM_WORLD);
 	/* compute error sum over processors */
-	MPI_Allgather(errorSig, 21, MPI_DOUBLE, &errorMatrixSig[0][0], 21, MPI_DOUBLE,MPI_COMM_WORLD);
+	MPI_Allgather(errorSig, 28, MPI_DOUBLE, &errorMatrixSig[0][0], 28, MPI_DOUBLE,MPI_COMM_WORLD);
         offset = 0;
-	for (i=0; i<6; i++) {
+	for (i=0; i<7; i++) {
 	  if (i>=1)        
 	    offset += i-1;
-	  for (j=i; j<6; j++) {
-	    index = 5*i+j-offset;
+	  for (j=i; j<7; j++) {
+	    index = 6*i+j-offset;
 	    error_sum = 0.0;
 	    /* extract the columnwise array from the matrix */
 	    for (k=0; k<n_processors; k++) {         
@@ -502,11 +515,11 @@ void accumulate_beam_sums(
 #endif
 	if (n_total) {
 	  offset = 0; 
-	  for (i=0; i<6; i++) {
+	  for (i=0; i<7; i++) {
 	    if (i>=1)
 	      offset += i-1;
-	    for (j=i; j<6; j++) {
-	      index = 5*i+j-offset;
+	    for (j=i; j<7; j++) {
+	      index = 6*i+j-offset;
 	      sums->sigma[i][j] = (sums->sigma[i][j]*sums->n_part+Sij_total[index])/(sums->n_part+n_total);
 	    }
 	  }
@@ -541,15 +554,16 @@ void accumulate_beam_sums(
 
 #if USE_MPI
 #ifdef USE_KAHAN
-  free_czarray_2d((void**)sumMatrixCen, n_processors, 6); 
-  free_czarray_2d((void**)errorMatrixCen, n_processors, 6);
-  free_czarray_2d((void**)sumMatrixSig, n_processors, 21);
-  free_czarray_2d((void**)errorMatrixSig, n_processors, 21);
+  free_czarray_2d((void**)sumMatrixCen, n_processors, 7); 
+  free_czarray_2d((void**)errorMatrixCen, n_processors, 7);
+  free_czarray_2d((void**)sumMatrixSig, n_processors, 28);
+  free_czarray_2d((void**)errorMatrixSig, n_processors, 28);
   free(sumArray);
   free(errorArray);
 #endif
 #endif
-
+  free(timeCoord);
+  
 }
 
 void copy_beam_sums(
@@ -559,12 +573,12 @@ void copy_beam_sums(
 {
   long i, j;
 
-  for (i=0; i<6; i++) {
+  for (i=0; i<7; i++) {
     target->maxabs[i] = source->maxabs[i];
   }
-  for (i=0; i<6; i++) {
+  for (i=0; i<7; i++) {
     target->centroid[i] = source->centroid[i];
-    for (j=i; j<6; j++)
+    for (j=i; j<7; j++)
       target->sigma[i][j] = source->sigma[i][j];
   }
   target->n_part = source->n_part;

@@ -1,0 +1,43 @@
+#!/bin/sh  
+# \
+exec oagtclsh "$0" "$@"
+set auto_path [linsert $auto_path 0  /usr/local/oag/apps/lib/$env(HOST_ARCH)]
+set auto_path [linsert $auto_path 0 /usr/local/oag/lib_patch/$env(HOST_ARCH)]
+
+#double format
+set dformat "%.4e"
+#string format
+set sformat "%15s"
+set lformat "%8d"
+
+set inputFile [lindex $argv 0]
+set outputFile [lindex $argv 1]
+
+if ![string length $inputFile] {
+   puts stderr "Error input file (elegant output) not provided."
+   exit 1
+}
+if ![string length $outputFile] {
+   set outputFile [file root $inputFile].EXG
+}
+puts "converting $inputFile to $outputFile..."
+if [catch {exec sdds2plaindata $inputFile $outputFile \
+    -norowcount -outputMode=ascii "-sep= " \
+    -col=nreg -col=nexg -col=volname \
+    -col=im -col=rho,format=$dformat \
+    -col=vol,format=$dformat -col=st,format=$dformat -col=dst,format=$dformat \
+    -col=dpa,format=$dformat -col=fnt,format=$dformat -col=fn.1mev,format=$dformat \
+    -col=fn1mev,format=$dformat \
+    -col=fch,format=$dformat -col=fga,format=$dformat -col=fel,format=$dformat \
+    -col=fm,format=$dformat -col=fne,format=$dformat \
+    -col=fhi,format=$dformat -col=ed,format=$dformat -col=ded,format=$dformat \
+    -col=deq,format=$dformat -col=ddeq,format=$dformat \
+    -col=deltat,format=$dformat \
+    -col=pgam20,format=$dformat -col=pgam,format=$dformat \
+    -col=dpgam,format=$dformat -col=fiss,format=$dformat } result] {
+	puts stderr "Error in converting sdds to mars output: $result"
+	exit
+    }
+    
+    puts "done."
+    exit 0

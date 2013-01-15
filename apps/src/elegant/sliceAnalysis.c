@@ -8,10 +8,7 @@
 \*************************************************************************/
 
 /*
- * $Log: sliceAnalysis.c,v $
- * Revision 1.15  2010/02/05 22:05:39  soliday
- * Made some changes to reduce the number or compiler warnings on Linux.
- *
+ * $Log: not supported by cvs2svn $
  * Revision 1.14  2010/02/05 17:48:50  soliday
  * Fixed minor issues related to compiler warnings.
  *

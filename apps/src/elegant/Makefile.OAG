@@ -16,7 +16,7 @@ CC := $(RATIONAL) -best-effort $(CC)
 CCC := $(RATIONAL) -best-effort $(CCC)
 endif
 
-OP_SYS_CFLAGS+= -DSORT                 # sort for comparing the results of two elegants
+# OP_SYS_CFLAGS+= -DSORT               # sort for comparing the results of two elegants
                                        # -g should be turned off for comparison
 OP_SYS_CFLAGS+= -DUSE_KAHAN            # use Kahan's algorithm for long sum
 #OP_SYS_CFLAGS+= -DSET_DOUBLE           # set FPU as double precision
@@ -29,13 +29,13 @@ ifdef WIN32
     CC := $(CC) $(USER_MPI_FLAGS)
     CCC := $(CCC) $(USER_MPI_FLAGS)
 else
-    #OP_SYS_LDLIBS += -lmpe -llmpe        # visualize the performance of the parallel elegant 
+    #OP_SYS_LDLIBS += -mpe=mpilog        # visualize the performance of the parallel elegant 
     #USER_MPI_FLAGS+=  -DUSE_MPE          # user defined MPE event
     #USER_MPI_FLAGS+=  -mpianim -L/usr/X11R6/lib -lX11   # animate MPI program in real-time
     #USER_MPI_FLAGS+= -DMPI_DEBUG # -DDEBUG        # print debugging information for MPI 
     #USER_MPI_FLAGS+= -DCHECKFLAGS=1      # if defined, check balance only at the beginning
                                         # or the particle number is changed
-    MPI_PATH = $(wildcard /usr/local/software/mvapich2-gcc/bin/ /share/mpich2_smpd_nemesis/bin/ /act/mvapich2/gnu/bin/ /data/mpich2-1.1.1p1/bin/)
+    MPI_PATH = $(wildcard /usr/local/software/mvapich2-gcc/bin/ /share/mpich2_smpd_nemesis/bin/ /act/mvapich2/gnu/bin/ /data/mpich2-1.1.1p1/bin/ /usr/lib64/mpich2/bin/)
     #MPI_PATH =  /home/helios/SOLIDAY/mpich2-1.2.1p1_darwin-x86/bin/
 ifeq ($(HOST_ARCH),linux-ppc-bgp-ibm)
     CC += $(USER_MPI_FLAGS)
@@ -84,7 +84,7 @@ PROD_HOST = $(PRODOAG)
 endif
 
 USR_CFLAGS = 	-I$(EPICS_EXTENSIONS)/src/SDDS/include -I$(EPICS_EXTENSIONS_INCLUDE) \
-		-I$(EPICS_EXTENSIONS)/src/SDDS/gsl -DIEEE_MATH -DzLib -DWL=32
+		-DIEEE_MATH -DzLib -DWL=32
 USR_CPPFLAGS = 	$(USR_CFLAGS)
 
 USR_CFLAGS_Linux = -I/lib/modules/`uname -r`/build/include -DMINIMIZE_MEMORY -D_GNU_SOURCE 
@@ -97,15 +97,97 @@ ifeq ($(LYNCEANTECH),1)
         USR_CFLAGS += -DLYNCEANTECH
 endif
 
+
+
+#Look for private version of GSL used here at APS
+GSL = $(words $(wildcard $(EPICS_EXTENSIONS)/src/SDDS/gsl))
+ifeq ($(GSL), 1)
+USR_CFLAGS += -I$(EPICS_EXTENSIONS)/src/SDDS/gsl -DUSE_GSL
+GSLLIB = rpnlib gsl
+SYS_GSLLIB = 
+gsl_DIR = $(EPICS_EXTENSIONS_LIB)
+else
+
+#Look for system version of GSL
+SYSGSL = $(words $(notdir $(wildcard \
+/usr/lib/libgsl.a \
+/usr/lib/libgsl.so \
+/usr/lib64/libgsl.a \
+/usr/lib64/libgsl.so \
+/lib/libgsl.a \
+/lib/libgsl.so \
+/lib64/libgsl.a \
+/lib64/libgsl.so \
+/sw/lib/libgsl.a \
+/sw/lib/libgsl.dylib \
+/opt/local/lib/libgsl.a \
+/opt/local/lib/libgsl.dylib \
+/usr/sfw/lib/libgsl.a \
+/usr/sfw/lib/libgsl.so )))
+
+ifneq ($(SYSGSL), 0)
+USR_CFLAGS += -DUSE_GSL
+GSLLIB = 
+SYS_GSLLIB = -lgsl -lgslcblas
+STATIC_BUILD=NO
+else
+
+#No GSL library found. Build without it.
+GSLLIB = 
+SYS_GSLLIB = 
+endif
+endif
+
+
+
+#Look for private version of LEVMAR used here at APS
+LEVMAR = $(words $(wildcard $(EPICS_EXTENSIONS)/src/SDDS/levmar))
+ifeq ($(LEVMAR), 1)
+USR_CFLAGS += -I$(EPICS_EXTENSIONS)/src/SDDS/levmar -DUSE_LEVMAR
+LEVMARLIB = levmar
+SYS_LEVMARLIB = 
+levmar_DIR = $(EPICS_EXTENSIONS_LIB)
+else
+
+#Look for system version of LEVMAR
+SYSLEVMAR = $(words $(notdir $(wildcard \
+/usr/lib/liblevmar.a \
+/usr/lib/liblevmar.so \
+/usr/lib64/liblevmar.a \
+/usr/lib64/liblevmar.so \
+/lib/liblevmar.a \
+/lib/liblevmar.so \
+/lib64/liblevmar.a \
+/lib64/liblevmar.so \
+/sw/lib/liblevmar.a \
+/sw/lib/liblevmar.dylib \
+/usr/sfw/lib/liblevmar.a \
+/usr/sfw/lib/liblevmar.so )))
+
+ifneq ($(SYSLEVMAR), 0)
+USR_CFLAGS += -DUSE_LEVMAR -DUSE_LEVMAR_H
+LEVMARLIB = 
+SYS_LEVMARLIB = -llevmar
+STATIC_BUILD=NO
+else
+
+#No LEVMAR library found. Build without it.
+LEVMARLIB = 
+SYS_LEVMARLIB = 
+endif
+endif
+
+
+
 ifdef WIN32
 ifeq ($(MPI),1)
 USR_LIBS = 	mdbcommon matlib fftpack SDDSmpi \
 		rpnlib mdbmth namelist mdblib \
-		meschach z fdlibm gsl pgapack
+		meschach z fdlibm pgapack
 else
 USR_LIBS = 	mdbcommon matlib fftpack SDDS1 \
 		rpnlib mdbmth namelist mdblib \
-		meschach z fdlibm gsl
+		meschach z fdlibm 
 endif
 z_DIR = $(EPICS_EXTENSIONS_LIB)
 
@@ -121,11 +203,11 @@ else
 ifeq ($(MPI),1)
 USR_LIBS = 	mdbcommon matlib fftpack SDDSmpi \
 		rpnlib mdbmth namelist mdblib \
-		meschach gsl pgapack 
+		meschach pgapack 
 else
 USR_LIBS = 	mdbcommon matlib fftpack SDDS1 \
 		rpnlib mdbmth namelist mdblib \
-		meschach gsl
+		meschach 
 endif
 SYS_PROD_LIBS_DEFAULT += z 
 SYS_PROD_LIBS_Linux += z 
@@ -150,7 +232,7 @@ MAKE = gmake
 endif
 
 # On Intrepid, we need build our own lapack and blas libraries
-ifeq ($(HOST_ARCH),linux-ppc-bgp-ibm)
+ifeq (intrepid, $(findstring intrepid, $(HOSTNAME)))
 OP_SYS_LDLIBS += -L/gpfs/home/ywang/Lib -llapack -lblas -lgfortran 
 endif
 
@@ -158,6 +240,11 @@ LAPACK = 0
 #Use LAPACK on Linux by default.
 #This is available as an RPM package.
 ifeq ($(OS_CLASS),Linux)
+LAPACK = 1
+endif
+#Use LAPACK on OSX by default.
+#This is available from the Accelerate framework
+ifeq ($(OS_CLASS),Darwin)
 LAPACK = 1
 endif
 
@@ -202,7 +289,7 @@ gfortran-version = $(shell gfortran -v 2> /dev/stdout | grep "^gcc" | awk '{prin
 ifeq ($(gcc-version),$(gfortran-version))
 SYS_PROD_LIBS_Linux += gfortran
 else
-  ifneq ($(HOST_ARCH),linux-ppc-bgp-ibm)
+  ifneq (intrepid,$(findstring intrepid, $(HOSTNAME)))
     SYS_PROD_LIBS_Linux += g2c
   endif
 endif
@@ -288,7 +375,6 @@ SDDS1_DIR = $(EPICS_EXTENSIONS_LIB)
 namelist_DIR = $(EPICS_EXTENSIONS_LIB)
 fftpack_DIR = $(EPICS_EXTENSIONS_LIB)
 mdbmth_DIR = $(EPICS_EXTENSIONS_LIB)
-gsl_DIR = $(EPICS_EXTENSIONS_LIB)
 matlib_DIR = $(EPICS_EXTENSIONS_LIB)
 mdblib_DIR = $(EPICS_EXTENSIONS_LIB)
 mdbcommon_DIR = $(EPICS_EXTENSIONS_LIB)
@@ -315,8 +401,8 @@ elegant_SRCS = 	alpha_data.c alpha_matrix.c amplif.c analyze.c aperture_search.c
 		frfmode.c ftrfmode.c tfeedback.c engeCoef.c lsc.c frequencyMap.c \
 		GWigSymplecticPass.c gwig.c noiseGroup.c insertSCeffects.cc momentumAperture.c kahan.c \
 		coupled_twiss.c drand_oag.c lookupa.c recycle.c hashtab.c moments.c \
-                insert_elements.c touschekScatter.c chbook.c kickmap.c matrixOp.c replace_elements.c modulate.c \
-                ramp.c 
+                insert_elements.c regexCode.cc touschekScatter.c chbook.c kickmap.c matrixOp.c \
+                replace_elements.c modulate.c ramp.c fringe.c apple.c
                    
 Pelegant_SRCS = $(elegant_SRCS) findGlobalMinMax.c  media_oag.c genetic.c swarm.c
 
@@ -338,3 +424,9 @@ kahan_CFLAGS = -O0
 endif
 
 
+madto_LIBS += $(GSLLIB)
+madto_LDFLAGS += $(SYS_GSLLIB)
+elegant_LIBS += $(GSLLIB) $(LEVMARLIB) 
+elegant_LDFLAGS += $(SYS_GSLLIB) $(SYS_LEVMARLIB)
+Pelegant_LIBS += $(GSLLIB) $(LEVMARLIB) 
+Pelegant_LDFLAGS += $(SYS_GSLLIB) $(SYS_LEVMARLIB)

@@ -12,7 +12,7 @@
  *
  * Michael Borland, 2009
  *
- $Log: astra2elegant.c,v $
+ $Log: not supported by cvs2svn $
  Revision 1.3  2009/09/10 13:47:16  borland
  Now offsets by the reference particle arrival time.
  Added -centerReference option to suppress this if desired.
@@ -33,23 +33,26 @@
 
 #define SET_PIPE 0
 #define SET_CENTER_REFERENCE 1
-#define N_OPTIONS 2
+#define SET_KEEP_ALL 2
+#define N_OPTIONS 3
 
 char *option[N_OPTIONS] = {
-  "pipe", "centerreference",
+  "pipe", "centerreference", "keepall"
 } ;
 
 char *USAGE="astra2elegant [-pipe=[input][,output]] [<ASTRAoutputfile>] [<SDDSoutputfile>]\n\
-[-centerReference]\n\
+[-centerReference] [-keepAll]\n\
 -pipe                Standard SDDS Toolkit pipe option.\n\
--centerReference     If given, the arrival time of the reference particle is set to 0.\n\n\
+-centerReference     If given, the arrival time of the reference particle is set to 0.\n\
+-keepAll             If given, all particles are kept and an extra column is added to hold\n\
+                     the status flag.  By default, only particles with status=5 are kept.\n\n\
 Converts ASTRA phase space output to a form acceptable to elegant.\n\
-Program by Michael Borland.  (This is version 2, September 2009.)\n";
+Program by Michael Borland.  (This is version 3, August 2011.)\n";
 
-long SetUpOutputFile(SDDS_DATASET *SDDSout, char *outputfile);
+long SetUpOutputFile(SDDS_DATASET *SDDSout, char *outputfile, short keepAll);
 long addParticleToFile(SDDS_DATASET *SDDSout, long *row, long *maxRows,
                        double x, double y, double z, double px, double py, double pz,
-                       double tReference);
+                       double tReference, short keepAll, short status);
 
 int main(int argc, char **argv)
 {
@@ -60,8 +63,8 @@ int main(int argc, char **argv)
   unsigned long pipeFlags;
   FILE *fpin;
   double x, y, z, px, py, pzRef, dpz, clock, charge, totalCharge, tReference;
-  long index, flag, i_arg, tmpFileUsed;
-  short centerReference;
+  long index, i_arg, tmpFileUsed;
+  short centerReference, keepAll, flag;
   
   SDDS_RegisterProgramName(argv[0]);
   argc = scanargs(&s_arg, argc, argv);
@@ -70,7 +73,7 @@ int main(int argc, char **argv)
 
   inputfile = outputfile = NULL;
   pipeFlags = 0;
-  centerReference = 0;
+  centerReference = keepAll = 0;
   
   for (i_arg=1; i_arg<argc; i_arg++) {
     if (s_arg[i_arg].arg_type==OPTION) {
@@ -81,6 +84,9 @@ int main(int argc, char **argv)
         break;
       case SET_CENTER_REFERENCE:
         centerReference = 1;
+        break;
+      case SET_KEEP_ALL:
+        keepAll = 1;
         break;
       default:
         fprintf(stdout, "error: unknown switch: %s\n", s_arg[i_arg].list[0]);
@@ -107,7 +113,7 @@ int main(int argc, char **argv)
   
   if (!(fpin=fopen(inputfile, "r")))
     SDDS_Bomb("problem opening input file");
-  if (fscanf(fpin, "%le %le %le %le %le %le %le %le %ld %ld",
+  if (fscanf(fpin, "%le %le %le %le %le %le %le %le %ld %hd",
              &x, &y, &z, &px, &py, &pzRef, &tReference, &charge, &index, &flag)!=10 ||
       flag!=5)
     SDDS_Bomb("problem reading reference particle data");
@@ -116,22 +122,21 @@ int main(int argc, char **argv)
   if (centerReference)
     tReference = 0;
   
-  if (!SetUpOutputFile(&SDDSout, outputfile) ||
+  if (!SetUpOutputFile(&SDDSout, outputfile, keepAll) ||
       !SDDS_StartTable(&SDDSout, maxRows=MAX_ROW_INCREMENT))
     SDDS_Bomb("problem setting up output file");
 
   row = 0;
-  if (!addParticleToFile(&SDDSout, &row, &maxRows, x, y, 0.0, px, py, pzRef, tReference))
-    return 1;
+  if (!addParticleToFile(&SDDSout, &row, &maxRows, x, y, 0.0, px, py, pzRef, tReference, keepAll, flag)) 
+    SDDS_Bomb("Problem adding reference particle to output file");
 
   while (!feof(fpin) &&
-         fscanf(fpin, "%le %le %le %le %le %le %le %le %ld %ld",
+         fscanf(fpin, "%le %le %le %le %le %le %le %le %ld %hd",
                 &x, &y, &z, &px, &py, &dpz, &clock, &charge, &index, &flag)==10) {
-    if (flag==3 || flag==5) {
-      if (!addParticleToFile(&SDDSout, &row, &maxRows, x, y, z, px, py, pzRef+dpz, tReference))
-        return 1;
+    if (flag==3 || flag==5)
       totalCharge += charge;
-    }
+    if (keepAll || flag==3 || flag==5) 
+      addParticleToFile(&SDDSout, &row, &maxRows, x, y, z, px, py, pzRef+dpz, tReference, keepAll, flag);
   }
   
   if (!SDDS_SetParameters(&SDDSout, SDDS_SET_BY_NAME|SDDS_PASS_BY_VALUE,
@@ -148,7 +153,7 @@ int main(int argc, char **argv)
 }
 
 
-long SetUpOutputFile(SDDS_DATASET *SDDSout, char *outputfile)
+long SetUpOutputFile(SDDS_DATASET *SDDSout, char *outputfile, short keepAll)
 {
   if (!SDDS_InitializeOutput(SDDSout, SDDS_BINARY, 1, NULL, NULL, outputfile) ||
       SDDS_DefineColumn(SDDSout, "x", NULL, "m", NULL, NULL, SDDS_DOUBLE, 0)<0 ||
@@ -157,8 +162,12 @@ long SetUpOutputFile(SDDS_DATASET *SDDSout, char *outputfile)
       SDDS_DefineColumn(SDDSout, "yp", NULL, NULL, NULL, NULL, SDDS_DOUBLE, 0)<0 ||
       SDDS_DefineColumn(SDDSout, "t", NULL, "s", NULL, NULL, SDDS_DOUBLE, 0)<0 ||
       SDDS_DefineColumn(SDDSout, "p", NULL, NULL, NULL, NULL, SDDS_DOUBLE, 0)<0 ||
-      SDDS_DefineParameter(SDDSout, "Charge", NULL, "C", NULL, NULL, SDDS_DOUBLE, NULL)<0 ||
-      !SDDS_WriteLayout(SDDSout)) 
+      SDDS_DefineParameter(SDDSout, "Charge", NULL, "C", NULL, NULL, SDDS_DOUBLE, NULL)<0)
+    return 0;
+  if (keepAll && 
+      SDDS_DefineColumn(SDDSout, "status", NULL, NULL, NULL, NULL, SDDS_SHORT, 0)<0)
+    return 0;
+  if (!SDDS_WriteLayout(SDDSout)) 
     return 0;
   return 1;
 }
@@ -167,16 +176,17 @@ long SetUpOutputFile(SDDS_DATASET *SDDSout, char *outputfile)
 
 long addParticleToFile(SDDS_DATASET *SDDSout, long *row, long *maxRows,
                        double x, double y, double z, double px, double py, double pz,
-                       double tReference)
+                       double tReference, short keepAll, short status)
 {
   double xp, yp;
   double p2, gamma, betaz;
   
-  if (!pz)
-    return 0;
-  xp = px/pz;
-  yp = py/pz;
-
+  if (pz) {
+    xp = px/pz;
+    yp = py/pz;
+  } else
+    xp = yp = sqrt(DBL_MAX);
+  
   x -= z*xp;
   y -= z*yp;
   p2 = (sqr(px)+sqr(py)+sqr(pz))*sqr(K1);
@@ -185,6 +195,13 @@ long addParticleToFile(SDDS_DATASET *SDDSout, long *row, long *maxRows,
   if (!SDDS_SetRowValues(SDDSout, SDDS_SET_BY_INDEX|SDDS_PASS_BY_VALUE, 
                          *row,
                          0, x, 1, xp, 2, y, 3, yp, 4, tReference-z/(betaz*c_mks), 5, sqrt(p2), -1)) {
+    SDDS_Bomb("problem setting rows with particle data");
+    return 0;
+  }
+  if (keepAll && 
+      !SDDS_SetRowValues(SDDSout, SDDS_SET_BY_INDEX|SDDS_PASS_BY_VALUE,
+                         *row,
+                         6, status, -1)) {
     SDDS_Bomb("problem setting rows with particle data");
     return 0;
   }

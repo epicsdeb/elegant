@@ -14,10 +14,7 @@
  * Michael Borland, 1997.
  */
 /*
- * $Log: sddsemitmeas.c,v $
- * Revision 1.1  2007/03/30 16:50:28  soliday
- * Moved from directory above.
- *
+ * $Log: not supported by cvs2svn $
  * Revision 1.21  2005/11/10 15:38:49  soliday
  * Added changes to get it to compile properly with 64 bit compilers.
  *
