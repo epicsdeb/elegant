@@ -8,10 +8,7 @@
 \*************************************************************************/
 
 /*
- $Log: brightness.c,v $
- Revision 1.3  2009/05/31 04:27:21  borland
- Fixed a problem reading twiss data.
-
+ $Log: not supported by cvs2svn $
  Revision 1.2  2006/03/15 17:09:07  shang
  added ReadTwissInput function
 

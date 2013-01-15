@@ -82,9 +82,10 @@ long find_median_of_row_p(double *best_particle, double **x, long index, long n,
     if (index<0 && n_total<=0)
         return(-1);
 
-    if (n_total < n_processors-1) {
-      long *n_vector = (long*)tmalloc(n_processors*sizeof(*n_vector));
-      long *offset = (long*)tmalloc(n_processors*sizeof(*offset));
+    if (n_total < n_processors) {
+      long *n_vector_long = (long*)tmalloc(n_processors*sizeof(*n_vector_long));
+      int *n_vector = (int*)tmalloc(n_processors*sizeof(*n_vector));	
+      int *offset = (int*)tmalloc(n_processors*sizeof(*offset));
       double median;
 
      
@@ -96,16 +97,17 @@ long find_median_of_row_p(double *best_particle, double **x, long index, long n,
 	last_n_total = n_total;
     
       
-	MPI_Allgather(&n, 1, MPI_LONG, n_vector, 1, MPI_LONG, MPI_COMM_WORLD);
+	MPI_Allgather(&n, 1, MPI_LONG, n_vector_long, 1, MPI_LONG, MPI_COMM_WORLD);
       offset[0] = 0;
       for (i=0; i<n_processors-1; i++) {
-	n_vector[i] *= 7;
+	n_vector[i] = 7*n_vector_long[i];
 	offset[i+1] = offset[i] + n_vector[i];
       }	
+      n_vector[n_processors-1] = 7*n_vector_long[n_processors-1];	
 
       if (!n) /* We need allocate dummy memory to make MPI_Gatherv work */
 	x = (double**)zarray_2d(sizeof(**data), 1, 7);
-      MPI_Allgatherv (&x[0][0], 7*n, MPI_DOUBLE, &data[0][0], (int*)n_vector, (int*)offset, MPI_DOUBLE, MPI_COMM_WORLD);
+      MPI_Allgatherv (&x[0][0], 7*n, MPI_DOUBLE, &data[0][0], n_vector, offset, MPI_DOUBLE, MPI_COMM_WORLD);
 
       if (isMaster)
 	best_i = find_median_of_row(&median, data, index, n_total)+1;

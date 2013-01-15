@@ -147,7 +147,7 @@ void setupSCEffect(NAMELIST_TEXT *nltext, RUN *run, LINE_LIST *beamline)
 
   sc->nskip = 0;
   sc->nonlinear = 0; 
-  sc->horizontal = sc->vertical = sc->longitudinal =0;
+  sc->horizontal = sc->vertical = sc->longitudinal = sc->uniform = 0;
   if (skip)
     sc->nskip = skip;
 
@@ -159,6 +159,9 @@ void setupSCEffect(NAMELIST_TEXT *nltext, RUN *run, LINE_LIST *beamline)
 
   if (longitudinal)
     sc->longitudinal =longitudinal;
+
+  if (uniform_distribution)
+    sc->uniform = 1;
 
   if (nonlinear)
     sc->nonlinear = nonlinear;
@@ -212,7 +215,7 @@ void trackThroughSCMULT(double **part, long np, ELEMENT_LIST *eptr)
 #endif
  
   /* apply kick to particles */
-  if (!nonlinear) {
+  if (!sc->nonlinear) {
     for(i=0; i<np; i++) {
       coord = part[i];
       linearSCKick(coord, eptr, center);
@@ -223,11 +226,12 @@ void trackThroughSCMULT(double **part, long np, ELEMENT_LIST *eptr)
     sigmay = computeRmsCoordinate(part, 2, np);
     for(i=0; i<np; i++) {
       coord = part[i];
-
+      /* remove linear kick approximation.
       if ((fabs(coord[0]-center[0])<sigmax) && (fabs(coord[2]-center[1]) < sigmay)) {
         linearSCKick(coord, eptr, center);
         continue;
       }
+      */
 
       if (sigmax/sigmay>0.99 && sigmax/sigmay < 1.01) {
         sx = 0.99 * sigmay;
@@ -267,7 +271,11 @@ void trackThroughSCMULT(double **part, long np, ELEMENT_LIST *eptr)
 void linearSCKick(double *coord, ELEMENT_LIST *eptr, double *center)
 {
   double k0, kx, ky;
-  k0 = sc->c1 * exp(-sqr(coord[4]-center[2])/sqr(sc->sigmaz)/2.0);
+  if (sc->uniform) {
+    k0 = sc->c1 * sqrt(PI/6.0);
+  } else {
+    k0 = sc->c1 * exp(-sqr(coord[4]-center[2])/sqr(sc->sigmaz)/2.0);
+  }
   if (sc->horizontal) {
     kx = k0 * sc->dmux / eptr->twiss->betax;	/* From dmux to KL */
     coord[1] += kx*(coord[0]-center[0]);
@@ -286,7 +294,11 @@ int nonlinearSCKick(double *coord, ELEMENT_LIST *eptr, double *center,
   double temp;
   long flag;
 
-  k0 = sc->c1 * exp(-sqr(coord[4]-center[2])/sqr(sc->sigmaz)/2.0) * sqrt(PI/2.0);
+  if (sc->uniform) {
+    k0 = sc->c1 * PI/12.0;
+  } else {
+    k0 = sc->c1 * exp(-sqr(coord[4]-center[2])/sqr(sc->sigmaz)/2.0) * sqrt(PI/2.0);
+  }
 
   sqs = sqrt(fabs(sqr(sigmax)-sqr(sigmay))*2.0);
   kx = k0 * sc->dmux * sigmax * sqrt(sigmax+sigmay) / sqrt(fabs(sigmax-sigmay)) / eptr->twiss->betax;

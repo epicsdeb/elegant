@@ -566,7 +566,8 @@ C  Generate energy scale with variable step size
 		 END IF		! IDW
 	      END DO		! WHILE
 	      
-	      DO WHILE (E(IE) .LT. (EP-EPSE) .AND. E(IE) .LT. (EMAX-EPSE))
+	      DO WHILE (E(IE) .LT. (EP-EPSE) .AND. 
+     1	                E(IE) .LT. (EMAX-EPSE))
 		 IF (E(IE) .GT. EP-EF) THEN
 		    IDW = IDW*2
 		    IF (IDW .GT. IDWMAX) THEN

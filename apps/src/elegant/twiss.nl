@@ -71,6 +71,7 @@
     double chromatic_tune_spread_half_range = 0;
     long cavities_are_drifts_if_matched = 1;
     long compute_driving_terms = 0;
+    long leading_order_driving_terms_only = 0;
     long local_dispersion = 1;
 #end
 
@@ -87,3 +88,15 @@
         long clear = 0;
 #end
 
+#namelist rf_setup,struct
+        STRING name = NULL;
+        long start_occurence = -1;
+        long end_occurence = -1;
+        double s_start = -1;
+        double s_end = -1;
+        long set_for_each_step = 0;
+        double near_frequency = 0;
+        long harmonic = -1;
+        double bucket_half_height = 0;
+        double over_voltage = 0;
+#end

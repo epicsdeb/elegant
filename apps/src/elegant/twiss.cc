@@ -143,6 +143,8 @@ VMATRIX *compute_periodic_twiss(
     }
     M = append_full_matrix(elem, run, M1, twissConcatOrder);
     free_matrices(M1);
+    free(M1);
+    M1 = NULL;
 /*
     fprintf(stdout, "Computed revolution matrix on closed orbit to %ld order\n",
             twissConcatOrder);
@@ -309,6 +311,7 @@ void propagate_twiss_parameters(TWISS *twiss0, double *tune, long *waists,
   double beta[2], alpha[2], phi[2], eta[2], etap[2], gamma[2], refAlpha[2];
   double *func, path[6], path0[6], detR[2], length, sTotal;
   double **R=NULL, C[2], S[2], Cp[2], Sp[2], D[2], Dp[2], sin_dphi, cos_dphi, dphi;
+  double lastRI[6];
   long n_mat_computed, i, j, plane, otherPlane, hasMatrix, hasPath;
   VMATRIX *M1, *M2;
   MATRIX *dispM, *dispOld, *dispNew;
@@ -377,7 +380,7 @@ void propagate_twiss_parameters(TWISS *twiss0, double *tune, long *waists,
   
   if (radIntegrals) {
     for (i=0; i<6; i++) 
-      radIntegrals->RI[i] = 0;
+      lastRI[i] = radIntegrals->RI[i] = 0;
   }
   waists[0] = waists[1] = 0;
 
@@ -397,17 +400,22 @@ void propagate_twiss_parameters(TWISS *twiss0, double *tune, long *waists,
 	  } else {
 	    if (!((TWISSELEMENT*)elem->p_elem)->computeOnce || !((TWISSELEMENT*)elem->p_elem)->transformComputed) {
 	      TWISS twissInput;
-	      twissInput.betax = beta[0];
-	      twissInput.betay = beta[1];
-	      twissInput.alphax = alpha[0];
-	      twissInput.alphay = alpha[1];
-	      twissInput.etax   = eta[0];
-	      twissInput.etapx  = etap[0];
-	      twissInput.etay   = eta[1];
-	      twissInput.etapy  = etap[1];
+              if (((TWISSELEMENT*)elem->p_elem)->from0Values) {
+                twissInput = ((TWISSELEMENT*)elem->p_elem)->twiss0;
+              } else {
+                twissInput.betax = beta[0];       
+                twissInput.betay = beta[1];       
+                twissInput.alphax = alpha[0];
+                twissInput.alphay = alpha[1];
+                twissInput.etax   = eta[0];
+                twissInput.etapx  = etap[0];
+                twissInput.etay   = eta[1];
+                twissInput.etapy  = etap[1];
+              }
 	      if (elem->matrix) {
 		free_matrices(elem->matrix);
 		free(elem->matrix);
+                elem->matrix = NULL;
 	      }
 	      if (((TWISSELEMENT*)elem->p_elem)->verbose) {
 		printf((char*)"Computing twiss transformation matrix for %s at z=%e m from lattice twiss parameters\n", elem->name, elem->end_pos);
@@ -444,6 +452,7 @@ void propagate_twiss_parameters(TWISS *twiss0, double *tune, long *waists,
           if (elem->matrix) {
             free_matrices(elem->matrix);
             free(elem->matrix);
+            elem->matrix = NULL;
           }
           elem->matrix = compute_matrix(elem, run, NULL);
         }
@@ -525,12 +534,19 @@ void propagate_twiss_parameters(TWISS *twiss0, double *tune, long *waists,
     if (!elem->twiss)
       elem->twiss = (TWISS*)tmalloc(sizeof(*elem->twiss));
     elem->twiss->periodic = matched;
-    if (radIntegrals)
+    if (radIntegrals) {
       incrementRadIntegrals(radIntegrals, elem->twiss->dI, 
                             elem, 
                             beta[0], alpha[0], gamma[0], eta[0], etap[0], 
                             beta[1], alpha[1], gamma[1], eta[1], etap[1], 
                             path0);
+      if (elem->type==T_MRADINTEGRALS) {
+        for (i=0; i<6; i++) {
+          radIntegrals->RI[i] = (radIntegrals->RI[i]-lastRI[i])*(((MRADINTEGRALS*)elem->p_elem)->factor)+lastRI[i];
+          lastRI[i] = radIntegrals->RI[i];
+        }
+      }
+    }
     if (elem->type==T_ROTATE) {
       if (fabs(((ROTATE*)elem->p_elem)->tilt-PI/2.0)<1e-6 ||
           fabs(((ROTATE*)elem->p_elem)->tilt-3*PI/2.0)<1e-6 ||
@@ -807,13 +823,13 @@ void propagate_twiss_parameters(TWISS *twiss0, double *tune, long *waists,
     m_free(&dispOld);
   }
   else {
-    free_matrices(dispM1); tfree(dispM1);
-    free_matrices(dispM2); tfree(dispM2);
+    free_matrices(dispM1); tfree(dispM1); dispM1 = NULL;
+    free_matrices(dispM2); tfree(dispM2); dispM2 = NULL;
     /* fprintf(stderr, "*** Using global dispersion algorithm \n"); */
   }
   
-  free_matrices(M1); tfree(M1);
-  free_matrices(M2); tfree(M2);
+  free_matrices(M1); tfree(M1); M1 = NULL;
+  free_matrices(M2); tfree(M2); M2 = NULL;
 
   processTwissAnalysisRequests(elemOrig);
 }
@@ -925,32 +941,8 @@ static SDDS_DEFINITION column_definition[N_COLUMNS_WRI] = {
 #define IP_COUPLINGINTEGRAL 48
 #define IP_COUPLINGOFFSET 49
 #define IP_EMITRATIO 50
-#define IP_H11001 51
-#define IP_H00111 52
-#define IP_H20001 53
-#define IP_H00201 54
-#define IP_H10002 55
-#define IP_H21000 56
-#define IP_H30000 57
-#define IP_H10110 58
-#define IP_H10020 59
-#define IP_H10200 60
-#define IP_H22000 61
-#define IP_H11110 62
-#define IP_H00220 63
-#define IP_H31000 64
-#define IP_H40000 65
-#define IP_H20110 66
-#define IP_H11200 67
-#define IP_H20020 68
-#define IP_H20200 69
-#define IP_H00310 70
-#define IP_H00400 71 
-#define IP_DNUXDJX 72
-#define IP_DNUXDJY 73
-#define IP_DNUYDJY 74
-#define IP_ALPHAC2 75
-#define IP_ALPHAC  76
+#define IP_ALPHAC2 51
+#define IP_ALPHAC  52
 /* IP_ALPHAC must be the last item before the radiation-integral-related
  * items!
  */
@@ -1022,30 +1014,6 @@ static SDDS_DEFINITION parameter_definition[N_PARAMETERS] = {
 {(char*)"couplingIntegral", (char*)"&parameter name=couplingIntegral, type=double, description=\"Coupling integral for difference resonance\" &end"},
 {(char*)"couplingDelta", (char*)"&parameter name=couplingDelta, type=double, description=\"Distance from difference resonance\" &end"},
 {(char*)"emittanceRatio", (char*)"&parameter name=emittanceRatio, type=double, description=\"Emittance ratio from coupling integral\" &end"},
-{(char*)"h11001", (char*)"&parameter name=h11001, type=double, description=\"Magnitude of chromatic driving term (x chromaticity)\", &end"},
-{(char*)"h00111", (char*)"&parameter name=h00111, type=double, description=\"Magnitude of chromatic driving term (y chromaticity)\", &end"},
-{(char*)"h20001", (char*)"&parameter name=h20001, type=double, description=\"Magnitude of chromatic driving term (synchro-betatron resonances)\", &end"},
-{(char*)"h00201", (char*)"&parameter name=h00201, type=double, description=\"Magnitude of chromatic driving term (momentum-dependence of beta functions)\", &end"},
-{(char*)"h10002", (char*)"&parameter name=h10002, type=double, description=\"Magnitude of chromatic driving term (second order dispersion)\", units=\"1/m$a1/2$n\" &end"},
-{(char*)"h21000", (char*)"&parameter name=h21000, type=double, description=\"Magnitude of geometric driving term (nux)\", units=\"1/m$a1/2$n\" &end"},
-{(char*)"h30000", (char*)"&parameter name=h30000, type=double, description=\"Magnitude of geometric driving term (3 nux)\", units=\"1/m$a1/2$n\" &end"},
-{(char*)"h10110", (char*)"&parameter name=h10110, type=double, description=\"Magnitude of geometric driving term (nux)\", units=\"1/m$a1/2$n\" &end"},
-{(char*)"h10020", (char*)"&parameter name=h10020, type=double, description=\"Magnitude of geometric driving term (nux - 2 nuy)\", units=\"1/m$a1/2$n\" &end"},
-{(char*)"h10200", (char*)"&parameter name=h10200, type=double, description=\"Magnitude of geometric driving term (nux + 2 nuy)\", units=\"1/m\" &end"},
-{(char*)"h22000", (char*)"&parameter name=h22000, type=double, description=\"Magnitude of geometric driving term (amplitude-dependent tune)\", units=\"1/m\" &end"},
-{(char*)"h11110", (char*)"&parameter name=h11110, type=double, description=\"Magnitude of geometric driving term (amplitude-dependent tune)\", units=\"1/m\" &end"},
-{(char*)"h00220", (char*)"&parameter name=h00220, type=double, description=\"Magnitude of geometric driving term (amplitude-dependent tune)\", units=\"1/m\" &end"},
-{(char*)"h31000", (char*)"&parameter name=h31000, type=double, description=\"Magnitude of geometric driving term (2 nux)\", units=\"1/m\" &end"},
-{(char*)"h40000", (char*)"&parameter name=h40000, type=double, description=\"Magnitude of geometric driving term (4 nux)\", units=\"1/m\" &end"},
-{(char*)"h20110", (char*)"&parameter name=h20110, type=double, description=\"Magnitude of geometric driving term (2 nux)\", units=\"1/m\" &end"},
-{(char*)"h11200", (char*)"&parameter name=h11200, type=double, description=\"Magnitude of geometric driving term (2 nuy)\", units=\"1/m\" &end"},
-{(char*)"h20020", (char*)"&parameter name=h20020, type=double, description=\"Magnitude of geometric driving term (2 nux - 2 nuy)\", units=\"1/m\" &end"},
-{(char*)"h20200", (char*)"&parameter name=h20200, type=double, description=\"Magnitude of geometric driving term (2 nux + 2 nuy)\", units=\"1/m\" &end"},
-{(char*)"h00310", (char*)"&parameter name=h00310, type=double, description=\"Magnitude of geometric driving term (2 nuy)\", units=\"1/m\" &end"},
-{(char*)"h00400", (char*)"&parameter name=h00400, type=double, description=\"Magnitude of geometric driving term (4 nuy)\", units=\"1/m\" &end"},
-{(char*)"dnux/dJx", (char*)"&parameter name=dnux/dJx, type=double, description=\"Horizontal tune shift with horizontal invariant\", units=\"1/m\" &end"},
-{(char*)"dnux/dJy", (char*)"&parameter name=dnux/dJy, type=double, description=\"Horizontal tune shift with vertical invariant\", units=\"1/m\" &end"},
-{(char*)"dnuy/dJy", (char*)"&parameter name=dnuy/dJy, type=double, description=\"Vertical tune shift with vertical invariant\", units=\"1/m\" &end"},
 {(char*)"alphac2", (char*)"&parameter name=alphac2, symbol=\"$ga$r$bc2$n\", type=double, description=\"2nd-order momentum compaction factor\" &end"},
 {(char*)"alphac", (char*)"&parameter name=alphac, symbol=\"$ga$r$bc$n\", type=double, description=\"Momentum compaction factor\" &end"},
 {(char*)"I1", (char*)"&parameter name=I1, type=double, description=\"Radiation integral 1\", units=m &end"} ,
@@ -1064,6 +1032,102 @@ static SDDS_DEFINITION parameter_definition[N_PARAMETERS] = {
 {(char*)"Jdelta", (char*)"&parameter name=Jdelta, type=double, description=\"Longitudinal damping partition number\" &end"},
 {(char*)"U0", (char*)"&parameter name=U0, type=double, units=MeV, description=\"Energy loss per turn\" &end"},
 } ;
+
+#define IP_DNUXDJX 0
+#define IP_DNUXDJY 1
+#define IP_DNUYDJY 2
+#define IP_H11001 3
+#define IP_H00111 4
+#define IP_H21000 5
+#define IP_H30000 6
+#define IP_H10110 7
+#define IP_H10020 8
+#define IP_H10200 9
+#define IP_H20001 10
+#define IP_H00201 11
+#define IP_H10002 12
+#define IP_H22000 13
+#define IP_H11110 14
+#define IP_H00220 15
+#define IP_H31000 16
+#define IP_H40000 17
+#define IP_H20110 18
+#define IP_H11200 19
+#define IP_H20020 20
+#define IP_H20200 21
+#define IP_H00310 22
+#define IP_H00400 23
+#define N_DT_PARAMETERS (3*21+3)
+static SDDS_DEFINITION driving_term_parameter_definition[N_DT_PARAMETERS] = {
+{(char*)"dnux/dJx", (char*)"&parameter name=dnux/dJx, type=double, description=\"Horizontal tune shift with horizontal invariant\", units=\"1/m\" &end"},
+{(char*)"dnux/dJy", (char*)"&parameter name=dnux/dJy, type=double, description=\"Horizontal tune shift with vertical invariant\", units=\"1/m\" &end"},
+{(char*)"dnuy/dJy", (char*)"&parameter name=dnuy/dJy, type=double, description=\"Vertical tune shift with vertical invariant\", units=\"1/m\" &end"},
+{(char*)"h11001", (char*)"&parameter name=h11001, type=double, description=\"Magnitude of chromatic driving term (x chromaticity)\", &end"},
+{(char*)"h00111", (char*)"&parameter name=h00111, type=double, description=\"Magnitude of chromatic driving term (y chromaticity)\", &end"},
+{(char*)"h21000", (char*)"&parameter name=h21000, type=double, description=\"Magnitude of geometric driving term (nux)\", units=\"1/m$a1/2$n\" &end"},
+{(char*)"h30000", (char*)"&parameter name=h30000, type=double, description=\"Magnitude of geometric driving term (3 nux)\", units=\"1/m$a1/2$n\" &end"},
+{(char*)"h10110", (char*)"&parameter name=h10110, type=double, description=\"Magnitude of geometric driving term (nux)\", units=\"1/m$a1/2$n\" &end"},
+{(char*)"h10020", (char*)"&parameter name=h10020, type=double, description=\"Magnitude of geometric driving term (nux - 2 nuy)\", units=\"1/m$a1/2$n\" &end"},
+{(char*)"h10200", (char*)"&parameter name=h10200, type=double, description=\"Magnitude of geometric driving term (nux + 2 nuy)\", units=\"1/m\" &end"},
+{(char*)"h20001", (char*)"&parameter name=h20001, type=double, description=\"Magnitude of chromatic driving term (synchro-betatron resonances)\", &end"},
+{(char*)"h00201", (char*)"&parameter name=h00201, type=double, description=\"Magnitude of chromatic driving term (momentum-dependence of beta functions)\", &end"},
+{(char*)"h10002", (char*)"&parameter name=h10002, type=double, description=\"Magnitude of chromatic driving term (second order dispersion)\", units=\"1/m$a1/2$n\" &end"},
+{(char*)"h22000", (char*)"&parameter name=h22000, type=double, description=\"Magnitude of geometric driving term (amplitude-dependent tune)\", units=\"1/m\" &end"},
+{(char*)"h11110", (char*)"&parameter name=h11110, type=double, description=\"Magnitude of geometric driving term (amplitude-dependent tune)\", units=\"1/m\" &end"},
+{(char*)"h00220", (char*)"&parameter name=h00220, type=double, description=\"Magnitude of geometric driving term (amplitude-dependent tune)\", units=\"1/m\" &end"},
+{(char*)"h31000", (char*)"&parameter name=h31000, type=double, description=\"Magnitude of geometric driving term (2 nux)\", units=\"1/m\" &end"},
+{(char*)"h40000", (char*)"&parameter name=h40000, type=double, description=\"Magnitude of geometric driving term (4 nux)\", units=\"1/m\" &end"},
+{(char*)"h20110", (char*)"&parameter name=h20110, type=double, description=\"Magnitude of geometric driving term (2 nux)\", units=\"1/m\" &end"},
+{(char*)"h11200", (char*)"&parameter name=h11200, type=double, description=\"Magnitude of geometric driving term (2 nuy)\", units=\"1/m\" &end"},
+{(char*)"h20020", (char*)"&parameter name=h20020, type=double, description=\"Magnitude of geometric driving term (2 nux - 2 nuy)\", units=\"1/m\" &end"},
+{(char*)"h20200", (char*)"&parameter name=h20200, type=double, description=\"Magnitude of geometric driving term (2 nux + 2 nuy)\", units=\"1/m\" &end"},
+{(char*)"h00310", (char*)"&parameter name=h00310, type=double, description=\"Magnitude of geometric driving term (2 nuy)\", units=\"1/m\" &end"},
+{(char*)"h00400", (char*)"&parameter name=h00400, type=double, description=\"Magnitude of geometric driving term (4 nuy)\", units=\"1/m\" &end"},
+
+{(char*)"Reh11001", (char*)"&parameter name=Reh11001, type=double, description=\"Real part of chromatic driving term (x chromaticity)\", &end"},
+{(char*)"Reh00111", (char*)"&parameter name=Reh00111, type=double, description=\"Real part of chromatic driving term (y chromaticity)\", &end"},
+{(char*)"Reh21000", (char*)"&parameter name=Reh21000, type=double, description=\"Real part of geometric driving term (nux)\", units=\"1/m$a1/2$n\" &end"},
+{(char*)"Reh30000", (char*)"&parameter name=Reh30000, type=double, description=\"Real part of geometric driving term (3 nux)\", units=\"1/m$a1/2$n\" &end"},
+{(char*)"Reh10110", (char*)"&parameter name=Reh10110, type=double, description=\"Real part of geometric driving term (nux)\", units=\"1/m$a1/2$n\" &end"},
+{(char*)"Reh10020", (char*)"&parameter name=Reh10020, type=double, description=\"Real part of geometric driving term (nux - 2 nuy)\", units=\"1/m$a1/2$n\" &end"},
+{(char*)"Reh10200", (char*)"&parameter name=Reh10200, type=double, description=\"Real part of geometric driving term (nux + 2 nuy)\", units=\"1/m\" &end"},
+{(char*)"Reh20001", (char*)"&parameter name=Reh20001, type=double, description=\"Real part of chromatic driving term (synchro-betatron resonances)\", &end"},
+{(char*)"Reh00201", (char*)"&parameter name=Reh00201, type=double, description=\"Real part of chromatic driving term (momentum-dependence of beta functions)\", &end"},
+{(char*)"Reh10002", (char*)"&parameter name=Reh10002, type=double, description=\"Real part of chromatic driving term (second order dispersion)\", units=\"1/m$a1/2$n\" &end"},
+{(char*)"Reh22000", (char*)"&parameter name=Reh22000, type=double, description=\"Real part of geometric driving term (amplitude-dependent tune)\", units=\"1/m\" &end"},
+{(char*)"Reh11110", (char*)"&parameter name=Reh11110, type=double, description=\"Real part of geometric driving term (amplitude-dependent tune)\", units=\"1/m\" &end"},
+{(char*)"Reh00220", (char*)"&parameter name=Reh00220, type=double, description=\"Real part of geometric driving term (amplitude-dependent tune)\", units=\"1/m\" &end"},
+{(char*)"Reh31000", (char*)"&parameter name=Reh31000, type=double, description=\"Real part of geometric driving term (2 nux)\", units=\"1/m\" &end"},
+{(char*)"Reh40000", (char*)"&parameter name=Reh40000, type=double, description=\"Real part of geometric driving term (4 nux)\", units=\"1/m\" &end"},
+{(char*)"Reh20110", (char*)"&parameter name=Reh20110, type=double, description=\"Real part of geometric driving term (2 nux)\", units=\"1/m\" &end"},
+{(char*)"Reh11200", (char*)"&parameter name=Reh11200, type=double, description=\"Real part of geometric driving term (2 nuy)\", units=\"1/m\" &end"},
+{(char*)"Reh20020", (char*)"&parameter name=Reh20020, type=double, description=\"Real part of geometric driving term (2 nux - 2 nuy)\", units=\"1/m\" &end"},
+{(char*)"Reh20200", (char*)"&parameter name=Reh20200, type=double, description=\"Real part of geometric driving term (2 nux + 2 nuy)\", units=\"1/m\" &end"},
+{(char*)"Reh00310", (char*)"&parameter name=Reh00310, type=double, description=\"Real part of geometric driving term (2 nuy)\", units=\"1/m\" &end"},
+{(char*)"Reh00400", (char*)"&parameter name=Reh00400, type=double, description=\"Real part of geometric driving term (4 nuy)\", units=\"1/m\" &end"},
+
+{(char*)"Imh11001", (char*)"&parameter name=Imh11001, type=double, description=\"Imaginary part of chromatic driving term (x chromaticity)\", &end"},
+{(char*)"Imh00111", (char*)"&parameter name=Imh00111, type=double, description=\"Imaginary part of chromatic driving term (y chromaticity)\", &end"},
+{(char*)"Imh21000", (char*)"&parameter name=Imh21000, type=double, description=\"Imaginary part of geometric driving term (nux)\", units=\"1/m$a1/2$n\" &end"},
+{(char*)"Imh30000", (char*)"&parameter name=Imh30000, type=double, description=\"Imaginary part of geometric driving term (3 nux)\", units=\"1/m$a1/2$n\" &end"},
+{(char*)"Imh10110", (char*)"&parameter name=Imh10110, type=double, description=\"Imaginary part of geometric driving term (nux)\", units=\"1/m$a1/2$n\" &end"},
+{(char*)"Imh10020", (char*)"&parameter name=Imh10020, type=double, description=\"Imaginary part of geometric driving term (nux - 2 nuy)\", units=\"1/m$a1/2$n\" &end"},
+{(char*)"Imh10200", (char*)"&parameter name=Imh10200, type=double, description=\"Imaginary part of geometric driving term (nux + 2 nuy)\", units=\"1/m\" &end"},
+{(char*)"Imh20001", (char*)"&parameter name=Imh20001, type=double, description=\"Imaginary part of chromatic driving term (synchro-betatron resonances)\", &end"},
+{(char*)"Imh00201", (char*)"&parameter name=Imh00201, type=double, description=\"Imaginary part of chromatic driving term (momentum-dependence of beta functions)\", &end"},
+{(char*)"Imh10002", (char*)"&parameter name=Imh10002, type=double, description=\"Imaginary part of chromatic driving term (second order dispersion)\", units=\"1/m$a1/2$n\" &end"},
+{(char*)"Imh22000", (char*)"&parameter name=Imh22000, type=double, description=\"Imaginary part of geometric driving term (amplitude-dependent tune)\", units=\"1/m\" &end"},
+{(char*)"Imh11110", (char*)"&parameter name=Imh11110, type=double, description=\"Imaginary part of geometric driving term (amplitude-dependent tune)\", units=\"1/m\" &end"},
+{(char*)"Imh00220", (char*)"&parameter name=Imh00220, type=double, description=\"Imaginary part of geometric driving term (amplitude-dependent tune)\", units=\"1/m\" &end"},
+{(char*)"Imh31000", (char*)"&parameter name=Imh31000, type=double, description=\"Imaginary part of geometric driving term (2 nux)\", units=\"1/m\" &end"},
+{(char*)"Imh40000", (char*)"&parameter name=Imh40000, type=double, description=\"Imaginary part of geometric driving term (4 nux)\", units=\"1/m\" &end"},
+{(char*)"Imh20110", (char*)"&parameter name=Imh20110, type=double, description=\"Imaginary part of geometric driving term (2 nux)\", units=\"1/m\" &end"},
+{(char*)"Imh11200", (char*)"&parameter name=Imh11200, type=double, description=\"Imaginary part of geometric driving term (2 nuy)\", units=\"1/m\" &end"},
+{(char*)"Imh20020", (char*)"&parameter name=Imh20020, type=double, description=\"Imaginary part of geometric driving term (2 nux - 2 nuy)\", units=\"1/m\" &end"},
+{(char*)"Imh20200", (char*)"&parameter name=Imh20200, type=double, description=\"Imaginary part of geometric driving term (2 nux + 2 nuy)\", units=\"1/m\" &end"},
+{(char*)"Imh00310", (char*)"&parameter name=Imh00310, type=double, description=\"Imaginary part of geometric driving term (2 nuy)\", units=\"1/m\" &end"},
+{(char*)"Imh00400", (char*)"&parameter name=Imh00400, type=double, description=\"Imaginary part of geometric driving term (4 nuy)\", units=\"1/m\" &end"},
+  };
 
 void dump_twiss_parameters(
   LINE_LIST *beamline,
@@ -1146,30 +1210,6 @@ void dump_twiss_parameters(
 			  IP_NUXTSWAMAX, beamline->nuxTswaExtrema[1],
 			  IP_NUYTSWAMIN, beamline->nuyTswaExtrema[0],
 			  IP_NUYTSWAMAX, beamline->nuyTswaExtrema[1],
-                          IP_H11001, beamline->drivingTerms.h11001,
-                          IP_H00111, beamline->drivingTerms.h00111,
-                          IP_H20001, beamline->drivingTerms.h20001,
-                          IP_H00201, beamline->drivingTerms.h00201,
-                          IP_H10002, beamline->drivingTerms.h10002,
-                          IP_H21000, beamline->drivingTerms.h21000,
-                          IP_H30000, beamline->drivingTerms.h30000,
-                          IP_H10110, beamline->drivingTerms.h10110,
-                          IP_H10020, beamline->drivingTerms.h10020,
-                          IP_H10200, beamline->drivingTerms.h10200,
-                          IP_H22000, beamline->drivingTerms.h22000,
-                          IP_H11110, beamline->drivingTerms.h11110,
-                          IP_H00220, beamline->drivingTerms.h00220,
-                          IP_H31000, beamline->drivingTerms.h31000,
-                          IP_H40000, beamline->drivingTerms.h40000,
-                          IP_H20110, beamline->drivingTerms.h20110,
-                          IP_H11200, beamline->drivingTerms.h11200,
-                          IP_H20020, beamline->drivingTerms.h20020,
-                          IP_H20200, beamline->drivingTerms.h20200,
-                          IP_H00310, beamline->drivingTerms.h00310,
-                          IP_H00400, beamline->drivingTerms.h00400,
-                          IP_DNUXDJX, beamline->drivingTerms.dnux_dJx,
-                          IP_DNUXDJY, beamline->drivingTerms.dnux_dJy,
-                          IP_DNUYDJY, beamline->drivingTerms.dnuy_dJy,
                           IP_ETAX2, beamline->eta2[0],
                           IP_ETAY2, beamline->eta2[2],
                           IP_ETAX3, beamline->eta3[0],
@@ -1178,6 +1218,89 @@ void dump_twiss_parameters(
     SDDS_SetError((char*)"Problem setting SDDS parameters (dump_twiss_parameters 1)");
     SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
   }
+
+  if (compute_driving_terms) {
+    long offset;
+    if (radiation_integrals)
+      offset = IP_U0+1;
+    else
+      offset = IP_ALPHAC+1;
+    if (!SDDS_SetParameters(&SDDS_twiss, SDDS_SET_BY_INDEX|SDDS_PASS_BY_VALUE,
+			    IP_DNUXDJX+offset, beamline->drivingTerms.dnux_dJx,
+			    IP_DNUXDJY+offset, beamline->drivingTerms.dnux_dJy,
+			    IP_DNUYDJY+offset, beamline->drivingTerms.dnuy_dJy,
+			    /* magnitudes of driving terms */
+			    IP_H11001+offset, beamline->drivingTerms.h11001[0],
+			    IP_H00111+offset, beamline->drivingTerms.h00111[0],
+			    IP_H20001+offset, beamline->drivingTerms.h20001[0],
+			    IP_H00201+offset, beamline->drivingTerms.h00201[0],
+			    IP_H10002+offset, beamline->drivingTerms.h10002[0],
+			    IP_H21000+offset, beamline->drivingTerms.h21000[0],
+			    IP_H30000+offset, beamline->drivingTerms.h30000[0],
+			    IP_H10110+offset, beamline->drivingTerms.h10110[0],
+			    IP_H10020+offset, beamline->drivingTerms.h10020[0],
+			    IP_H10200+offset, beamline->drivingTerms.h10200[0],
+			    IP_H22000+offset, beamline->drivingTerms.h22000[0],
+			    IP_H11110+offset, beamline->drivingTerms.h11110[0],
+			    IP_H00220+offset, beamline->drivingTerms.h00220[0],
+			    IP_H31000+offset, beamline->drivingTerms.h31000[0],
+			    IP_H40000+offset, beamline->drivingTerms.h40000[0],
+			    IP_H20110+offset, beamline->drivingTerms.h20110[0],
+			    IP_H11200+offset, beamline->drivingTerms.h11200[0],
+			    IP_H20020+offset, beamline->drivingTerms.h20020[0],
+			    IP_H20200+offset, beamline->drivingTerms.h20200[0],
+			    IP_H00310+offset, beamline->drivingTerms.h00310[0],
+			    IP_H00400+offset, beamline->drivingTerms.h00400[0],
+			    /* real parts */
+			    IP_H11001+(IP_H00400-IP_H11001+1)+offset, beamline->drivingTerms.h11001[1],
+			    IP_H00111+(IP_H00400-IP_H11001+1)+offset, beamline->drivingTerms.h00111[1],
+			    IP_H20001+(IP_H00400-IP_H11001+1)+offset, beamline->drivingTerms.h20001[1],
+			    IP_H00201+(IP_H00400-IP_H11001+1)+offset, beamline->drivingTerms.h00201[1],
+			    IP_H10002+(IP_H00400-IP_H11001+1)+offset, beamline->drivingTerms.h10002[1],
+			    IP_H21000+(IP_H00400-IP_H11001+1)+offset, beamline->drivingTerms.h21000[1],
+			    IP_H30000+(IP_H00400-IP_H11001+1)+offset, beamline->drivingTerms.h30000[1],
+			    IP_H10110+(IP_H00400-IP_H11001+1)+offset, beamline->drivingTerms.h10110[1],
+			    IP_H10020+(IP_H00400-IP_H11001+1)+offset, beamline->drivingTerms.h10020[1],
+			    IP_H10200+(IP_H00400-IP_H11001+1)+offset, beamline->drivingTerms.h10200[1],
+			    IP_H22000+(IP_H00400-IP_H11001+1)+offset, beamline->drivingTerms.h22000[1],
+			    IP_H11110+(IP_H00400-IP_H11001+1)+offset, beamline->drivingTerms.h11110[1],
+			    IP_H00220+(IP_H00400-IP_H11001+1)+offset, beamline->drivingTerms.h00220[1],
+			    IP_H31000+(IP_H00400-IP_H11001+1)+offset, beamline->drivingTerms.h31000[1],
+			    IP_H40000+(IP_H00400-IP_H11001+1)+offset, beamline->drivingTerms.h40000[1],
+			    IP_H20110+(IP_H00400-IP_H11001+1)+offset, beamline->drivingTerms.h20110[1],
+			    IP_H11200+(IP_H00400-IP_H11001+1)+offset, beamline->drivingTerms.h11200[1],
+			    IP_H20020+(IP_H00400-IP_H11001+1)+offset, beamline->drivingTerms.h20020[1],
+			    IP_H20200+(IP_H00400-IP_H11001+1)+offset, beamline->drivingTerms.h20200[1],
+			    IP_H00310+(IP_H00400-IP_H11001+1)+offset, beamline->drivingTerms.h00310[1],
+			    IP_H00400+(IP_H00400-IP_H11001+1)+offset, beamline->drivingTerms.h00400[1],
+			    /* imaginary parts */
+			    IP_H11001+(IP_H00400-IP_H11001+1)*2+offset, beamline->drivingTerms.h11001[2],
+			    IP_H00111+(IP_H00400-IP_H11001+1)*2+offset, beamline->drivingTerms.h00111[2],
+			    IP_H20001+(IP_H00400-IP_H11001+1)*2+offset, beamline->drivingTerms.h20001[2],
+			    IP_H00201+(IP_H00400-IP_H11001+1)*2+offset, beamline->drivingTerms.h00201[2],
+			    IP_H10002+(IP_H00400-IP_H11001+1)*2+offset, beamline->drivingTerms.h10002[2],
+			    IP_H21000+(IP_H00400-IP_H11001+1)*2+offset, beamline->drivingTerms.h21000[2],
+			    IP_H30000+(IP_H00400-IP_H11001+1)*2+offset, beamline->drivingTerms.h30000[2],
+			    IP_H10110+(IP_H00400-IP_H11001+1)*2+offset, beamline->drivingTerms.h10110[2],
+			    IP_H10020+(IP_H00400-IP_H11001+1)*2+offset, beamline->drivingTerms.h10020[2],
+			    IP_H10200+(IP_H00400-IP_H11001+1)*2+offset, beamline->drivingTerms.h10200[2],
+			    IP_H22000+(IP_H00400-IP_H11001+1)*2+offset, beamline->drivingTerms.h22000[2],
+			    IP_H11110+(IP_H00400-IP_H11001+1)*2+offset, beamline->drivingTerms.h11110[2],
+			    IP_H00220+(IP_H00400-IP_H11001+1)*2+offset, beamline->drivingTerms.h00220[2],
+			    IP_H31000+(IP_H00400-IP_H11001+1)*2+offset, beamline->drivingTerms.h31000[2],
+			    IP_H40000+(IP_H00400-IP_H11001+1)*2+offset, beamline->drivingTerms.h40000[2],
+			    IP_H20110+(IP_H00400-IP_H11001+1)*2+offset, beamline->drivingTerms.h20110[2],
+			    IP_H11200+(IP_H00400-IP_H11001+1)*2+offset, beamline->drivingTerms.h11200[2],
+			    IP_H20020+(IP_H00400-IP_H11001+1)*2+offset, beamline->drivingTerms.h20020[2],
+			    IP_H20200+(IP_H00400-IP_H11001+1)*2+offset, beamline->drivingTerms.h20200[2],
+			    IP_H00310+(IP_H00400-IP_H11001+1)*2+offset, beamline->drivingTerms.h00310[2],
+			    IP_H00400+(IP_H00400-IP_H11001+1)*2+offset, beamline->drivingTerms.h00400[2],
+			    -1)) {
+      SDDS_SetError((char*)"Problem setting SDDS parameters (dump_twiss_parameters 1.5)");
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors|SDDS_EXIT_PrintErrors);
+    }
+  }
+
   if (radIntegrals) {
     if (!SDDS_SetParameters(&SDDS_twiss, SDDS_SET_BY_INDEX|SDDS_PASS_BY_VALUE,
                             IP_I1, radIntegrals->RI[0],
@@ -1396,7 +1519,26 @@ void setup_twiss_output(NAMELIST_TEXT *nltext, RUN *run, LINE_LIST *beamline, lo
                             run->runfile, run->lattice, parameter_definition, 
                             (radiation_integrals?N_PARAMETERS:IP_ALPHAC+1),
                             column_definition, (radiation_integrals?N_COLUMNS_WRI:N_COLUMNS), (char*)"setup_twiss_output",
-                            SDDS_EOS_NEWFILE|SDDS_EOS_COMPLETE);
+                            SDDS_EOS_NEWFILE);
+    if (compute_driving_terms) {
+      long i, index;
+      for (i=0; i<N_DT_PARAMETERS; i++) {
+        if (!SDDS_ProcessParameterString(&SDDS_twiss, driving_term_parameter_definition[i].text, 0) ||
+            (SDDS_GetParameterIndex(&SDDS_twiss, driving_term_parameter_definition[i].name))<0) {
+            fprintf(stdout, "Unable to define SDDS parameter for driving terms--string was:\n%s\n", 
+                    parameter_definition[i].text);
+            fflush(stdout);
+            SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+            exitElegant(1);
+	}
+      }
+    }
+    if (!SDDS_WriteLayout(&SDDS_twiss)) {
+      fprintf(stdout, "Unable to write SDDS layout for file %s\n", filename);
+      fflush(stdout);
+      SDDS_PrintErrors(stderr, SDDS_VERBOSE_PrintErrors);
+      exitElegant(1);
+    }
     SDDS_twiss_initialized = 1;
     twiss_count = 0;
   }
@@ -1404,6 +1546,7 @@ void setup_twiss_output(NAMELIST_TEXT *nltext, RUN *run, LINE_LIST *beamline, lo
     SDDS_twiss_initialized = 0;
   twiss_initialized = 1;
 
+  beamline->flags = 0;
   beamline->flags |= BEAMLINE_TWISS_WANTED;
   if (radiation_integrals)
     beamline->flags |= BEAMLINE_RADINT_WANTED;
@@ -1424,6 +1567,7 @@ void finish_twiss_output(void)
   if (doTuneShiftWithAmplitude && tune_shift_with_amplitude_struct.tune_output)
     SDDS_Terminate(&SDDSTswaTunes);
   doTuneShiftWithAmplitude = 0;
+  free_namelist(&twiss_output);
   log_exit((char*)"finish_twiss_output");
 }
 
@@ -1577,6 +1721,8 @@ long run_twiss_output(RUN *run, LINE_LIST *beamline, double *starting_coord, lon
       isnan(elast->twiss->betay) ||
       isnan(elast->twiss->etay))
     return 0;
+  if (beamline->acc_limit_name[0]) free(beamline->acc_limit_name[0]);
+  if (beamline->acc_limit_name[1]) free(beamline->acc_limit_name[1]);
 
   log_exit((char*)"run_twiss_output");
   return 1;
@@ -1618,6 +1764,7 @@ void compute_twiss_parameters(RUN *run, LINE_LIST *beamline, double *starting_co
     if (beamline->matrix) {
       free_matrices(beamline->matrix);
       free(beamline->matrix);
+      beamline->matrix = NULL;
     }
 
     beamline->matrix = compute_periodic_twiss(&betax, &alphax, &etax, &etapx, beamline->tune,
@@ -1728,11 +1875,12 @@ void compute_twiss_parameters(RUN *run, LINE_LIST *beamline, double *starting_co
     for (j=0; j<N_TSWA; j++)
       beamline->dnux_dA[i][j] = beamline->dnuy_dA[i][j] = 0;
 
-  beamline->drivingTerms.h21000 = beamline->drivingTerms.h30000 = beamline->drivingTerms.h10110 =
-    beamline->drivingTerms.h10020 = beamline->drivingTerms.h10200 = 
-      beamline->drivingTerms.h22000 = beamline->drivingTerms.h11110 = beamline->drivingTerms.h00220 = beamline->drivingTerms.h31000 = 
-        beamline->drivingTerms.h40000 = beamline->drivingTerms.h20110 = beamline->drivingTerms.h11200 = beamline->drivingTerms.h20020 = 
-          beamline->drivingTerms.h20200 = beamline->drivingTerms.h00310 = beamline->drivingTerms.h00400 = 0;
+  for (i=0; i<3; i++)
+    beamline->drivingTerms.h21000[i] = beamline->drivingTerms.h30000[i] = beamline->drivingTerms.h10110[i] =
+      beamline->drivingTerms.h10020[i] = beamline->drivingTerms.h10200[i] = 
+      beamline->drivingTerms.h22000[i] = beamline->drivingTerms.h11110[i] = beamline->drivingTerms.h00220[i] = beamline->drivingTerms.h31000[i] = 
+      beamline->drivingTerms.h40000[i] = beamline->drivingTerms.h20110[i] = beamline->drivingTerms.h11200[i] = beamline->drivingTerms.h20020[i] = 
+      beamline->drivingTerms.h20200[i] = beamline->drivingTerms.h00310[i] = beamline->drivingTerms.h00400[i] = 0;
   
   if (periodic) {
     if (!(M = beamline->matrix))
@@ -2095,10 +2243,8 @@ void modify_rfca_matrices(ELEMENT_LIST *eptr, long order)
 {
   while (eptr) {
     if (eptr->type==T_RFCA || eptr->type==T_MODRF || eptr->type==T_RFCW || eptr->type==T_RFDF) {
-      if (eptr->matrix) {
-        free_matrices(eptr->matrix);
-        tfree(eptr->matrix);
-      }
+      eptr->savedMatrix = eptr->matrix;
+      eptr->matrix = NULL;
       switch (eptr->type) {
       case T_RFCA:
         if (((RFCA*)eptr->p_elem)->change_p0)
@@ -2133,6 +2279,10 @@ void reset_rfca_matrices(ELEMENT_LIST *eptr, long order)
         tfree(eptr->matrix);
         eptr->matrix = NULL;
       }
+      if (eptr->savedMatrix) {
+        eptr->matrix = eptr->savedMatrix;
+        eptr->savedMatrix = NULL;
+      } 
     }
     eptr = eptr->succ;
   }
@@ -2216,6 +2366,121 @@ void compute_twiss_statistics(LINE_LIST *beamline, TWISS *twiss_ave, TWISS *twis
   }
 }
 
+void compute_twiss_percentiles(LINE_LIST *beamline, TWISS *twiss_p99, TWISS *twiss_p98, TWISS *twiss_p96)
+{
+  ELEMENT_LIST *eptr;
+  long iElem, i;
+  double **data;
+  TWISS *twiss_pXX[3];
+  double percent[3] = {99, 98, 96};
+  double value[3];
+    
+  if (!twiss_p99) {
+    fprintf(stdout, (char*)"error: NULL twiss_p99 pointer in compute_twiss_percentiles\n");
+    fflush(stdout);
+    abort();
+  }
+  if (!twiss_p98) {
+    fprintf(stdout, (char*)"error: NULL twiss_min pointer in compute_twiss_percentiles\n");
+    fflush(stdout);
+    abort();
+  }
+  if (!twiss_p96) {
+    fprintf(stdout, (char*)"error: NULL twiss_max pointer in compute_twiss_percentiles\n");
+    fflush(stdout);
+    abort();
+  }
+  
+  data = (double**)czarray_2d(sizeof(double), 8, beamline->n_elems);
+  eptr = beamline->elem_twiss;
+  iElem = 0;
+  while (eptr) {
+    if (iElem>=beamline->n_elems)
+      bombElegant("element counting error (compute_twiss_percentiles)", NULL);
+    data[0][iElem] = eptr->twiss->betax;
+    data[1][iElem] = eptr->twiss->alphax;
+    data[2][iElem] = eptr->twiss->etax;
+    data[3][iElem] = eptr->twiss->etapx;
+    data[4][iElem] = eptr->twiss->betay;
+    data[5][iElem] = eptr->twiss->alphay;
+    data[6][iElem] = eptr->twiss->etay;
+    data[7][iElem] = eptr->twiss->etapy;
+    iElem++;
+    eptr = eptr->succ;
+  }
+
+  twiss_pXX[0] = twiss_p99;
+  twiss_pXX[1] = twiss_p98;
+  twiss_pXX[2] = twiss_p96;
+  
+  compute_percentiles(value, percent, 3, data[0], beamline->n_elems);
+  for (i=0; i<3; i++) {
+    twiss_pXX[i]->betax = value[i];
+#ifdef DEBUG
+    printf("betax %.0f %% = %g\n", percent[i], value[i]);
+#endif
+  }
+  
+  compute_percentiles(value, percent, 3, data[1], beamline->n_elems);
+  for (i=0; i<3; i++) {
+    twiss_pXX[i]->alphax = value[i];
+#ifdef DEBUG
+    printf("alphax %.0f %% = %g\n", percent[i], value[i]);
+#endif
+  }
+  
+  compute_percentiles(value, percent, 3, data[2], beamline->n_elems);
+  for (i=0; i<3; i++) {
+    twiss_pXX[i]->etax = value[i];
+#ifdef DEBUG
+    printf("etax %.0f %% = %g\n", percent[i], value[i]);
+#endif
+  }
+  
+  compute_percentiles(value, percent, 3, data[3], beamline->n_elems);
+  for (i=0; i<3; i++) {
+    twiss_pXX[i]->etapx = value[i];
+#ifdef DEBUG
+    printf("etaxp %.0f %% = %g\n", percent[i], value[i]);
+#endif
+  }
+  
+  compute_percentiles(value, percent, 3, data[4], beamline->n_elems);
+  for (i=0; i<3; i++) {
+    twiss_pXX[i]->betay = value[i];
+#ifdef DEBUG
+    printf("betay %.0f %% = %g\n", percent[i], value[i]);
+#endif
+  }
+  
+  compute_percentiles(value, percent, 3, data[5], beamline->n_elems);
+  for (i=0; i<3; i++) {
+    twiss_pXX[i]->alphay = value[i];
+#ifdef DEBUG
+    printf("alphay %.0f %% = %g\n", percent[i], value[i]);
+#endif
+  }
+  
+  compute_percentiles(value, percent, 3, data[6], beamline->n_elems);
+  for (i=0; i<3; i++) {
+    twiss_pXX[i]->etay = value[i];
+#ifdef DEBUG
+    printf("etay %.0f %% = %g\n", percent[i], value[i]);
+#endif
+  }
+  
+  compute_percentiles(value, percent, 3, data[7], beamline->n_elems);
+  for (i=0; i<3; i++) {
+    twiss_pXX[i]->etapy = value[i];
+#ifdef DEBUG
+    printf("etayp %.0f %% = %g\n", percent[i], value[i]);
+#endif
+  }
+
+  free_czarray_2d((void**)data, 8, beamline->n_elems); 
+}
+
+
 void incrementRadIntegrals(RADIATION_INTEGRALS *radIntegrals, double *dI, 
                            ELEMENT_LIST *elem, 
                            double beta0, double alpha0, double gamma0, double eta0, double etap0, 
@@ -2259,6 +2524,31 @@ void incrementRadIntegrals(RADIATION_INTEGRALS *radIntegrals, double *dI,
   } else if (elem->type==T_CWIGGLER) {
     CWIGGLER *wiggler;
     wiggler = (CWIGGLER*)(elem->p_elem);
+    if (wiggler->BPeak[1]) {
+      /* By */
+      AddWigglerRadiationIntegrals(wiggler->length, wiggler->periods*2, 
+                                   wiggler->radiusInternal[1],
+                                   eta0, etap0, beta0, alpha0,
+                                   &I1, &I2, &I3, &I4, &I5);
+      radIntegrals->RI[0] += I1;
+      radIntegrals->RI[1] += I2;
+      radIntegrals->RI[2] += I3;
+      radIntegrals->RI[3] += I4;
+      radIntegrals->RI[4] += I5;
+    }
+    if (wiggler->BPeak[0]) {
+      /* Bx */
+      I1 = I2 = I3 = I4 = I5 = 0;
+      AddWigglerRadiationIntegrals(wiggler->length, wiggler->periods*2, 
+                                   wiggler->radiusInternal[0],
+                                   etay0, etapy0, betay0, alphay0,
+                                   &I1, &I2, &I3, &I4, &I5);
+      radIntegrals->RI[1] += I2;
+      radIntegrals->RI[2] += I3;
+    }
+  } else if (elem->type==T_APPLE) {
+    APPLE *wiggler;
+    wiggler = (APPLE*)(elem->p_elem);
     if (wiggler->BPeak[1]) {
       /* By */
       AddWigglerRadiationIntegrals(wiggler->length, wiggler->periods*2, 
@@ -3732,49 +4022,71 @@ void setLinearChromaticTrackingValues(LINE_LIST *beamline)
   beamline->alpha[1] = setup_linear_chromatic_tracking_struct.alphac[1];
 }
 
+typedef struct {
+  double betax, betay;
+  double rbetax, rbetay;           /* rbetax = sqrt(betax) */
+  double betax2, betay2;           /* betax2 = betax^2 */
+  double phix, phiy;
+  std::complex <double> px[5], py[5];    /* px[j]=(exp(i*phix))^j j>0 */
+  double b2L, b3L, s;
+} ELEMDATA;
 
 void computeDrivingTerms(DRIVING_TERMS *d, ELEMENT_LIST *elem, TWISS *twiss0, double *tune)
 /* Based on J. Bengtsson, SLS Note 9/97, March 7, 1997, with corrections per W. Guo (NSLS) */
+/* Revised to follow C. X. Wang AOP-TN-2009-020 for second-order terms */
 {
   std::complex <double> h11001, h00111, h20001, h00201, h10002;
   std::complex <double> h21000, h30000, h10110, h10020, h10200;
-  std::complex <double> h22000, h11110, h00220, h31000, h40000, h12000;
+  std::complex <double> h22000, h11110, h00220, h31000, h40000;
   std::complex <double> h20110, h11200, h20020, h20200, h00310, h00400;
   std::complex <double> t1, t2, t3, t4;
-  double betax1, betay1, phix1, phiy1, etax1;
-  double betax2, betay2, phix2, phiy2;
-  double coef, b2L, b3L1, b3L2, sqrt_betax, sqrt3_betax, nux, nuy;
-  ELEMENT_LIST *eptr1, *eptr2;
-  
+  std::complex <double> ii;
+  double betax1, betay1, phix1, phiy1, etax1, termSign;
+  double coef, b2L, b3L, b4L, nux, nuy;
+  ELEMENT_LIST *eptr1;
+  double two=2, three=3, four=4;
+  ELEMDATA *ed = NULL;
+  long nE=0, iE, jE;
+  double sqrt8, sqrt2;
+
+  sqrt8 = sqrt((double)8);
+  sqrt2 = sqrt((double)2);
+  ii = std::complex<double>(0,1);
+
   /* accumulate real and imaginary parts */
   h11001 = h00111 = h20001 = h00201 = h10002 = std::complex<double>(0,0);
   h21000 = h30000 = h10110 = h10020 = h10200 = std::complex<double>(0,0);
+  h22000 = h11110 = h00220 = h31000 = h40000 = std::complex<double>(0,0);
+  h20110 = h11200 = h20020 = h20200 = h00310 = h00400 = std::complex<double>(0,0);
+  
+  d->dnux_dJx = d->dnux_dJy = d->dnuy_dJy = 0;
+
   eptr1 = elem;
   while (eptr1) {
-    b2L = b3L1 = 0;
+    b2L = b3L = b4L = 0;
     switch (eptr1->type) {
     case T_SEXT:
-      b3L1 = ((SEXT*)eptr1->p_elem)->k2 * ((SEXT*)eptr1->p_elem)->length/2;
+      b3L = ((SEXT*)eptr1->p_elem)->k2 * ((SEXT*)eptr1->p_elem)->length/2;
       break;
     case T_KSEXT:
-      b3L1 = ((KSEXT*)eptr1->p_elem)->k2 * ((KSEXT*)eptr1->p_elem)->length/2;
+      b3L = ((KSEXT*)eptr1->p_elem)->k2 * ((KSEXT*)eptr1->p_elem)->length/2;
       break;
     case T_KQUSE:
       b2L = ((KQUSE*)eptr1->p_elem)->k1 * ((KQUSE*)eptr1->p_elem)->length;
-      b3L1 = ((KQUSE*)eptr1->p_elem)->k2 * ((KQUSE*)eptr1->p_elem)->length/2;
+      b3L = ((KQUSE*)eptr1->p_elem)->k2 * ((KQUSE*)eptr1->p_elem)->length/2;
       break;
     case T_SBEN:
     case T_RBEN:
       b2L = ((BEND*)eptr1->p_elem)->k1 * ((BEND*)eptr1->p_elem)->length;
-      b3L1 = ((BEND*)eptr1->p_elem)->k2 * ((BEND*)eptr1->p_elem)->length/2;
+      b3L = ((BEND*)eptr1->p_elem)->k2 * ((BEND*)eptr1->p_elem)->length/2;
       break;
     case T_CSBEND:
       b2L = ((CSBEND*)eptr1->p_elem)->k1 * ((CSBEND*)eptr1->p_elem)->length;
-      b3L1 = ((CSBEND*)eptr1->p_elem)->k2 * ((CSBEND*)eptr1->p_elem)->length/2;
+      b3L = ((CSBEND*)eptr1->p_elem)->k2 * ((CSBEND*)eptr1->p_elem)->length/2;
       break;
     case T_CSRCSBEND:
       b2L = ((CSRCSBEND*)eptr1->p_elem)->k1 * ((CSRCSBEND*)eptr1->p_elem)->length;
-      b3L1 = ((CSRCSBEND*)eptr1->p_elem)->k2 * ((CSRCSBEND*)eptr1->p_elem)->length/2;
+      b3L = ((CSRCSBEND*)eptr1->p_elem)->k2 * ((CSRCSBEND*)eptr1->p_elem)->length/2;
       break;
     case T_QUAD:
       b2L = ((QUAD*)eptr1->p_elem)->k1 * ((QUAD*)eptr1->p_elem)->length;
@@ -3782,10 +4094,16 @@ void computeDrivingTerms(DRIVING_TERMS *d, ELEMENT_LIST *elem, TWISS *twiss0, do
     case T_KQUAD:
       b2L = ((KQUAD*)eptr1->p_elem)->k1 * ((KQUAD*)eptr1->p_elem)->length;
       break;
+    case T_OCT:
+      b4L = ((OCTU*)eptr1->p_elem)->k3 * ((OCTU*)eptr1->p_elem)->length/6;
+      break;
+    case T_KOCT:
+      b4L = ((KOCT*)eptr1->p_elem)->k3 * ((OCTU*)eptr1->p_elem)->length/6;
+      break;
     default:
       break;
     }      
-    if (b2L || b3L1) {
+    if (b2L || b3L || b4L) {
       if (eptr1->pred) {
         betax1 = (eptr1->twiss->betax + eptr1->pred->twiss->betax)/2;
         etax1  = (eptr1->twiss->etax + eptr1->pred->twiss->etax)/2;
@@ -3799,208 +4117,381 @@ void computeDrivingTerms(DRIVING_TERMS *d, ELEMENT_LIST *elem, TWISS *twiss0, do
         betay1 = (eptr1->twiss->betay + twiss0->betay)/2;
         phiy1  = (eptr1->twiss->phiy + twiss0->phiy)/2;
       }
-      sqrt_betax = sqrt(betax1);
-      sqrt3_betax = ipow(sqrt_betax, 3);
 
-      /* first-order chromatic terms */
-      /* h11001 and h00111 */
-      coef = b2L-2*b3L1*etax1;
-      h11001 += coef*betax1/4;
-      h00111 += -coef*betay1/4;
+      ed = (ELEMDATA*)SDDS_Realloc(ed, sizeof(*ed)*(nE+1));
+      ed[nE].s = eptr1->end_pos;
+      ed[nE].b2L = b2L;
+      ed[nE].b3L = b3L;
+      ed[nE].betax = betax1;
+      ed[nE].betax2 = sqr(betax1);
+      ed[nE].rbetax = sqrt(betax1);
+      ed[nE].phix = phix1;
+      ed[nE].px[1] = exp(ii*phix1);
+      ed[nE].px[2] = ed[nE].px[1]*ed[nE].px[1];
+      ed[nE].px[3] = ed[nE].px[1]*ed[nE].px[2];
+      ed[nE].px[4] = ed[nE].px[1]*ed[nE].px[3];
+      ed[nE].betay = betay1;
+      ed[nE].betay2 = sqr(betay1);
+      ed[nE].rbetay = sqrt(betay1);
+      ed[nE].phiy = phiy1;
+      ed[nE].py[1] = exp(ii*phiy1);
+      ed[nE].py[2] = ed[nE].py[1]*ed[nE].py[1];
+      ed[nE].py[3] = ed[nE].py[1]*ed[nE].py[2];
+      ed[nE].py[4] = ed[nE].py[1]*ed[nE].py[3];
 
-      /* h20001, h00201 */
-      h20001 += coef/8*betax1*cos(2*phix1) + std::complex<double>(0,1)*coef/8.0*betax1*sin(2*phix1);
-      h00201 += -coef/8*betay1*cos(2*phiy1) + std::complex<double>(0,1)*(-coef/8*betay1*sin(2*phiy1));
 
-      /* h10002 */
-      coef = b2L-b3L1*etax1;
-      h10002 += coef/2*etax1*sqrt_betax*cos(phix1) + std::complex<double>(0,1)*coef/2.0*etax1*sqrt_betax*sin(phix1);
+      if (b2L || b3L) {
+	/* first-order chromatic terms */
+	/* h11001 and h00111 */
+	h11001 += b3L*betax1*etax1/2-b2L*betax1/4;
+	h00111 += b2L*betay1/4-b3L*betay1*etax1/2;
+	
+	/* h20001, h00201 */
+	h20001 += (b3L*betax1*etax1/2-b2L*betax1/4)/2*ed[nE].px[2];
+	h00201 += (b2L*betay1/4-b3L*betay1*etax1/2)/2*ed[nE].py[2];
 
-      if (b3L1) {
-        /* first-order geometric terms */
+	/* h10002 */
+	h10002 += (b3L*ed[nE].rbetax*ipow(etax1,2)-b2L*ed[nE].rbetax*etax1)/2*ed[nE].px[1];
+      }
+      if (ed[nE].b3L) {
+        /* first-order geometric terms from sextupoles */
         /* h21000 */
-        coef = -b3L1/8*sqrt3_betax;
-        h21000 += coef*cos(phix1) + std::complex<double>(0,1)*coef*sin(phix1);
-        
+	h21000 += b3L*ed[nE].rbetax*betax1/8*ed[nE].px[1];
+
         /* h30000 */
-        coef = coef/3;
-        h30000 += coef*cos(3*phix1) + std::complex<double>(0,1)*coef*sin(3*phix1);
+	h30000 += b3L*ed[nE].rbetax*betax1/24*ed[nE].px[3];
         
         /* h10110 */
-        coef = b3L1/4*sqrt_betax*betay1;
-        h10110 += coef*cos(phix1) + std::complex<double>(0,1)*coef*sin(phix1);
-        
+	h10110 += -b3L*ed[nE].rbetax*betay1/4*ed[nE].px[1];
+
         /* h10020 and h10200 */
-        coef = coef/2;
-        h10020 += coef*cos(phix1-2*phiy1) + std::complex<double>(0,1)*coef*sin(phix1-2*phiy1);
-        h10200 += coef*cos(phix1+2*phiy1) + std::complex<double>(0,1)*coef*sin(phix1+2*phiy1);
+	h10020 += -b3L*ed[nE].rbetax*betay1/8*ed[nE].px[1]*conj(ed[nE].py[2]);
+
+	h10200 += -b3L*ed[nE].rbetax*betay1/8*ed[nE].px[1]*ed[nE].py[2];
       }
+      if (b4L) {
+        /* second-order terms from leading order effects of octupoles */
+	/* Ignoring a large number of terms that are not also driven by sextupoles */
+
+        d->dnux_dJx += 3*b4L*ed[nE].betax2/(8*PI);
+        d->dnux_dJy -= 3*b4L*betax1*betay1/(4*PI);
+        d->dnuy_dJy += 3*b4L*ed[nE].betay2/(8*PI);
+	
+	h22000 += 3*b4L*ed[nE].betax2/32;
+	h11110 += -3*b4L*betax1*betay1/8;
+	h00220 += 3*b4L*ed[nE].betay2/32;
+	h31000 += b4L*ed[nE].betax2/16*ed[nE].px[2];
+	h40000 += b4L*ed[nE].betax2/64*ed[nE].px[4];
+	h20110 += -3*b4L*betax1*betay1/16*ed[nE].px[2];
+	h11200 += -3*b4L*betax1*betay1/16*ed[nE].py[2];
+	h20020 += -3*b4L*betax1*betay1/32*ed[nE].px[2]*conj(ed[nE].py[2]);
+	h20200 += -3*b4L*betax1*betay1/32*ed[nE].px[2]*ed[nE].py[2];
+	h00310 += b4L*ed[nE].betay2/16*ed[nE].py[2];
+	h00400 += b4L*ed[nE].betay2/64*ed[nE].py[4];
+      }
+      nE++;
     }
     eptr1 = eptr1->succ;
   }
 
-  d->h11001 = std::abs<double>(h11001);
-  d->h00111 = std::abs<double>(h00111);
-  d->h20001 = std::abs<double>(h20001);
-  d->h00201 = std::abs<double>(h00201);
-  d->h10002 = std::abs<double>(h10002);
+  /* Done with the leading-order quad and sext terms */
+  d->h11001[0] = std::abs<double>(h11001);
+  d->h11001[1] = h11001.real();
+  d->h11001[2] = h11001.imag();
+  d->h00111[0] = std::abs<double>(h00111);
+  d->h00111[1] = h00111.real();
+  d->h00111[2] = h00111.imag();
+  d->h20001[0] = std::abs<double>(h20001);
+  d->h20001[1] = h20001.real();
+  d->h20001[2] = h20001.imag();
+  d->h00201[0] = std::abs<double>(h00201);
+  d->h00201[1] = h00201.real();
+  d->h00201[2] = h00201.imag();
+  d->h10002[0] = std::abs<double>(h10002);
+  d->h10002[1] = h10002.real();
+  d->h10002[2] = h10002.imag();
 
-  d->h21000 = std::abs<double>(h21000);
-  d->h30000 = std::abs<double>(h30000);
-  d->h10110 = std::abs<double>(h10110);
-  d->h10020 = std::abs<double>(h10020);
-  d->h10200 = std::abs<double>(h10200);
+  d->h21000[0] = std::abs<double>(h21000);
+  d->h21000[1] = h21000.real();
+  d->h21000[2] = h21000.imag();
+  d->h30000[0] = std::abs<double>(h30000);
+  d->h30000[1] = h30000.real();
+  d->h30000[2] = h30000.imag();
+  d->h10110[0] = std::abs<double>(h10110);
+  d->h10110[1] = h10110.real();
+  d->h10110[2] = h10110.imag();
+  d->h10020[0] = std::abs<double>(h10020);
+  d->h10020[1] = h10020.real();
+  d->h10020[2] = h10020.imag();
+  d->h10200[0] = std::abs<double>(h10200);
+  d->h10200[1] = h10200.real();
+  d->h10200[2] = h10200.imag();
 
-  /* compute second-order geomeric terms */
-  h12000 = std::conj(h21000);
-  h22000 = (3*sqr(std::abs<double>(h21000)) + sqr(std::abs<double>(h30000)))/64;
-  d->h22000 = std::abs<double>(h22000);
+  if (!leading_order_driving_terms_only) {
+    /* compute sextupole contributions to second-order terms */
 
-  t1 = 2.0*h21000*std::conj(h10110);
-  t2 = h10020*std::conj(h10020);
-  t3 = h10200*std::conj(h10200);
-  h11110 = (t1+t2+t3)/16.0;
-  d->h11110 = std::abs<double>(h11110);
-
-  h00220 = (4*sqr(std::abs<double>(h10110)) + sqr(std::abs<double>(h10020)) + sqr(std::abs<double>(h10200)))/64;
-  d->h00220 = std::abs<double>(h00220);
- 
-  h31000 = h30000*std::conj(h21000)/32.0;
-  d->h31000 = std::abs<double>(h31000);
-
-  h40000 = h30000*h21000/64.0;
-  d->h40000 = std::abs<double>(h40000);
-  
-  t1 = 2.0*h30000*std::conj(h10110);
-  t2 = 2.0*h21000*h10110;
-  t3 = 4.0*h10200*h10020;
-  h20110 = (t1+t2+t3)/64.0;
-  d->h20110 = std::abs<double>(h20110);
-
-  t1 = 2.0*h10200*h12000;
-  t2 = 2.0*h21000*std::conj(h10020);
-  t3 = 4.0*h10200*std::conj(h10110);
-  t4 = 4.0*h10110*std::conj(h10020);
-  h11200 = (t1+t2+t3+t4)/64.0;
-  d->h11200 = std::abs<double>(h11200);
-
-  t1 = h21000*h10020;
-  t2 = h30000*std::conj(h10200);
-  t3 = 4.0*h10110*h10020;
-  h20020 = (t1+t2+t3)/64.0;
-  d->h20020 = std::abs<double>(h20020);
-
-  t1 = h30000*std::conj(h10020)/64.0;
-  t2 = h10200*h21000/64.0;
-  t3 = h10110*h10200/16.0;
-  h20200 = t1+t2+t3;
-  d->h20200 = std::abs<double>(h20200);
-  
-  t1 = h10200*std::conj(h10110);
-  t2 = h10110*std::conj(h10020);
-  h00310 = (t1+t2)/32.0;
-  d->h00310 = std::abs<double>(h00310);
-  
-  h00400 = h10200*std::conj(h10020)/64.0;
-  d->h00400 = std::abs<double>(h00400);
-  
-  nux = tune[0];
-  nuy = tune[1];
-  eptr1 = elem;
-  d->dnux_dJx = d->dnux_dJy = d->dnuy_dJy = 0;
-  while (eptr1) {
-    b3L1 = 0;
-    switch (eptr1->type) {
-    case T_SEXT:
-      b3L1 = ((SEXT*)eptr1->p_elem)->k2 * ((SEXT*)eptr1->p_elem)->length/2;
-      break;
-    case T_KSEXT:
-      b3L1 = ((KSEXT*)eptr1->p_elem)->k2 * ((KSEXT*)eptr1->p_elem)->length/2;
-      break;
-    case T_KQUSE:
-      b3L1 = ((KQUSE*)eptr1->p_elem)->k2 * ((KQUSE*)eptr1->p_elem)->length/2;
-      break;
-    case T_RBEN:
-    case T_SBEN:
-      b3L1 = ((BEND*)eptr1->p_elem)->k2 * ((BEND*)eptr1->p_elem)->length/2;
-      break;
-    case T_CSBEND:
-      b3L1 = ((CSBEND*)eptr1->p_elem)->k2 * ((CSBEND*)eptr1->p_elem)->length/2;
-      break;
-    case T_CSRCSBEND:
-      b3L1 = ((CSRCSBEND*)eptr1->p_elem)->k2 * ((CSRCSBEND*)eptr1->p_elem)->length/2;
-      break;
-    default:
-      break;
-    }      
-    if (b3L1) {
-      if (eptr1->pred) {
-        betax1 = (eptr1->twiss->betax + eptr1->pred->twiss->betax)/2;
-        phix1  = (eptr1->twiss->phix + eptr1->pred->twiss->phix)/2;
-        betay1 = (eptr1->twiss->betay + eptr1->pred->twiss->betay)/2;
-        phiy1  = (eptr1->twiss->phiy + eptr1->pred->twiss->phiy)/2;
-      } else {
-        betax1 = (eptr1->twiss->betax + twiss0->betax)/2;
-        phix1  = (eptr1->twiss->phix + twiss0->phix)/2;
-        betay1 = (eptr1->twiss->betay + twiss0->betay)/2;
-        phiy1  = (eptr1->twiss->phiy + twiss0->phiy)/2;
-      }
-      eptr2 = elem;
-      while (eptr2) {
-        b3L2 = 0;
-        switch (eptr2->type) {
-        case T_SEXT:
-          b3L2 = ((SEXT*)eptr2->p_elem)->k2 * ((SEXT*)eptr2->p_elem)->length/2;
-          break;
-        case T_KSEXT:
-          b3L2 = ((KSEXT*)eptr2->p_elem)->k2 * ((KSEXT*)eptr2->p_elem)->length/2;
-          break;
-        case T_KQUSE:
-          b3L2 = ((KQUSE*)eptr2->p_elem)->k2 * ((KQUSE*)eptr2->p_elem)->length/2;
-          break;
-        case T_RBEN:
-        case T_SBEN:
-          b3L2 = ((BEND*)eptr2->p_elem)->k2 * ((BEND*)eptr2->p_elem)->length/2;
-          break;
-        case T_CSBEND:
-          b3L2 = ((CSBEND*)eptr2->p_elem)->k2 * ((CSBEND*)eptr2->p_elem)->length/2;
-          break;
-        case T_CSRCSBEND:
-          b3L2 = ((CSRCSBEND*)eptr2->p_elem)->k2 * ((CSRCSBEND*)eptr2->p_elem)->length/2;
-          break;
-        default:
-          break;
-        }
-        if (b3L2) {
-          if (eptr2->pred) {
-            betax2 = (eptr2->twiss->betax + eptr2->pred->twiss->betax)/2;
-            phix2  = (eptr2->twiss->phix + eptr2->pred->twiss->phix)/2;
-            betay2 = (eptr2->twiss->betay + eptr2->pred->twiss->betay)/2;
-            phiy2  = (eptr2->twiss->phiy + eptr2->pred->twiss->phiy)/2;
-          } else {
-            betax2 = (eptr2->twiss->betax + twiss0->betax)/2;
-            phix2  = (eptr2->twiss->phix + twiss0->phix)/2;
-            betay2 = (eptr2->twiss->betay + twiss0->betay)/2;
-            phiy2  = (eptr2->twiss->phiy + twiss0->phiy)/2;
+    nux = tune[0];
+    nuy = tune[1];
+    for (iE=0; iE<nE; iE++) {
+      if (ed[iE].b3L) {
+	for (jE=0; jE<nE; jE++) {
+          if (ed[jE].b3L) {
+	    d->dnux_dJx += ed[iE].b3L*ed[jE].b3L/(-16*PI)*pow(ed[iE].betax*ed[jE].betax, 1.5)*
+	      (3*cos(fabs(ed[iE].phix-ed[jE].phix)-PI*nux)/sin(PI*nux) + cos(fabs(3*(ed[iE].phix-ed[jE].phix))-3*PI*nux)/sin(3*PI*nux));
+	    d->dnux_dJy += ed[iE].b3L*ed[jE].b3L/(8*PI)*sqrt(ed[iE].betax*ed[jE].betax)*ed[iE].betay*
+	      (2*ed[jE].betax*cos(fabs(ed[iE].phix-ed[jE].phix)-PI*nux)/sin(PI*nux) 
+	       - ed[jE].betay*cos(fabs(ed[iE].phix-ed[jE].phix)+2*fabs(ed[iE].phiy-ed[jE].phiy)-PI*(nux+2*nuy))/sin(PI*(nux+2*nuy))
+	       + ed[jE].betay*cos(fabs(ed[iE].phix-ed[jE].phix)-2*fabs(ed[iE].phiy-ed[jE].phiy)-PI*(nux-2*nuy))/sin(PI*(nux-2*nuy)));
+	    d->dnuy_dJy += ed[iE].b3L*ed[jE].b3L/(-16*PI)*sqrt(ed[iE].betax*ed[jE].betax)*ed[iE].betay*ed[jE].betay*
+	      (4*cos(fabs(ed[iE].phix-ed[jE].phix)-PI*nux)/sin(PI*nux) 
+	       + cos(fabs(ed[iE].phix-ed[jE].phix)+2*fabs(ed[iE].phiy-ed[jE].phiy)-PI*(nux+2*nuy))/sin(PI*(nux+2*nuy)) 
+	       + cos(fabs(ed[iE].phix-ed[jE].phix)-2*fabs(ed[iE].phiy-ed[jE].phiy)-PI*(nux-2*nuy))/sin(PI*(nux-2*nuy)));
+	    termSign = SIGN(ed[iE].s - ed[jE].s);
+            if (termSign) {
+              /* geometric terms */
+              h22000 += (1./64)*termSign*ii*ed[iE].b3L*ed[jE].b3L*
+                ed[iE].rbetax*ed[jE].rbetax*ed[iE].betax*ed[jE].betax*
+                (ed[iE].px[3]*conj(ed[jE].px[3]) + three*ed[iE].px[1]*conj(ed[jE].px[1]));
+              h31000 += (1./32)*termSign*ii*ed[iE].b3L*ed[jE].b3L*
+                ed[iE].rbetax*ed[jE].rbetax*ed[iE].betax*ed[jE].betax*
+                ed[iE].px[3]*conj(ed[jE].px[1]);
+	      t1 = conj(ed[iE].px[1])*ed[jE].px[1];
+	      t2 = ed[iE].px[1]*conj(ed[jE].px[1]);
+              h11110 += (1./16)*termSign*ii*ed[iE].b3L*ed[jE].b3L*
+                ed[iE].rbetax*ed[jE].rbetax*ed[iE].betay*
+                (ed[jE].betax*(t1 - conj(t1) )
+                 + 
+		 ed[jE].betay*ed[iE].py[2]*conj(ed[jE].py[2])*(conj(t1) + t1)
+		 );
+	      t1 = exp(-ii*(ed[iE].phix-ed[jE].phix));
+	      t2 = conj(t1);
+              h11200 += (1./32)*termSign*ii*ed[iE].b3L*ed[jE].b3L*
+                ed[iE].rbetax*ed[jE].rbetax*ed[iE].betay*exp(ii*(2*ed[iE].phiy))*
+                (ed[jE].betax*(t1 - t2)
+                 + 
+		 two*ed[jE].betay*(t2 + t1)
+		 );
+              h40000 += (1./64)*termSign*ii*ed[iE].b3L*ed[jE].b3L*
+                ed[iE].rbetax*ed[jE].rbetax*ed[iE].betax*ed[jE].betax*
+                ed[iE].px[3]*ed[jE].px[1];
+              h20020 += (1./64)*termSign*ii*ed[iE].b3L*ed[jE].b3L*
+                ed[iE].rbetax*ed[jE].rbetax*ed[iE].betay*
+                (ed[jE].betax*conj(ed[iE].px[1]*ed[iE].py[2])*ed[jE].px[3]
+                 -(ed[jE].betax+four*ed[jE].betay)*ed[iE].px[1]*ed[jE].px[1]*conj(ed[iE].py[2])
+		 );
+              h20110 += (1./32)*termSign*ii*ed[iE].b3L*ed[jE].b3L*
+                ed[iE].rbetax*ed[jE].rbetax*ed[iE].betay*
+                (ed[jE].betax*(
+			       conj(ed[iE].px[1])*ed[jE].px[3]
+			       - 
+			       ed[iE].px[1]*ed[jE].px[1]
+			       ) 
+                 + two*ed[jE].betay*ed[iE].px[1]*ed[jE].px[1]*ed[iE].py[2]*conj(ed[jE].py[2])
+		 );
+              h20200 += (1./64)*termSign*ii*ed[iE].b3L*ed[jE].b3L*
+                ed[iE].rbetax*ed[jE].rbetax*ed[iE].betay*
+                (ed[jE].betax*
+		 conj(ed[iE].px[1])*ed[jE].px[3]*ed[iE].py[2]
+                 -(ed[jE].betax-four*ed[jE].betay)*
+		 ed[iE].px[1]*ed[jE].px[1]*ed[iE].py[2]
+		 );
+              h00220 += (1./64)*termSign*ii*ed[iE].b3L*ed[jE].b3L*
+                ed[iE].rbetax*ed[jE].rbetax*ed[iE].betay*ed[jE].betay*
+		(ed[iE].px[1]*ed[iE].py[2]*conj(ed[jE].px[1]*ed[jE].py[2])
+                 + four*ed[iE].px[1]*conj(ed[jE].px[1])
+		 - conj(ed[iE].px[1]*ed[jE].py[2])*ed[jE].px[1]*ed[iE].py[2]
+		 );
+              h00310 += (1./32)*termSign*ii*ed[iE].b3L*ed[jE].b3L*
+                ed[iE].rbetax*ed[jE].rbetax*ed[iE].betay*ed[jE].betay*ed[iE].py[2]*
+                (ed[iE].px[1]*conj(ed[jE].px[1])
+		 -conj(ed[iE].px[1])*ed[jE].px[1]
+		 );
+              h00400 += (1./64)*termSign*ii*ed[iE].b3L*ed[jE].b3L*
+                ed[iE].rbetax*ed[jE].rbetax*ed[iE].betay*ed[jE].betay*
+		ed[iE].px[1]*conj(ed[jE].px[1])*ed[iE].py[2]*ed[jE].py[2];
+	    }
           }
-          d->dnux_dJx += b3L1*b3L2/(-16*PI)*pow(betax1*betax2, 1.5)*
-                          (3*cos(fabs(phix1-phix2)-PI*nux)/sin(PI*nux) + cos(fabs(3*(phix1-phix2))-3*PI*nux)/sin(3*PI*nux));
-          d->dnux_dJy += b3L1*b3L2/(8*PI)*sqrt(betax1*betax2)*betay1*
-            (2*betax2*cos(fabs(phix1-phix2)-PI*nux)/sin(PI*nux) 
-             - betay2*cos(fabs(phix1-phix2)+2*fabs(phiy1-phiy2)-PI*(nux+2*nuy))/sin(PI*(nux+2*nuy))
-             + betay2*cos(fabs(phix1-phix2)-2*fabs(phiy1-phiy2)-PI*(nux-2*nuy))/sin(PI*(nux-2*nuy)));
-          d->dnuy_dJy += b3L1*b3L2/(-16*PI)*sqrt(betax1*betax2)*betay1*betay2*
-            (4*cos(fabs(phix1-phix2)-PI*nux)/sin(PI*nux) 
-             + cos(fabs(phix1-phix2)+2*fabs(phiy1-phiy2)-PI*(nux+2*nuy))/sin(PI*(nux+2*nuy)) 
-             + cos(fabs(phix1-phix2)-2*fabs(phiy1-phiy2)-PI*(nux-2*nuy))/sin(PI*(nux-2*nuy)));
         }
-        eptr2 = eptr2->succ;
       }
     }
-    eptr1 = eptr1->succ;
   }
+
+  d->h22000[0] = std::abs<double>(h22000);
+  d->h22000[1] = h22000.real();
+  d->h22000[2] = h22000.imag();
+  d->h11110[0] = std::abs<double>(h11110);
+  d->h11110[1] = h11110.real();
+  d->h11110[2] = h11110.imag();
+  d->h00220[0] = std::abs<double>(h00220);
+  d->h00220[1] = h00220.real();
+  d->h00220[2] = h00220.imag();
+  d->h31000[0] = std::abs<double>(h31000);
+  d->h31000[1] = h31000.real();
+  d->h31000[2] = h31000.imag();
+  d->h40000[0] = std::abs<double>(h40000);
+  d->h40000[1] = h40000.real();
+  d->h40000[2] = h40000.imag();
+  d->h20110[0] = std::abs<double>(h20110);
+  d->h20110[1] = h20110.real();
+  d->h20110[2] = h20110.imag();
+  d->h11200[0] = std::abs<double>(h11200);
+  d->h11200[1] = h11200.real();
+  d->h11200[2] = h11200.imag();
+  d->h20020[0] = std::abs<double>(h20020);
+  d->h20020[1] = h20020.real();
+  d->h20020[2] = h20020.imag();
+  d->h20200[0] = std::abs<double>(h20200);
+  d->h20200[1] = h20200.real();
+  d->h20200[2] = h20200.imag();
+  d->h00310[0] = std::abs<double>(h00310);
+  d->h00310[1] = h00310.real();
+  d->h00310[2] = h00310.imag();
+  d->h00400[0] = std::abs<double>(h00400);
+  d->h00400[1] = h00400.real();
+  d->h00400[2] = h00400.imag();
+
+  if (ed)
+    free(ed);
 }
 
 
+
+
+static  long nRfca = 0;
+static ELEMENT_LIST **rfcaElem = NULL;
+
+void setup_rf_setup(NAMELIST_TEXT *nltext, RUN *run, LINE_LIST *beamline, long do_twiss_output, long *do_rf_setup) 
+{
+  ELEMENT_LIST *eptr;
+  
+  /* process namelist input */
+  set_namelist_processing_flags(STICKY_NAMELIST_DEFAULTS);
+  set_print_namelist_flags(0);
+  if (processNamelist(&rf_setup, nltext)==NAMELIST_ERROR)
+    bombElegant(NULL, NULL);
+  if (echoNamelists) print_namelist(stdout, &rf_setup);
+  
+  if ((rf_setup_struct.start_occurence>0 && rf_setup_struct.end_occurence<1) ||
+      (rf_setup_struct.start_occurence<1 && rf_setup_struct.end_occurence>0) ||
+      rf_setup_struct.start_occurence>rf_setup_struct.end_occurence)
+    bombElegant("Invalid start and end occurence values", NULL);
+  if (rf_setup_struct.s_start>rf_setup_struct.s_end)
+    bombElegant("Invalid s_start and s_end values", NULL);
+  if (rf_setup_struct.near_frequency>0 && rf_setup_struct.harmonic>1)
+    bombElegant("Give non-zero near_frequency or harmonic value, not both", NULL);
+  if (rf_setup_struct.bucket_half_height>0 && rf_setup_struct.over_voltage>0)
+    bombElegant("Give non-zero bucket_half_height or over_voltage, not both", NULL);
+  
+  if (!do_twiss_output && rf_setup_struct.set_for_each_step)
+    bombElegant("If set_for_each_step is non-zero, must also ask for twiss output at each step", NULL);
+  if (do_twiss_output && !rf_setup_struct.set_for_each_step)
+    bombElegant("If set_for_each_step is zero, cannot also ask for twiss output at each step", NULL);
+
+  if (!matched || !radiation_integrals)
+    bombElegant("Need to compute matched twiss parameters with radiation integrals for RF setup", NULL);
+  
+  if (rf_setup_struct.name) {
+    str_toupper(rf_setup_struct.name);
+    if (has_wildcards(rf_setup_struct.name) && strchr(rf_setup_struct.name, '-'))
+      rf_setup_struct.name = expand_ranges(rf_setup_struct.name);
+  }
+
+  free(rfcaElem);
+  nRfca = 0;
+  rfcaElem = NULL;
+  
+  eptr = &(beamline->elem);
+  
+  while (eptr) {
+    if (eptr->type!=T_RFCA
+        || (rf_setup_struct.name && !wild_match(eptr->name, rf_setup_struct.name))
+        || (rf_setup_struct.start_occurence>0 && eptr->occurence<rf_setup_struct.start_occurence) 
+        || (rf_setup_struct.end_occurence>0 && eptr->occurence>rf_setup_struct.end_occurence)
+        || (rf_setup_struct.s_start>0 && eptr->end_pos<rf_setup_struct.s_start)
+        || (rf_setup_struct.s_end>0 && eptr->end_pos>rf_setup_struct.s_end)) {
+      eptr = eptr->succ;
+      continue;
+    }
+    rfcaElem = (ELEMENT_LIST**)SDDS_Realloc(rfcaElem, sizeof(*rfcaElem)*(nRfca+1));
+    rfcaElem[nRfca] = eptr;
+    nRfca ++;
+    eptr = eptr->succ;
+  }
+  
+  if (nRfca==0)
+    bombElegant("No RFCA elements found meeting requirements", NULL);
+
+  *do_rf_setup = 0;
+  if (!rf_setup_struct.set_for_each_step)
+    run_rf_setup(run, beamline);
+  else
+    *do_rf_setup = 1;
+}
+
+
+void run_rf_setup(RUN *run, LINE_LIST *beamline)
+{
+  double beta, T0, frf, q, voltage;
+  long harmonic, i;
+  RFCA *rfca;
+  long iFreq, iVolt, iPhase;
+
+  if (!(beamline->flags&BEAMLINE_TWISS_CURRENT) || !(beamline->flags&BEAMLINE_RADINT_CURRENT)) {
+    if (output_before_tune_correction)
+      bombElegant("twiss parameters and radiation integrals not up-to-date (do_rf_setup)", NULL);
+    return;
+  }       
+  
+  if (beamline->revolution_length<=0)
+    bombElegant("Beamline length is undefined (do_rf_setup)", NULL);
+  
+  beta = run->p_central/sqrt(sqr(run->p_central)+1);
+  T0 = beamline->revolution_length/(beta*c_mks);
+  if (rf_setup_struct.harmonic)
+    harmonic = rf_setup_struct.harmonic;
+  else
+    harmonic = rf_setup_struct.near_frequency*T0+0.5;
+
+  iFreq = confirm_parameter("FREQ", T_RFCA);
+  iVolt = confirm_parameter("VOLT", T_RFCA);
+  iPhase = confirm_parameter("PHASE", T_RFCA);
+  frf = harmonic/T0;
+  printf("\nRf setup: frequency is %21.15e Hz (h=%ld)\n", frf, harmonic);
+  for (i=0; i<nRfca; i++) {
+    rfca = (RFCA*)(rfcaElem[i]->p_elem);
+    rfca->freq = frf;
+    change_defined_parameter(rfcaElem[i]->name, iFreq, T_RFCA, frf, NULL, LOAD_FLAG_ABSOLUTE);
+    if (rfcaElem[i]->matrix) {
+      free_matrices(rfcaElem[i]->matrix);
+      free(rfcaElem[i]->matrix);
+      rfcaElem[i]->matrix = NULL;
+    }
+  }
+  
+  voltage = 0;
+  if (rf_setup_struct.bucket_half_height>0) {
+    double F, E;
+    
+    E = sqrt(sqr(run->p_central)+1)*particleMassMV;
+    F = sqr(rf_setup_struct.bucket_half_height)/(beamline->radIntegrals.Uo/(PI*beamline->alpha[0]*harmonic*E));
+    q = (F+2)/2;
+    voltage = (q=solveForOverVoltage(F,q))*beamline->radIntegrals.Uo*1e6/nRfca;
+  } else if (rf_setup_struct.over_voltage)
+    voltage = (q=rf_setup_struct.over_voltage)*beamline->radIntegrals.Uo*1e6/nRfca;
+  
+  if (voltage) {
+    double phase;
+    phase = 180-asin(1/q)*180/PI;
+    printf("Voltage per cavity is %21.15e V, phase is %21.15e deg\n", voltage, phase);
+    for (i=0; i<nRfca; i++) {
+      rfca = (RFCA*)(rfcaElem[i]->p_elem);
+      rfca->volt = voltage;
+      rfca->phase = phase;
+      change_defined_parameter(rfcaElem[i]->name, iVolt, T_RFCA, voltage, NULL, LOAD_FLAG_ABSOLUTE);
+      change_defined_parameter(rfcaElem[i]->name, iPhase, T_RFCA, phase, NULL, LOAD_FLAG_ABSOLUTE);
+    }
+  }
+  
+}
 
 

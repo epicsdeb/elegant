@@ -7,13 +7,10 @@
 # in the file LICENSE that is included with this distribution. 
 #*************************************************************************
 #
-# $Id: Makefile.Pelegant,v 1.13 2010/10/04 22:28:06 borland Exp $
+# $Id: Makefile.Pelegant,v 1.13 2010-10-04 22:28:06 borland Exp $
 #
 #  Lowest Level Directroy Makefile
-# $Log: Makefile.Pelegant,v $
-# Revision 1.13  2010/10/04 22:28:06  borland
-# Added ramp_elements command.  Similar to modulate_elements, but easier to use.
-#
+# $Log: not supported by cvs2svn $
 # Revision 1.12  2010/03/24 14:29:27  borland
 # Added modulate_elements command.
 #

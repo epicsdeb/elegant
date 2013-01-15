@@ -399,6 +399,9 @@ long do_lorentz_integration(double *coord, void *field)
         }                
 
     (*coord_transform)(q, coord, field, 1);
+#ifdef DEBUG
+    printf("length from integration routine: %le\n", s_start);
+#endif
 
     log_exit("do_lorentz_integration");
 
@@ -511,8 +514,22 @@ void lorentz_setup(
             /* calculate slope and intercept for entrance plane */ 
             alpha = nibend->angle/2-nibend->e1;
             rentr_intercept = -nibend->rho0*(sin(nibend->angle/2) - cos(nibend->angle/2)*tan(alpha));
-            fentr_intercept = rentr_intercept + flen/cos(alpha)/2;
-            entr_intercept = rentr_intercept - flen/cos(alpha)/2;
+            switch (nibend->fringePosition) {
+            case -1: /* Fringe inside */
+              fentr_intercept = rentr_intercept + flen/cos(alpha);
+              entr_intercept = rentr_intercept;
+              break;
+            case 1: /* Fringe outside */
+              fentr_intercept = rentr_intercept;
+              entr_intercept = rentr_intercept - flen/cos(alpha);
+              break;
+            case 0: /* Fringe centered */
+            default:
+              fentr_intercept = rentr_intercept + flen/cos(alpha)/2;
+              entr_intercept = rentr_intercept - flen/cos(alpha)/2;
+              break;
+            }
+             
             if (alpha!=PIo2)
                 entr_slope = -tan(alpha);
             else 
@@ -523,8 +540,22 @@ void lorentz_setup(
             /* calculate slope and intercept for exit plane */
             alpha = nibend->angle/2-nibend->e2;
             rexit_intercept = nibend->rho0*(sin(nibend->angle/2) - cos(nibend->angle/2)*tan(alpha));
-            fexit_intercept = rexit_intercept - flen/cos(alpha)/2; 
-            exit_intercept = rexit_intercept + flen/cos(alpha)/2; 
+            switch (nibend->fringePosition) {
+            case -1: /* Fringe inside */
+              fexit_intercept = rexit_intercept - flen/cos(alpha);
+              exit_intercept = rexit_intercept;
+              break;
+            case 1: /* Fringe outside */
+              fexit_intercept = rexit_intercept ;
+              exit_intercept = rexit_intercept + flen/cos(alpha); 
+              break;
+            case 0: /* Fringe centered */
+            default:
+              fexit_intercept = rexit_intercept - flen/cos(alpha)/2; 
+              exit_intercept = rexit_intercept + flen/cos(alpha)/2; 
+              break;
+            }
+            
             cos_alpha2 = cos(alpha);
             sin_alpha2 = sin(alpha);
             if (alpha!=PIo2)
@@ -532,6 +563,37 @@ void lorentz_setup(
             else 
                 exit_slope = DBL_MAX;   
 
+#ifdef DEBUG
+            if (1) {
+              FILE *fp_edges;
+              fp_edges = fopen("edges.sdds", "w");
+              fprintf(fp_edges, "SDDS1\n&parameter name=Type type=string &end\n");
+              fprintf(fp_edges, "&column name=q0 type=double units=m &end\n");
+              fprintf(fp_edges, "&column name=q1 type=double units=m &end\n");
+              fprintf(fp_edges, "&data mode=ascii no_row_counts=1 &end\n");
+              fprintf(fp_edges, "Fringe1Begin\n");
+              fprintf(fp_edges, "%le 0\n", entr_intercept);
+              fprintf(fp_edges, "%le %le\n\n", entr_intercept+entr_slope*nibend->rho0*2, nibend->rho0*2);
+              fprintf(fp_edges, "Fringe1End\n");
+              fprintf(fp_edges, "%le 0\n", fentr_intercept);
+              fprintf(fp_edges, "%le %le\n\n", fentr_intercept+entr_slope*nibend->rho0*2, nibend->rho0*2);
+              fprintf(fp_edges, "Reference1\n");
+              fprintf(fp_edges, "%le 0\n", rentr_intercept);
+              fprintf(fp_edges, "%le %le\n\n", rentr_intercept+entr_slope*nibend->rho0*2, nibend->rho0*2);
+
+              fprintf(fp_edges, "Fringe2Begin\n");
+              fprintf(fp_edges, "%le 0\n", fexit_intercept);
+              fprintf(fp_edges, "%le %le\n\n", fexit_intercept+exit_slope*nibend->rho0*2, nibend->rho0*2);
+              fprintf(fp_edges, "Fringe2End\n");
+              fprintf(fp_edges, "%le 0\n", exit_intercept);
+              fprintf(fp_edges, "%le %le\n\n", exit_intercept+exit_slope*nibend->rho0*2, nibend->rho0*2);
+              fprintf(fp_edges, "Reference2\n");
+              fprintf(fp_edges, "%le 0\n", rexit_intercept);
+              fprintf(fp_edges, "%le %le\n\n", rexit_intercept+exit_slope*nibend->rho0*2, nibend->rho0*2);
+              fclose(fp_edges);
+            }
+            
+#endif
             if (!nibend->initialized) {
               /* find zeta offset or fse adjustment to give the right bending angle */
               if (!flen)
@@ -592,7 +654,10 @@ void lorentz_setup(
                 nibend->zeta_offset = offset;
                 nibend->fse_adjust = fse_opt;
                 nibend->x_correction = traj_err_final_coord[0];
-                nibend->s_offset = (nibend->length-traj_err_final_coord[4])/2;
+                if (nibend->fudgePathLength)
+                  nibend->s_offset = (nibend->length-traj_err_final_coord[4])/2;
+                else
+                  nibend->s_offset = 0;
                 nibend->etilt = save[0]; 
                 nibend->dx = save[1];
                 nibend->dy = save[2];
@@ -874,8 +939,21 @@ void nibend_coord_transform(double *q, double *coord, NIBEND *nibend, long which
         dqds[2] = dyds;
         /* find q coordinates of particle at entrance plane */
         alpha = nibend->angle/2 - nibend->e1;
-        q0I  = -flen/2/cos(alpha) + nibend->rho0*(cos_ah*tan(alpha) - sin_ah);
+        switch (nibend->fringePosition) {
+        case -1 :
+          q0I  = nibend->rho0*(cos_ah*tan(alpha) - sin_ah);
+          break;
+        case 1:
+          q0I  = -flen/cos(alpha) + nibend->rho0*(cos_ah*tan(alpha) - sin_ah);
+          break;
+        case 0:
+          q0I  = -flen/2/cos(alpha) + nibend->rho0*(cos_ah*tan(alpha) - sin_ah);
+          break;
+        }
         ds   = (-q0[1]*tan(alpha) + q0I - q0[0])/(dqds[0] + dqds[1]*tan(alpha));
+#ifdef DEBUG
+        fprintf(stdout, "Initial ds = %e\n", ds);
+#endif
         q[0] = q0[0] + dqds[0]*ds;
         q[1] = q0[1] + dqds[1]*ds;
         q[2] = q0[2] + dqds[2]*ds;
@@ -922,6 +1000,9 @@ void nibend_coord_transform(double *q, double *coord, NIBEND *nibend, long which
         /* drift back to reference plane */
         tan_ah = tan(nibend->angle/2);
         ds = -(q[0] - q[1]*tan_ah)/(dqds[0] - dqds[1]*tan_ah);
+#ifdef DEBUG
+        fprintf(stdout, "Final ds = %e\n", ds);
+#endif
         q0[0] = q[0] + ds*dqds[0];
         q0[1] = q[1] + ds*dqds[1];
         q0[2] = q[2] + ds*dqds[2];
@@ -1136,7 +1217,7 @@ void nibend_deriv_function(double *qp, double *q, double s)
 
 #ifdef DEBUG
   if (field_output_on) {
-    fprintf(fp_field, "%e %e %e %e %e %e %e %e\n", q[0], q[1], q[2], z, s, F0, F1, F2);
+    fprintf(fp_field, "%21.15e %21.15e %21.15e %21.15e %21.15e %21.15e %21.15e %21.15e\n", q[0], q[1], q[2], z, s, F0, F1, F2);
     fflush(fp_field);
   }
 #endif
@@ -1290,7 +1371,7 @@ void nisept_deriv_function(double *qp, double *q, double s)
 
 #ifdef DEBUG
     if (field_output_on) {
-      fprintf(fp_field, "%e %e %e %e %e %e %e %e\n", q[0], q[1], q[2], 0.0, s, F0, F1, F2);
+      fprintf(fp_field, "%21.15e %21.15e %21.15e %21.15e %21.15e %21.15e %21.15e %21.15e\n", q[0], q[1], q[2], 0.0, s, F0, F1, F2);
       fflush(fp_field);
     }
 #endif
@@ -1374,7 +1455,7 @@ void bmapxy_deriv_function(double *qp, double *q, double s)
       F2 = bmapxy->strength*rpn(bmapxy->FyRpn);
     }
 #ifdef DEBUG
-    fprintf(fp_field, "%e %e %e %e %e %e %e %e\n", q[0], q[1], q[2], 0.0, s, F0, F1, F2);
+    fprintf(fp_field, "%21.15e %21.15e %21.15e %21.15e %21.15e %21.15e %21.15e %21.15e\n", q[0], q[1], q[2], 0.0, s, F0, F1, F2);
     fflush(fp_field);
 #endif
 }
@@ -1610,7 +1691,7 @@ void writeEngeFunctionToFile(char *filename)
   dz = flen/100;
   while (z<flen) {
     engeFunction(&Fy, &Fz, z, 0.0, engeD, engeCoef[0], engeCoef[1], engeCoef[2], 1);
-    fprintf(fp, "%e %e\n", z, Fy);
+    fprintf(fp, "%21.15e %21.15e\n", z, Fy);
     z += dz;
   }
   fclose(fp);

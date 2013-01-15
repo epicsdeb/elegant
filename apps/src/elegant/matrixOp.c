@@ -36,8 +36,19 @@
 
 #include "SDDS.h"
 #include "mdb.h"
-#define HUGE DBL_MAX
 
+#ifndef HUGE_VAL
+#define HUGE_VAL HUGE
+#else
+#ifndef HUGE
+#define HUGE HUGE_VAL
+#endif
+#endif
+
+
+#ifdef SUNPERF
+#include <sunperf.h>
+#endif
 #ifdef CLAPACK
 #include "cblas.h"
 #ifdef F2C
@@ -312,6 +323,10 @@ MAT *matrix_mult(MAT *mat1, MAT *mat2)
 {
   
   MAT *new_mat = NULL;
+#if defined(SUNPERF)
+  int lda, kk, ldb;
+  double alpha=1.0, beta=0.0; 
+#endif
 #if defined(CLAPACK)
   long lda, kk, ldb;
   double alpha=1.0, beta=0.0; 
@@ -325,19 +340,25 @@ MAT *matrix_mult(MAT *mat1, MAT *mat2)
   if (mat1->n !=mat2->m)
     SDDS_Bomb("The columns of A and rows of B do not match, can not do A X B operation(matrix_mult)!");
   
-#if defined(CLAPACK) || defined(LAPACK)
+#if defined(CLAPACK) || defined(LAPACK) || defined(SUNPERF)
   kk =  MAX(1, mat1->n);
   lda = MAX(1, mat1->m);
   ldb = MAX(1, mat2->m);
   new_mat = matrix_get(mat1->m, mat2->n);
-#if defined(_WIN32) || defined(SOLARIS) 
+#if defined(_WIN32)
   f2c_dgemm("N", "N",
             &new_mat->m, &new_mat->n, &kk, &alpha, mat1->base,
             &lda, mat2->base, &ldb, &beta, new_mat->base, &new_mat->m);
 #else
+#if defined(SUNPERF)
+  dgemm('N', 'N',
+        new_mat->m, new_mat->n, kk, alpha, mat1->base,
+        lda, mat2->base, ldb, beta, new_mat->base, new_mat->m);
+#else
   dgemm_("N", "N",
          &new_mat->m, &new_mat->n, &kk, &alpha, mat1->base,
          &lda, mat2->base, &ldb, &beta, new_mat->base, &new_mat->m);
+#endif
 #endif
 #else
    new_mat = op_matrix_mult(mat1, mat2);
@@ -354,7 +375,7 @@ MAT *matrix_invert(MAT *Ain, double *weight, int32_t largestSValue, int32_t smal
 {
   MAT *Inv=NULL;
   MAT *A;
-#if defined(CLAPACK) || defined(LAPACK)
+#if defined(CLAPACK) || defined(LAPACK) || defined(SUNPERF)
   MAT *U=NULL, *V=NULL, *Vt=NULL, *Invt=NULL;
   int32_t i, j, NSVUsed=0, m, n, firstdelete=1;   
   VEC *SValue=NULL, *SValueUsed=NULL, *InvSValue=NULL;
@@ -363,6 +384,13 @@ MAT *matrix_invert(MAT *Ain, double *weight, int32_t largestSValue, int32_t smal
   int info;
   /*use economy svd method i.e. U matrix is rectangular not square matrix */
   char calcMode='S';
+#endif
+#if defined(SUNPERF)
+  double *work;
+  int lwork;
+  int lda;
+  double alpha=1.0, beta=0.0;
+  int kk, ldb;
 #endif
 #if defined(CLAPACK)
   double *work;
@@ -381,7 +409,7 @@ MAT *matrix_invert(MAT *Ain, double *weight, int32_t largestSValue, int32_t smal
 
   A = matrix_copy(Ain);  /* To avoid changing users matrix */
 
-#if defined(CLAPACK) || defined(LAPACK)
+#if defined(CLAPACK) || defined(LAPACK) || defined(SUNPERF)
   if (!A || A->m<=0 || A->n<=0)
     SDDS_Bomb("Invalid matrix provided for invert (matrix_invert)!");
   n = A->n;
@@ -412,7 +440,17 @@ MAT *matrix_invert(MAT *Ain, double *weight, int32_t largestSValue, int32_t smal
       for (j=0; j<A->n; j++)
         Mij(A, i, j) *= weight[i]; 
   }
+#if defined(SUNPERF)
+  dgesvd(calcMode,calcMode,(int)A->m, (int)A->n,
+          A->base, (int)lda, 
+          SValue->ve,
+          U->base, (int)A->m,
+          Vt->base, (int)A->n,
+          &info); 
   
+  dtrans('I', 1.0, U->base, U->m, U->n, NULL);
+  dtrans('I', 1.0, Vt->base, Vt->m, Vt->n, NULL);
+#endif
 #if defined(CLAPACK)
   work = (double*) malloc(sizeof(double)*1);
   lwork = -1;
@@ -543,14 +581,20 @@ MAT *matrix_invert(MAT *Ain, double *weight, int32_t largestSValue, int32_t smal
   kk =  MIN(U->n, V->m);
   lda = MAX(1, U->m);
   ldb = MAX(1, V->m);
-#if defined(_WIN32) || defined(SOLARIS) 
+#if defined(_WIN32)
   f2c_dgemm("N", "N",
             &U->m, &V->n, &kk, &alpha, U->base,
             &lda, V->base, &ldb, &beta, Invt->base, &U->m);
 #else
+#if defined(SUNPERF)
+  dgemm('N', 'N',
+         U->m, V->n, kk, alpha, U->base,
+         lda, V->base, ldb, beta, Invt->base, U->m);
+#else
   dgemm_("N", "N",
          &U->m, &V->n, &kk, &alpha, U->base,
          &lda, V->base, &ldb, &beta, Invt->base, &U->m);
+#endif
 #endif
   matrix_free(V);
   if (Vt_matrix) {
@@ -661,23 +705,30 @@ double matrix_det(MAT *A)
   double det=1.0;
   MAT *B;
   
-#if defined(CLAPACK) 
+#if defined(SUNPERF)
+  int i, lda, n, m,*ipvt, info;
+#endif
+#if defined(CLAPACK)
   long i,lda, n, m, *ipvt, info; 
 #endif
-#if defined(LAPACK) 
+#if defined(LAPACK)
   integer i, lda, n, m,*ipvt, info;
 #endif
   
   if (A->m!=A->n)
     return 0;
-#if defined(LAPACK) || defined(CLAPACK)
+#if defined(LAPACK) || defined(CLAPACK) || defined(SUNPERF)
   lda = A->m;
   n = A->n;
   m =A->m;
   ipvt = calloc(n, sizeof(*ipvt));
   B = matrix_copy(A);
   /*LU decomposition*/
+#if defined(SUNPERF)
+  dgetrf(m, n, B->base, lda, ipvt, &info);
+#else
   dgetrf_(&m, &n, B->base, &lda, ipvt, &info);
+#endif
   if (info<0) {
     fprintf(stderr, "Error in LU decomposition, the %d-th argument had an illegal value.\n", -info);
     return 0;

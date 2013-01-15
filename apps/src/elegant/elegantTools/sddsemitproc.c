@@ -14,11 +14,7 @@
  * Michael Borland, 1997.
  */
 /*
- * $Log: sddsemitproc.c,v $
- * Revision 1.2  2008/05/28 18:11:29  borland
- * Added -errorData option.  Disabled -includeDispersion as it doesn't
- * work reliably.
- *
+ * $Log: not supported by cvs2svn $
  * Revision 1.1  2007/03/30 16:50:29  soliday
  * Moved from directory above.
  *

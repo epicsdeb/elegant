@@ -57,7 +57,7 @@ proc APSStrictParseArguments {optlist} {
 }
 
 
-set usage {usage: smoothDist6 -input <name> -output <name> -factor <number> -rippleAmplitude <%> -rippleWavelength <um> -smoothPasses <num(500)> -energyMod <%> -betaSlices <n>}
+set usage {usage: smoothDist6 -input <name> -output <name> -factor <number> -rippleAmplitude <%> -rippleWavelength <um> -smoothPasses <num(500)> -energyMod <%> -betaSlices <n> -seed <integer> -haltonOffset <integer> -semaphore <filename>}
 set debug 0
 set args $argv
 set output ""
@@ -68,7 +68,10 @@ set smoothPasses 500
 set factor 0
 set betaSlices 1
 set energyMod 0
-if {[APSStrictParseArguments {input output factor rippleAmplitude rippleWavelength smoothPasses energyMod betaSlices debug}]} {
+set seed 987654321
+set haltonOffset 0
+set semaphore ""
+if {[APSStrictParseArguments {input output factor rippleAmplitude rippleWavelength smoothPasses energyMod betaSlices debug seed haltonOffset semaphore}]} {
     puts "$usage"
     exit 1
 }
@@ -109,30 +112,39 @@ if [file exists $output] {
     puts "$output: already exists"
     exit 1
 }
+
+if [string length $semaphore] {
+    if [file exists $semaphore] {
+        return -code error "semaphore file ($semaphore) already exists"
+    }
+}
+
 set factor [expr int($factor)]
 
+set tmpRoot /tmp/tmp[pid]-$env(USER)
+
 # fit a polynomial to the (t,p) data to make a table for computing p(t)
-if {[catch {exec sddspfit $input $input.fit -terms=12 -evaluate=$input.eval,number=10000 -column=t,p} results]} {
+if {[catch {exec sddspfit $input $tmpRoot.fit -terms=12 -evaluate=$tmpRoot.eval,number=10000 -column=t,p} results]} {
     puts "Error1: $results"
     exit 1
 }
 if $debug {
-    exec sddsplot -col=t,p $input -graph=dot -col=t,p $input.eval -graph=line,type=1 "-title=momentum fit"
+    exec sddsplot -col=t,p $input -graph=dot -col=t,p $tmpRoot.eval -graph=line,type=1 "-title=momentum fit"
 }
 
 # find the StDev(pResidual) and make a table for computing pStDev(t)
-if {[catch {exec sddssort $input.fit -col=t,incr -pipe=out \
+if {[catch {exec sddssort $tmpRoot.fit -col=t,incr -pipe=out \
               | sddsbreak -rowlimit=1000 -pipe \
               | sddsprocess -pipe "-test=parameter,n_rows 10 >" -process=t,ave,tAve -process=pResidual,stand,pStDev \
               | sddscollapse -pipe \
-              | sddspfit -pipe=in $input.tmp -terms=12 \
-              -evaluate=$input.pStDev,number=10000 -column=tAve,pStDev} results]} {
+              | sddspfit -pipe=in $tmpRoot.tmp -terms=12 \
+              -evaluate=$tmpRoot.pStDev,number=10000 -column=tAve,pStDev} results]} {
     puts "Error2: $results"
     exit 1
 }
-file delete $input.tmp
+file delete $tmpRoot.tmp
 if $debug {
-    exec sddsplot -col=tAve,pStDev $input.pStDev "-title=momentum spread"
+    exec sddsplot -col=tAve,pStDev $tmpRoot.pStDev "-title=momentum spread"
 }
 
 # compute number of particles that we'll generate
@@ -163,7 +175,7 @@ if $debug {
 # the distribution, and apply the modulation
 if {[catch {exec sddshist $input -pipe=out -bins=1000 -data=t -expand=1.2 \
               | sddssmooth -pipe -column=t -savit=2,2,1 -column=frequency -pass=50 -newcolumns \
-              | sddsprocess -pipe=in $input.this \
+              | sddsprocess -pipe=in $tmpRoot.this \
               "-define=parameter,rippleOmega,c_mks $rippleWavelength 1e6 / / 2 * pi *,units=Hz" \
               "-define=parameter,rippleAmplitude,$rippleAmplitude 100 /" \
               "-redefine=column,frequency,frequency 0 > ? frequencySmoothed : 0 $ " \
@@ -172,7 +184,7 @@ if {[catch {exec sddshist $input -pipe=out -bins=1000 -data=t -expand=1.2 \
     exit 1
 }
 if $debug {
-    exec sddsplot -column=t,frequency $input.this "-title=time distribution"
+    exec sddsplot -column=t,frequency $tmpRoot.this "-title=time distribution"
 }
 
 # slice the beam up and compute slice emittances
@@ -206,7 +218,7 @@ APSSetVarsFromList -variableList "betax betay alphax alphay" -valueList $betaLis
 
 # make a gaussian distribution function (3 sigma)
 if {[catch {exec sddssequence -pipe=out -defi=z,type=double -sequence=begin=-3,end=3,delta=0.01 \
-              | sddsprocess -pipe=in gdf.sdds  \
+              | sddsprocess -pipe=in $output.gdf  \
               "-define=column,gaussianDF,z sqr -2 / exp"} results]} {
     puts "Error7: $results"
     exit 1
@@ -216,56 +228,56 @@ if {[catch {exec sddssequence -pipe=out -defi=z,type=double -sequence=begin=-3,e
 # gaussian DF for (x, xp, y, yp).
 # Set p = pAve for now.
 # Match beam to the right emittance and twiss parameters.
-if {[catch {exec sddssampledist -pipe=out -samples=$samples \
-              -column=indep=t,df=frequency,output=t,units=s,haltonRadix=2,datafile=$input.this \
-              -column=indep=z,df=gaussianDF,output=x,units=m,haltonRadix=3,datafile=gdf.sdds,factor=1e-4 \
-              -column=indep=z,df=gaussianDF,output=xp,haltonRadix=5,datafile=gdf.sdds,factor=1e-4 \
-              -column=indep=z,df=gaussianDF,output=y,units=m,haltonRadix=7,datafile=gdf.sdds,factor=1e-4 \
-              -column=indep=z,df=gaussianDF,output=yp,haltonRadix=11,datafile=gdf.sdds,factor=1e-4 \
-              -column=indep=z,df=gaussianDF,output=delta1,haltonRadix=13,datafile=gdf.sdds \
+if {[catch {exec sddssampledist -pipe=out -samples=$samples -seed=$seed \
+              -column=indep=t,df=frequency,output=t,units=s,haltonRadix=2,datafile=$tmpRoot.this,haltonOffset=$haltonOffset \
+              -column=indep=z,df=gaussianDF,output=x,units=m,haltonRadix=3,datafile=$output.gdf,factor=1e-4,haltonOffset=$haltonOffset  \
+              -column=indep=z,df=gaussianDF,output=xp,haltonRadix=5,datafile=$output.gdf,factor=1e-4,haltonOffset=$haltonOffset  \
+              -column=indep=z,df=gaussianDF,output=y,units=m,haltonRadix=7,datafile=$output.gdf,factor=1e-4,haltonOffset=$haltonOffset  \
+              -column=indep=z,df=gaussianDF,output=yp,haltonRadix=11,datafile=$output.gdf,factor=1e-4,haltonOffset=$haltonOffset  \
+              -column=indep=z,df=gaussianDF,output=delta1,haltonRadix=13,datafile=$output.gdf,haltonOffset=$haltonOffset  \
               | sddsprocess -pipe -define=col,p,$pAve \
-              | sddssort -pipe=in -column=t $input.partial0} results]} {
+              | sddssort -pipe=in -column=t $tmpRoot.partial0} results]} {
     puts "Error8: $results"
     exit 1
 }
 if $debug {
-    exec sddsplot -column=t,p -graph=dot $input.partial0 "-title=longitudinal phase space step 1"
+    exec sddsplot -column=t,p -graph=dot $tmpRoot.partial0 "-title=longitudinal phase space step 1"
 }
 
 if $betaSlices<=1 {
-    if {[catch {exec sddsmatchtwiss $input.partial0 $input.partial \
+    if {[catch {exec sddsmatchtwiss $tmpRoot.partial0 $tmpRoot.partial \
                   -xplane=beta=$betax,alpha=$alphax,nemit=$enx \
                   -yplane=beta=$betay,alpha=$alphay,nemit=$eny} results]} {
         puts "Error9: $results"
         exit 1
     }
-    file delete $input.partial0
+    file delete $tmpRoot.partial0
 } else {
-    catch {file delete $input.partial}
-    file rename $input.partial0 $input.partial
+    catch {file delete $tmpRoot.partial}
+    file rename $tmpRoot.partial0 $tmpRoot.partial
 }
 if $debug {
-    exec sddsplot -column=t,p -graph=dot $input.partial "-title=longitudinal phase space step 2"
+    exec sddsplot -column=t,p -graph=dot $tmpRoot.partial "-title=longitudinal phase space step 2"
 }
 
 # Generate value for standard deviation of p for each particle location.
-if {[catch {exec sddsinterp $input.pStDev $input.pStDevP \
-              -column=tAve,pStDev -fileValues=$input.partial,column=t -order=2} results]} {
+if {[catch {exec sddsinterp $tmpRoot.pStDev $tmpRoot.pStDevP \
+              -column=tAve,pStDev -fileValues=$tmpRoot.partial,column=t -order=2} results]} {
     puts "Error10: $results"
     exit 1
 }
 if $debug {
-    exec sddsplot -column=tAve,pStDev -graph=dot $input.pStDevP "-title=longitudinal phase space step 3 (stand. dev. of p)"
+    exec sddsplot -column=tAve,pStDev -graph=dot $tmpRoot.pStDevP "-title=longitudinal phase space step 3 (stand. dev. of p)"
 }
 
 # Interpolate <p>(t) at each particle location.
 # Xref in the standard deviation of p, plus (x, xp, y, yp).
 # Add the energy spread.
 
-if {[catch {exec sddsinterp $input.eval -pipe=out \
-              -column=t,p -fileValues=$input.partial,column=t -order=2 \
-              | sddsxref $input.pStDevP -pipe -take=pStDev \
-              | sddsxref $input.partial -pipe -take=* \
+if {[catch {exec sddsinterp $tmpRoot.eval -pipe=out \
+              -column=t,p -fileValues=$tmpRoot.partial,column=t -order=2 \
+              | sddsxref $tmpRoot.pStDevP -pipe -take=pStDev \
+              | sddsxref $tmpRoot.partial -pipe -take=* \
               | sddsprocess -pipe \
               "-define=parameter,rippleAmplitude,$rippleAmplitude,units=%" \
               "-define=parameter,rippleWavelength,$rippleWavelength,units=\$gm\$rm" \
@@ -381,7 +393,12 @@ if $betaSlices>1 {
     file rename $rootname.new $output
 }
 
-# exec sddsplot -sparse=10 -col=t,p $input $input.mult $output -graph=dot,vary -separate -same &
-eval file delete -force $input.pStDevP $input.partial gdf.sdds $input.fit $input.eval $input.pStDev $input.this
+# exec sddsplot -sparse=10 -col=t,p $input $tmpRoot.mult $output -graph=dot,vary -separate -same &
+eval file delete -force $tmpRoot.pStDevP $tmpRoot.partial $output.gdf $tmpRoot.fit $tmpRoot.eval $tmpRoot.pStDev $tmpRoot.this
+
+if [string length $semaphore] {
+    set fd [open $semaphore w]
+    close $fd
+}
 
 exit 0

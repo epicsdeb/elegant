@@ -450,7 +450,14 @@ VMATRIX *determineMatrix(RUN *run, ELEMENT_LIST *eptr, double *startingCoord, do
   double defaultStep[6] = {1e-5, 1e-5, 1e-5, 1e-5, 1e-5, 1e-5};
   long ltmp1, ltmp2;
   double dgamma, dtmp1, dP[3];
-  
+ 
+#if USE_MPI
+  long notSinglePart_saved = notSinglePart;
+
+  /* All the particles should do the same thing for this routine. */	
+  notSinglePart = 0;
+#endif
+   		 
   coord = (double**)czarray_2d(sizeof(**coord), 1+6*4, 7);
 
   if (stepSize==NULL)
@@ -509,6 +516,14 @@ VMATRIX *determineMatrix(RUN *run, ELEMENT_LIST *eptr, double *startingCoord, do
     ((CWIGGLER*)eptr->p_elem)->isr = ltmp1;
     ((CWIGGLER*)eptr->p_elem)->sr = ltmp2;
     break;
+  case T_APPLE:
+    ltmp1 = ((APPLE*)eptr->p_elem)->isr;
+    ltmp2 = ((APPLE*)eptr->p_elem)->sr;
+    ((APPLE*)eptr->p_elem)->isr = ((APPLE*)eptr->p_elem)->sr = 0;
+    APPLE_Track(coord, n_track, run->p_central, (APPLE*)eptr->p_elem);
+    ((APPLE*)eptr->p_elem)->isr = ltmp1;
+    ((APPLE*)eptr->p_elem)->sr = ltmp2;
+    break;
   case T_UKICKMAP:
     ltmp1 = ((UKICKMAP*)eptr->p_elem)->isr;
     ltmp2 = ((UKICKMAP*)eptr->p_elem)->synchRad;
@@ -524,6 +539,8 @@ VMATRIX *determineMatrix(RUN *run, ELEMENT_LIST *eptr, double *startingCoord, do
     transformBeamWithScript((SCRIPT*)eptr->p_elem, run->p_central, NULL, NULL, coord, n_track, 0,
                             NULL, 0, 2);
     break;
+  case T_TWMTA:
+  case T_MAPSOLENOID:
   case T_TWLA:
     motion(coord, n_track, eptr->p_elem, eptr->type, &run->p_central, &dgamma, dP, NULL, 0.0);
     break;
@@ -585,7 +602,9 @@ VMATRIX *determineMatrix(RUN *run, ELEMENT_LIST *eptr, double *startingCoord, do
     sprintf(s, "\nElement matrix determined from tracking:\n");
   print_matrices(stdout, s, M);
   */
-
+#if USE_MPI
+  notSinglePart = notSinglePart_saved;
+#endif
   return M;
 }
 
@@ -601,7 +620,8 @@ void determineRadiationMatrix(VMATRIX *Mr, RUN *run, ELEMENT_LIST *eptr, double 
   VMATRIX *M1, *M2, *Ml1, *Mtmp;
   ELEMENT_LIST elem;
   MATRIX *Ms;
-  
+  long ignoreRadiation = 0;
+
   /* Accumulated diffusion matrix */
   accumD1 = tmalloc(21*sizeof(*(accumD1)));
   memset(accumD1, 0, 21*sizeof(*(accumD1)));
@@ -721,6 +741,10 @@ void determineRadiationMatrix(VMATRIX *Mr, RUN *run, ELEMENT_LIST *eptr, double 
       kquad.isr = 0;
       length = (kquad.length /= nSlices);
       kquad.n_kicks = 4 + (long)(fabs(kquad.k1)*sqr(kquad.length));
+      if (slice!=0)
+	kquad.edge1_effects = 0;
+      if (slice!=nSlices-1)
+	kquad.edge2_effects = 0;
       elem.type = T_KQUAD;
       elem.p_elem = (void*)&kquad;
       break;
@@ -744,6 +768,10 @@ void determineRadiationMatrix(VMATRIX *Mr, RUN *run, ELEMENT_LIST *eptr, double 
       kquad.yKickCalibration = quad->yKickCalibration;
       kquad.n_kicks = 4 + (long)(fabs(kquad.k1)*sqr(kquad.length));
       kquad.integration_order = 4;
+      if (slice!=0)
+	kquad.edge1_effects = 0;
+      if (slice!=nSlices-1)
+	kquad.edge2_effects = 0;
       elem.type = T_KQUAD;
       elem.p_elem = (void*)&kquad;
       break;
@@ -752,6 +780,10 @@ void determineRadiationMatrix(VMATRIX *Mr, RUN *run, ELEMENT_LIST *eptr, double 
       ksext.isr = 0;
       ksext.n_kicks = 4;
       length = (ksext.length /= nSlices);
+      if (length<1e-6) {
+	ignoreRadiation = 1;
+	ksext.synch_rad = 0;
+      }
       elem.type = T_KSEXT;
       elem.p_elem = (void*)&ksext;
       break;
@@ -761,6 +793,10 @@ void determineRadiationMatrix(VMATRIX *Mr, RUN *run, ELEMENT_LIST *eptr, double 
       ksext.isr = 0;
       ksext.synch_rad = 1;
       length = (ksext.length = sext->length/nSlices);
+      if (length<1e-6) {
+	ignoreRadiation = 1;
+	ksext.synch_rad = 0;
+      }
       ksext.k2 = sext->k2;
       ksext.tilt = sext->tilt;
       ksext.dx = sext->dx;
@@ -786,6 +822,7 @@ void determineRadiationMatrix(VMATRIX *Mr, RUN *run, ELEMENT_LIST *eptr, double 
       break;
     case T_HCOR:
       memcpy(&elem, eptr, sizeof(elem));
+      elem.matrix = NULL;
       elem.p_elem = &hcor;
       memcpy(&hcor, eptr->p_elem, sizeof(hcor));
       length = (hcor.length /= nSlices);
@@ -795,6 +832,7 @@ void determineRadiationMatrix(VMATRIX *Mr, RUN *run, ELEMENT_LIST *eptr, double 
       break;
     case T_VCOR:
       memcpy(&elem, eptr, sizeof(elem));
+      elem.matrix = NULL;
       elem.p_elem = &vcor;
       memcpy(&vcor, eptr->p_elem, sizeof(vcor));
       length = (vcor.length /= nSlices);
@@ -804,6 +842,7 @@ void determineRadiationMatrix(VMATRIX *Mr, RUN *run, ELEMENT_LIST *eptr, double 
       break;
     case T_HVCOR:
       memcpy(&elem, eptr, sizeof(elem));
+      elem.matrix = NULL;
       elem.p_elem = &hvcor;
       memcpy(&hvcor, eptr->p_elem, sizeof(hvcor));
       length = (hvcor.length /= nSlices);
@@ -820,7 +859,7 @@ void determineRadiationMatrix(VMATRIX *Mr, RUN *run, ELEMENT_LIST *eptr, double 
     }
 
     /* Step 1: determine effective R matrix for this element, as well as the diffusion matrix */
-    determineRadiationMatrix1(Ml1, run, &elem, M1->C, accumD2); 
+    determineRadiationMatrix1(Ml1, run, &elem, M1->C, accumD2, ignoreRadiation); 
     /*    print_matrices(stdout, "matrix1:", Ml1); */
 
     /* Step 2: Propagate the diffusion matrix */
@@ -865,11 +904,12 @@ void determineRadiationMatrix(VMATRIX *Mr, RUN *run, ELEMENT_LIST *eptr, double 
   free_matrices(M2); tfree(M2);
   free_matrices(M1); tfree(M1);
   free_matrices(Ml1); tfree(Ml1);
+  M1 = M2 = Ml1 = NULL;
   m_free(&Ms);
 }
 
 
-void determineRadiationMatrix1(VMATRIX *Mr, RUN *run, ELEMENT_LIST *elem, double *startingCoord, double *D)
+void determineRadiationMatrix1(VMATRIX *Mr, RUN *run, ELEMENT_LIST *elem, double *startingCoord, double *D, long ignoreRadiation)
 {
   CSBEND *csbend;
   KQUAD *kquad;
@@ -934,7 +974,7 @@ void determineRadiationMatrix1(VMATRIX *Mr, RUN *run, ELEMENT_LIST *elem, double
     matrix = compute_matrix(elem, run, NULL);
     track_particles(coord, matrix, coord, n_track);
     addCorrectorRadiationKick(coord, n_track, elem, elem->type, run->p_central, &sigmaDelta2, 1);
-    free_matrices(matrix); free(matrix);
+    free_matrices(matrix); free(matrix); matrix = NULL;
     break;
   case T_TWLA:
     pCentral = run->p_central;
@@ -946,7 +986,9 @@ void determineRadiationMatrix1(VMATRIX *Mr, RUN *run, ELEMENT_LIST *elem, double
     exitElegant(1);
     break;
   }
-  
+  if (ignoreRadiation)
+    sigmaDelta2 = 0;
+
   R = Mr->R;
   C = Mr->C;
   for (i=0; i<6; i++) {

@@ -2,8 +2,11 @@
 # \
 exec oagtclsh "$0" "$@"
 
-set auto_path [linsert $auto_path 0  /usr/local/oag/apps/lib/$env(HOST_ARCH)]
-set auto_path [linsert $auto_path 0 /usr/local/oag/lib_patch/$env(HOST_ARCH)]
+if ![info exists env(OAG_TOP_DIR)] {
+    set env(OAG_TOP_DIR) /usr/local
+}
+set auto_path [linsert $auto_path 0  $env(OAG_TOP_DIR)/oag/apps/lib/$env(HOST_ARCH)]
+
 APSStandardSetup
 
 set usage {usage: longitCmd -twiss <filename> -superperiods <integer> -harmonic <number> [-voltage <MV> | -acceptance <halfHeightPercent>] -output <filename> [-force 1]}

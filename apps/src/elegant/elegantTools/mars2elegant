@@ -1,0 +1,41 @@
+#!/bin/sh  
+# \
+exec oagtclsh "$0" "$@"
+set auto_path [linsert $auto_path 0  /usr/local/oag/apps/lib/$env(HOST_ARCH)]
+set auto_path [linsert $auto_path 0 /usr/local/oag/lib_patch/$env(HOST_ARCH)]
+
+
+set args $argv
+set skip 4
+APSParseArguments {skip}
+
+set inputFile [lindex $args 0]
+set outputFile [lindex $args 1]
+
+if ![string length $inputFile] {
+   puts stderr "Error input file (MARS) not provided."
+   exit 1
+}
+if ![string length $outputFile] {
+   set outputFile [file root $inputFile].sdds
+}
+puts "converting $inputFile to $outputFile..."
+if $skip {
+    set skipOpt -skipLines=$skip
+} else {
+    set skipOpt ""
+}
+if [catch {eval exec plaindata2sdds -col=nreg,long -col=nexg,long -col=volname,string \
+	       -col=im,long -col=rho,double -outputMode=binary  \
+	       -col=vol,double -col=st,double -col=dst,double\
+	       -col=dpa,double -col=fnt,double -col=fn.1mev,double -col=fn1mev,double \
+	       -col=fch,double -col=fga,double -col=fel,double -col=fm,double -col=fne,double \
+	       -col=fhi,double -col=ed,double -col=ded,double -col=deq,double -col=ddeq,double \
+	       -col=deltat,double \
+	       -col=pgam20,double -col=pgam,double -col=dpgam,double -col=fiss,double $skipOpt \
+	       -norowcount $inputFile $outputFile} result] {
+    puts stderr "Error in converting mars output to sdds: $result"
+    exit
+}
+puts "done."
+exit 0

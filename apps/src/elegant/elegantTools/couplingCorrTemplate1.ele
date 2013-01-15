@@ -1,14 +1,18 @@
 &transmute_elements
         name = *, type = WATCH, new_type = MARK &end
 
-# Load correction from SVD
+! Load correction from SVD
+
+&semaphores
+        failed = %s.failed
+        done = %s.done
+&end
 
 &run_setup
 	lattice = <lattice>,
 	use_beamline = <beamline>,
-	p_central_mev = 7e3,
+	p_central_mev = <pCentralMeV>,
 	default_order = <order>,
-        semaphore_file = %s.done,
         rootname = <rootname>,
         parameters = <rootname>.param1
 &end

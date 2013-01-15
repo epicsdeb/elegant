@@ -351,7 +351,7 @@ void track_through_mkicker(
 
     integrate_kick_multipole_ord4(part[ip], kicker->dx, kicker->dy, 0.0, 0.0, 0.0, 0.0, 0.0,
                                   kicker->order, 0, strength*kicker->length, n_parts,
-                                  kicker->length, NULL, NULL, NULL, &dummy, NULL);
+                                  kicker->length, NULL, NULL, NULL, &dummy, NULL, 0);
   }
 
   if (kicker->tilt)

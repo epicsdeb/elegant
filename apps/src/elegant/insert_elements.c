@@ -13,12 +13,17 @@
 #include "insert_elements.h"
 
 typedef struct {
-  char *name, *type, *exclude, *elemDef;
-  long nskip, add_end, total, occur[100];
+  char **name, *type, *exclude, *elemDef;
+  long nNames, nskip, add_end, total, occur[100];
+  double sStart, sEnd;
 } ADD_ELEM;
 
 static ADD_ELEM addElem;
 static long add_elem_flag = 0;
+
+#define COPYLEN 1024
+static char elementDefCopy[COPYLEN+1];
+static long insertCount = 0;
 
 long getAddElemFlag() 
 {
@@ -37,8 +42,9 @@ long getAddEndFlag()
 
 void do_insert_elements(NAMELIST_TEXT *nltext, RUN *run, LINE_LIST *beamline) 
 {
-  long i;
-
+  long i, nNames;
+  char **nameList;
+  
   /* process the namelist text */
   set_namelist_processing_flags(STICKY_NAMELIST_DEFAULTS);
   set_print_namelist_flags(0);
@@ -63,12 +69,24 @@ void do_insert_elements(NAMELIST_TEXT *nltext, RUN *run, LINE_LIST *beamline)
     bombElegant("name or type needs to be given", NULL);
   if (!element_def || !strlen(element_def))
     bombElegant("element's definition is not given", NULL);
- 
+
+  nameList = NULL;
+  nNames = 0;
   if (name) {
+    char *ptr;
     str_toupper(name);
-    if (has_wildcards(name) && strchr(name, '-'))
-      name = expand_ranges(name);
+    while (ptr=get_token_t(name, ", ")) {
+      nameList = SDDS_Realloc(nameList, sizeof(*nameList)*(nNames+1));
+      nameList[nNames] = ptr;
+      if (has_wildcards(ptr) && strchr(ptr, '-')) {
+        nameList[nNames] = expand_ranges(ptr);
+        free(ptr);
+      } else
+        nameList[nNames] = ptr;
+      nNames++;
+    }
   }
+  
   if (type) {
     str_toupper(type);
     if (has_wildcards(type) && strchr(type, '-'))
@@ -93,38 +111,60 @@ void do_insert_elements(NAMELIST_TEXT *nltext, RUN *run, LINE_LIST *beamline)
   addElem.add_end =0;
   if (add_at_end)
     addElem.add_end = add_at_end;
-  addElem.name = name;
+  addElem.name = nameList;
+  addElem.nNames = nNames;
   addElem.type = type;
   addElem.exclude = exclude;
   addElem.elemDef = element_def;
+  addElem.sStart = s_start;
+  addElem.sEnd = s_end;
   delete_spaces(addElem.elemDef);
+  strncpy(elementDefCopy, element_def, COPYLEN);
 
   addElem.total = total_occurrences;
   for (i=0; i< addElem.total; i++) {
     addElem.occur[i] =  occurrence[i];
   }
 
+  insertCount = 0;
   beamline = get_beamline(NULL, beamline->name, run->p_central, 0);
   add_elem_flag = 0;
+  if (verbose)
+    printf("%ld elements inserted in total\n", insertCount);
 
   return;
 }
 
-long insertElem(char *name, long type, long *skip, long occurPosition) 
+long insertElem(char *name, long type, long *skip, long occurPosition, double endPosition) 
 {
   long i;
 
   if (addElem.exclude && wild_match(name, addElem.exclude))
     return(0);
-  if (addElem.name && !wild_match(name, addElem.name))
-    return(0);
   if (addElem.type && !wild_match(entity_name[type], addElem.type))
     return(0);
+  if (addElem.name) {
+    for (i=0; i<addElem.nNames; i++) {
+      if (addElem.name[i] && wild_match(name, addElem.name[i]))
+        break;
+    }
+    if (i==addElem.nNames)
+      return(0);
+  }
+
+  if ((addElem.sStart>=0 && endPosition<addElem.sStart) ||
+      (addElem.sEnd>=0 && endPosition>addElem.sEnd))
+    return 0;
 
   if (addElem.total) {
     for (i=0; i<addElem.total; i++) {
-      if (occurPosition == addElem.occur[i])
-        return(1);
+      if (occurPosition == addElem.occur[i]) {
+	if (verbose)
+	  printf("Adding \"%s\" after occurrence %ld of %s\n",
+		 elementDefCopy, occurPosition, name);
+	insertCount ++;
+	return(1);
+      }
     }
     return(0);
   }
@@ -134,6 +174,10 @@ long insertElem(char *name, long type, long *skip, long occurPosition)
     if (*skip < addElem.nskip)
       return(0);
     *skip = 0;
+    if (verbose)
+      printf("Adding \"%s\" after occurrence %ld of %s\n",
+	     elementDefCopy, occurPosition, name);
+    insertCount ++;
     return(1);
   }
   return(0);

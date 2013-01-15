@@ -587,20 +587,21 @@ long compute_final_properties
     /* beam charge */
     data[F_T_OFFSET+4] = charge;
   } 
-
   /* compute "sigma" from width of particle distributions for x and y */
-#if !SDDS_MPI_IO
+#if !SDDS_MPI_IO 
   if (coord && sums->n_part>3) {
-#else 
-    if ((notSinglePart && n_part_total>3) || (!notSinglePart && coord && sums->n_part>3)){  /* In the version with parallel IO, coord on master points to NULL */
-#endif
-#if (!USE_MPI) || SDDS_MPI_IO    
     data[F_WIDTH_OFFSET] = approximateBeamWidth(0.6826F, coord, sums->n_part, 0L)/2.;
     data[F_WIDTH_OFFSET+1] = approximateBeamWidth(0.6826F, coord, sums->n_part, 2L)/2.;
 #else
-    /* In the parallel version without parallel I/O, this will be done on the master processor */
-    data[F_WIDTH_OFFSET] = approximateBeamWidth_p(0.6826F, coord, sums->n_part, 0L)/2.;
-    data[F_WIDTH_OFFSET+1] = approximateBeamWidth_p(0.6826F, coord, sums->n_part, 2L)/2.;
+  if ((notSinglePart && n_part_total>3) || (!notSinglePart && coord && sums->n_part>3)){  /* In the version with parallel IO, coord on master points to NULL */
+    if (!notSinglePart) {
+      /* All the processors compute the final properties independently. */
+      data[F_WIDTH_OFFSET] = approximateBeamWidth_p(0.6826F, coord, sums->n_part, 0L)/2.;
+      data[F_WIDTH_OFFSET+1] = approximateBeamWidth_p(0.6826F, coord, sums->n_part, 2L)/2.;
+    } else {
+      data[F_WIDTH_OFFSET] = approximateBeamWidth(0.6826F, coord, sums->n_part, 0L)/2.;
+      data[F_WIDTH_OFFSET+1] = approximateBeamWidth(0.6826F, coord, sums->n_part, 2L)/2.;
+    }
 #endif
     data[F_WIDTH_OFFSET+2] = dt;
     data[F_WIDTH_OFFSET+3] = Ddp;
@@ -621,7 +622,6 @@ long compute_final_properties
   /* compute emittances */
   computeEmitTwissFromSigmaMatrix(data+F_EMIT_OFFSET+0, data+F_EMIT_OFFSET+2, NULL, NULL, sums->sigma, 0);
   computeEmitTwissFromSigmaMatrix(data+F_EMIT_OFFSET+1, data+F_EMIT_OFFSET+3, NULL, NULL, sums->sigma, 2);
-
 #if 0
 #if !SDDS_MPI_IO
   data[F_EMIT_OFFSET]   = rms_emittance(coord, 0, 1, sums->n_part, NULL, NULL, NULL);
@@ -655,7 +655,7 @@ long compute_final_properties
   else
     data[F_EMIT_OFFSET+4] = rms_longitudinal_emittance(coord, sums->n_part, p_central);
 #endif
-  
+ 
   /* compute normalized emittances */
   for (i=0; i<4; i++)
     data[F_NEMIT_OFFSET+i]   = pAverage*data[F_EMIT_OFFSET+i];

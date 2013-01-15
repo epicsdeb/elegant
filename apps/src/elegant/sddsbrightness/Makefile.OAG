@@ -7,7 +7,19 @@
 # in the file LICENSE that is included with this distribution. 
 #*************************************************************************
 #
-# $Log: Makefile.OAG,v $
+# $Log: not supported by cvs2svn $
+# Revision 1.11  2012/02/29 20:18:57  soliday
+# Fixed a typo
+#
+# Revision 1.10  2011/03/10 15:29:31  soliday
+# Updated the USR_CFLAGS
+#
+# Revision 1.9  2011/03/09 20:46:04  shang
+# added sddssyncflux
+#
+# Revision 1.8  2011/03/09 02:21:50  lemery
+# Added sddsbs
+#
 # Revision 1.7  2010/06/28 21:34:13  soliday
 # One more change for purify on linux
 #
@@ -49,23 +61,97 @@ endif
 
 #TARGETS = sddsbrightness$(EXE)
 ifeq ($(EPICS_VERSION).$(EPICS_REVISION),3.13)
-PROD = sddsurgent sddsbrightness sddsfluxcurve sddsws
+PROD = sddsurgent sddsbrightness sddsfluxcurve sddsws sddsbs sddssyncflux
 else
-PROD_HOST = sddsurgent sddsbrightness sddsfluxcurve sddsws
+PROD_HOST = sddsurgent sddsbrightness sddsfluxcurve sddsws sddsbs
 endif
 
-USR_CFLAGS = 	-I$(EPICS_EXTENSIONS_INCLUDE) \
-		-DIEEE_MATH -DzLib
+USR_CFLAGS =  -I$(EPICS_EXTENSIONS_INCLUDE) \
+                -DIEEE_MATH -DzLib
 
 USR_CFLAGS_DEFAULT = 	-DUNIX 
 #USR_CFLAGS_Linux =	-Df2cFortran
 #USR_CFLAGS_WIN32 = 	-DpgiFortran
 
+
+GSLLIB = 
+
+#Look for private version of GSL used here at APS
+GSL = $(words $(wildcard $(EPICS_EXTENSIONS)/src/SDDS/gsl))
+ifeq ($(GSL), 1)
+PROD_HOST += sddssyncflux
+sddssyncflux_CFLAGS = -I$(EPICS_EXTENSIONS)/src/SDDS/gsl -DUSE_GSL
+GSLLIB = gsl
+gsl_DIR = $(EPICS_EXTENSIONS_LIB)
+else
+
+#Look for system version of GSL
+SYSGSL = $(words $(notdir $(wildcard \
+/usr/lib/libgsl.a \
+/usr/lib/libgsl.so \
+/usr/lib64/libgsl.a \
+/usr/lib64/libgsl.so \
+/lib/libgsl.a \
+/lib/libgsl.so \
+/lib64/libgsl.a \
+/lib64/libgsl.so \
+/sw/lib/libgsl.a \
+/sw/lib/libgsl.dylib \
+/usr/sfw/lib/libgsl.a \
+/usr/sfw/lib/libgsl.so )))
+
+ifneq ($(SYSGSL), 0)
+STATIC_BUILD=NO
+PROD_HOST += sddssyncflux
+sddssyncflux_CFLAGS = -DUSE_GSL
+sddssyncflux_LDFLAGS += -lgsl -lgslcblas
+endif
+endif
+
+
+XRAYLIB = 
+
+#Look for private version of xraylib used here at APS
+XRAY = $(words $(wildcard $(OAG_APPS)/src/xraylib))
+ifeq ($(XRAY), 1)
+PROD_HOST += sddscompton sddsxra sddsxrf
+sddscompton_CFLAGS = -I$(OAG_APPS)/src/xraylib
+sddsxra_CFLAGS = -I$(OAG_APPS)/src/xraylib
+sddsxrf_CFLAGS = -I$(OAG_APPS)/src/xraylib
+XRAYLIB = xrl
+xrl_DIR = $(OAG_APPS)/lib/$(EPICS_HOST_ARCH)
+else
+
+
+#Look for system version of xraylib
+SYSXRL = $(words $(notdir $(wildcard \
+/usr/lib/libxrl.a \
+/usr/lib/libxrl.so \
+/usr/lib64/libxrl.a \
+/usr/lib64/libxrl.so \
+/lib/libxrl.a \
+/lib/libxrl.so \
+/lib64/libxrl.a \
+/lib64/libxrl.so \
+/sw/lib/libxrl.a \
+/sw/lib/libxrl.dylib \
+/usr/sfw/lib/libxrl.a \
+/usr/sfw/lib/libxrl.so )))
+
+ifneq ($(SYSXRL), 0)
+STATIC_BUILD=NO
+PROD_HOST += sddscompton sddsxra sddsxrf
+sddscompton_LDFLAGS += -lxrl
+sddsxra_LDFLAGS += -lxrl
+sddsxrf_LDFLAGS += -lxrl
+endif
+endif
+
 ifdef WIN32
-USR_LIBS = oagphy mdbcommon matlib fftpack SDDS1 rpnlib mdbmth namelist mdblib z fftpack
+USR_LIBS = $(XRAYLIB) oagphy mdbcommon matlib fftpack $(GSLLIB) SDDS1 rpnlib mdbmth namelist mdblib z fftpack
 z_DIR = $(EPICS_EXTENSIONS_LIB)
 else
-USR_LIBS = oagphy mdbcommon matlib fftpack SDDS1 rpnlib mdbmth namelist mdblib
+USR_LIBS = $(XRAYLIB) oagphy mdbcommon matlib fftpack $(GSLLIB) SDDS1 rpnlib mdbmth namelist mdblib
 SYS_PROD_LIBS_DEFAULT += z
 endif
 
@@ -92,6 +178,14 @@ sddsfluxcurve$(EXE)_SRCS =	sddsfluxcurve.c
 sddsurgent$(EXE)_SRCS = sddsurgent.c
 
 sddsws$(EXE)_SRCS = sddsws.c
+
+sddsbs$(EXE)_SRCS = sddsbs.c
+
+sddsxra$(EXE)_SRCS = sddsxra.c
+
+sddscompton(EXE)_SRCS = sddscompton.c
+
+sddsxrf(EXE)_SRCS = sddsxrf.c
 
 OBJNAMES = sddsbrightness$(OBJ) usb$(OBJ) brighte$(OBJ) hunt$(OBJ)
 

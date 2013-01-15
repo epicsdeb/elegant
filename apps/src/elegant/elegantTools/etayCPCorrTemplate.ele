@@ -1,19 +1,24 @@
 &transmute_elements name=*, type=*MON*, exclude=<bpmPattern>  new_type=MARK &end
 &transmute_elements name=*, type=WATCH, new_type=MARK &end
 
+&semaphores
+        failed = %s.failed
+        done = %s.done
+&end
+
 &run_setup
 	lattice = <lattice>,
 	use_beamline = <beamline>,
-	p_central_mev = 7e3,
+	p_central_mev = <pCentralMeV>,
 	default_order = <order>,
         rootname = <rootname>
-        semaphore_file = %s.done,
 &end
 
 &load_parameters
         filename = <inputParameters>
-        change_defined_values = 1
-        allow_missing_elements = 1
+        change_defined_values = 1,
+        force_occurence_data = 1,
+        allow_missing_elements = 1,
 	allow_missing_parameters = 1
 &end
 
@@ -54,9 +59,16 @@
 &steering_element name = <vcPattern>, element_type = VKICK, item = KICK, tweek = 1e-6, plane = "v" &end
 
 &correct
-    mode = "orbit", method = "global",
-    verbose = 0, n_iterations = 0, n_xy_cycles = 1,
-    fixed_length = 1
+        mode = "orbit", method = "global",
+        verbose = 1, n_iterations = 4, n_xy_cycles = 100,
+        correction_fraction[0] = 0.5, 0.5,
+        bpm_noise[0] = 0e-6, 0e-6,
+        correction_accuracy[0] = 1e-6, 1e-6,
+        closed_orbit_iteration_fraction = 0.5,
+        closed_orbit_iterations = 40,
+        closed_orbit_accuracy = 1e-9,
+        fixed_length = 1
+        prezero_correctors = 0
 &end
 
 &correction_matrix_output

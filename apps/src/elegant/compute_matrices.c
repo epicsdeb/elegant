@@ -21,6 +21,20 @@ void InitializeCWiggler(CWIGGLER *cwiggler, char *name);
 VMATRIX *matrixFromExplicitMatrix(EMATRIX *emat, long order);
 VMATRIX *matrixForILMatrix(ILMATRIX *ilmat, long order);
 VMATRIX *rfdf_matrix(RFDF *rfdf, double Preference);
+VMATRIX *sextupoleFringeMatrix(double K2, double length, long maxOrder, long side);
+
+void checkMatrices(char *label, ELEMENT_LIST *elem)
+{
+  ELEMENT_LIST *eptr;
+  eptr = elem;
+  printf("Matrix check %s\n", label);
+  while (eptr) {
+    if ((entity_description[eptr->type].flags&HAS_MATRIX) && !(eptr->matrix)) {
+      printf("%s #%ld has no matrix\n", eptr->name, eptr->occurence);
+    }
+    eptr = eptr->succ;
+  }
+}
 
 VMATRIX *full_matrix(ELEMENT_LIST *elem, RUN *run, long order) 
 {
@@ -59,6 +73,7 @@ VMATRIX *accumulate_matrices(ELEMENT_LIST *elem, RUN *run, VMATRIX *M0, long ord
     copy_matrices1(M1, M0);
   
   member = elem;
+
   while (member) {
     if (member->type<0 || member->type>=N_TYPES) {
       fprintf(stdout, "error: bad element type %ld (accumulate_matrices)\n", member->type);
@@ -74,11 +89,13 @@ VMATRIX *accumulate_matrices(ELEMENT_LIST *elem, RUN *run, VMATRIX *M0, long ord
       Pref_input = member->Pref_input;
     if (!member->matrix || Pref_input!=member->Pref_input)
       compute_matrix(member, run, NULL);
-    if ((entity_description[member->type].flags&HAS_MATRIX) && !member->matrix) {
-      fprintf(stdout, "programming error: matrix not computed for element %s\n",
-              member->name);
-      fflush(stdout);
-      abort();
+    if (entity_description[member->type].flags&HAS_MATRIX) {
+      if (!member->matrix) {
+        fprintf(stdout, "programming error: matrix not computed for element %s\n",
+                member->name);
+        fflush(stdout);
+        abort();
+      }
     }
     if (member->matrix) {
       concat_matrices(M2, member->matrix, M1,
@@ -156,6 +173,7 @@ VMATRIX *accumulateRadiationMatrices(ELEMENT_LIST *elem, RUN *run, VMATRIX *M0, 
       if (member->matrix) {
         free_matrices(member->matrix);
         free(member->matrix);
+        member->matrix = NULL;
       }
       compute_matrix(member, run, NULL);
     }
@@ -263,13 +281,13 @@ VMATRIX *accumulateRadiationMatrices(ELEMENT_LIST *elem, RUN *run, VMATRIX *M0, 
     member = member->succ;
   }
   if (M2) {
-    free_matrices(M2); tfree(M2);
+    free_matrices(M2); tfree(M2); M2 = NULL;
   }
   if (Ml1) {
-    free_matrices(Ml1); tfree(Ml1);
+    free_matrices(Ml1); tfree(Ml1); Ml1 = NULL;
   }
   if (Ml2) {
-    free_matrices(Ml2); tfree(Ml2);
+    free_matrices(Ml2); tfree(Ml2); Ml2 = NULL;
   }
   m_free(&Ms);
   return M1;
@@ -282,8 +300,6 @@ long fill_in_matrices(
 {
     ELEMENT_LIST *member;
     long n_elements;
-    
-    log_entry("fill_in_matrices");
     
     n_elements = 0;
     member = elem;
@@ -303,7 +319,7 @@ long fill_in_matrices(
         }
         member = member->succ;
         }
-    log_exit("fill_in_matrices");    
+
     return(n_elements);
     }
 
@@ -362,7 +378,7 @@ VMATRIX *drift_matrix(double length, long order)
 
 VMATRIX *wiggler_matrix(double length, double radius, long poles,
 			double dx, double dy, double dz, 
-			double tilt, long order)
+			double tilt, long order, long focusing)
 {
     VMATRIX *M;
     double **R, *C;
@@ -379,10 +395,14 @@ VMATRIX *wiggler_matrix(double length, double radius, long poles,
     if (length) {
       C[4] = length;
       R[0][1] = length;
-      kl = length/(SQRT2*fabs(radius));
-      R[2][2] = R[3][3] = cos(kl);
-      R[2][3] = sin(kl)/(kl/length);
-      R[3][2] = -(kl/length)*sin(kl);
+      if (focusing) {
+        kl = length/(SQRT2*fabs(radius));
+        R[2][2] = R[3][3] = cos(kl);
+        R[2][3] = sin(kl)/(kl/length);
+        R[3][2] = -(kl/length)*sin(kl);
+      } else {
+        R[2][3] = length;
+      }
       R[4][5] = -(poles/2)*ipow(1/radius,2)*ipow(length/poles, 3)/ipow(PI,2);
     }
 
@@ -393,14 +413,14 @@ VMATRIX *wiggler_matrix(double length, double radius, long poles,
     return(M);
     }
 
-VMATRIX *sextupole_matrix(double K2, double length, long maximum_order, double tilt, double fse)
+VMATRIX *sextupole_matrix(double K2, double length, long maximum_order, double tilt, double fse, double ffringe)
 {
-    VMATRIX *M;
+    VMATRIX *M, *Medge1, *Medge2;
     double *C, **R, ***T, ****U;
-    double temp;
+    double temp, lf = 0;
     
-    log_entry("sextupole_matrix");
-
+    Medge1 = Medge2 = NULL;
+    
     K2 *= (1+fse);
 
     M = tmalloc(sizeof(*M));
@@ -408,8 +428,16 @@ VMATRIX *sextupole_matrix(double K2, double length, long maximum_order, double t
     R = M->R;
     C = M->C;
     
+    if (ffringe>0) {
+      lf = length*ffringe/2;
+      length *= (1-ffringe/2);
+      Medge1 = sextupoleFringeMatrix(K2, lf, maximum_order, -1);
+      Medge2 = sextupoleFringeMatrix(K2, lf, maximum_order,  1);
+    }
+
     R[0][0] = R[1][1] = R[2][2] = R[3][3] = R[4][4] = R[5][5] = 1;
     C[4] = R[0][1] = R[2][3] = length;
+    
     if (M->order>=2) {
       T = M->T;
       temp = K2*length/2;   /* temp = ks^2*l */
@@ -506,8 +534,104 @@ VMATRIX *sextupole_matrix(double K2, double length, long maximum_order, double t
         U[4][3][3][1] = K2*ipow(length,4)/8.0 ;
       }
     }
+
+    if (Medge1 && Medge2) {
+      VMATRIX *M1, *M2, *tmp, *Md;
+      M1 = tmalloc(sizeof(*M1));
+      initialize_matrices(M1, M->order);
+      M2 = tmalloc(sizeof(*M2));
+      initialize_matrices(M2, M->order);
+
+      /* drift back to fringe starting point */
+      Md = drift_matrix(-lf/2, M->order);
+      
+      concat_matrices(M1, Medge1, Md, 0);
+      concat_matrices(M2, M, M1, 0);
+      concat_matrices(M1, Medge2, M2, 0);
+      concat_matrices(M, Md, M1, 0);
+
+      free_matrices(Md); tfree(Md); Md = NULL;
+      free_matrices(M1); tfree(M1); M1 = NULL;
+      free_matrices(M2); tfree(M2); M2 = NULL;
+      free_matrices(Medge1); tfree(Medge1); Medge1 = NULL;
+      free_matrices(Medge2); tfree(Medge2); Medge2 = NULL;
+    }
+    
     tilt_matrices(M, tilt);
-    log_exit("sextupole_matrix");
+
+    return(M);
+  }
+
+VMATRIX *octupole_matrix(double K3, double length, long maximum_order, double tilt, double fse)
+{
+    VMATRIX *M;
+    double *C, **R, ***T, ****U;
+    
+    K3 *= (1+fse);
+
+    M = tmalloc(sizeof(*M));
+    initialize_matrices(M, M->order=MIN(3,maximum_order));
+    R = M->R;
+    C = M->C;
+    
+    R[0][0] = R[1][1] = R[2][2] = R[3][3] = R[4][4] = R[5][5] = 1;
+    C[4] = R[0][1] = R[2][3] = length;
+    if (M->order>=2) {
+      /* path length terms--same as for drift */
+      T = M->T;
+      T[4][1][1] = T[4][3][3] = length/2;
+    }
+    if (M->order >= 3) {
+      double L, L2, L3, L4, L5;
+      U = M->Q;
+      L = length;
+      L2 = L*L;
+      L3 = L2*L;
+      L4 = L3*L;
+      L5 = L4*L;
+      U[0][0][0][0] = -(K3*L2)/12.;
+      U[0][1][0][0] = -(K3*L3)/36.;
+      U[0][1][1][0] = -(K3*L4)/72.;
+      U[0][1][1][1] = -(K3*L5)/120.;
+      U[0][2][2][0] = (K3*L2)/4.;
+      U[0][2][2][1] = (K3*L3)/12.;
+      U[0][3][2][0] = (K3*L3)/12.;
+      U[0][3][2][1] = (K3*L4)/24.;
+      U[0][3][3][0] = (K3*L4)/24.;
+      U[0][3][3][1] = (K3*L5)/40.;
+      U[1][0][0][0] = -(K3*L)/6.;
+      U[1][1][0][0] = -(K3*L2)/12.;
+      U[1][1][1][0] = -(K3*L3)/18.;
+      U[1][1][1][1] = -(K3*L4)/24.;
+      U[1][2][2][0] = (K3*L)/2.;
+      U[1][2][2][1] = (K3*L2)/4.;
+      U[1][3][2][0] = (K3*L2)/4.;
+      U[1][3][2][1] = (K3*L3)/6.;
+      U[1][3][3][0] = (K3*L3)/6.;
+      U[1][3][3][1] = (K3*L4)/8.;
+      U[2][2][0][0] = (K3*L2)/4.;
+      U[2][2][1][0] = (K3*L3)/12.;
+      U[2][2][1][1] = (K3*L4)/24.;
+      U[2][2][2][2] = -(K3*L2)/12.;
+      U[2][3][0][0] = (K3*L3)/12.;
+      U[2][3][1][0] = (K3*L4)/24.;
+      U[2][3][1][1] = (K3*L5)/40.;
+      U[2][3][2][2] = -(K3*L3)/36.;
+      U[2][3][3][2] = -(K3*L4)/72.;
+      U[2][3][3][3] = -(K3*L5)/120.;
+      U[3][2][0][0] = (K3*L)/2.;
+      U[3][2][1][0] = (K3*L2)/4.;
+      U[3][2][1][1] = (K3*L3)/6.;
+      U[3][2][2][2] = -(K3*L)/6.;
+      U[3][3][0][0] = (K3*L2)/4.;
+      U[3][3][1][0] = (K3*L3)/6.;
+      U[3][3][1][1] = (K3*L4)/8.;
+      U[3][3][2][2] = -(K3*L2)/12.;
+      U[3][3][3][2] = -(K3*L3)/18.;
+      U[3][3][3][3] = -(K3*L4)/24.;
+    }
+    tilt_matrices(M, tilt);
+
     return(M);
   }
 
@@ -590,16 +714,16 @@ VMATRIX *compute_matrix(
                         )
 {
     QUAD *quad; BEND *bend; SEXT *sext; HCOR *hcor; HVCOR *hvcor;
-    VCOR *vcor; ALPH *alph; DRIFT *drift;
+    VCOR *vcor; ALPH *alph; DRIFT *drift; OCTU *oct;
     SOLE *sole; ROTATE *rot; QFRING *qfring;
     MONI *moni; HMON *hmon; VMON *vmon; 
-    KSEXT *ksext; KSBEND *ksbend; KQUAD *kquad; NIBEND *nibend; NISEPT *nisept; KQUSE *kquse;
+    KSEXT *ksext; KOCT *koct; KSBEND *ksbend; KQUAD *kquad; NIBEND *nibend; NISEPT *nisept; KQUSE *kquse;
     SAMPLE *sample; STRAY *stray; CSBEND *csbend; RFCA *rfca; ENERGY *energy;
     RFCW *rfcw; 
     MATTER *matter; MALIGN *malign; MATR *matr; MODRF *modrf;
     CSRCSBEND *csrcsbend;
     CSRDRIFT *csrdrift; LSCDRIFT *lscdrift; EDRIFT *edrift;
-    WIGGLER *wiggler; CWIGGLER *cwiggler;
+    WIGGLER *wiggler; CWIGGLER *cwiggler; APPLE *apple;
     UKICKMAP *ukmap; SCRIPT *script; FTABLE *ftable;
     double ks, Pref_output, pSave;
     VARY rcContext;
@@ -628,6 +752,10 @@ VMATRIX *compute_matrix(
      */
     elem->Pref_output = elem->Pref_input;
 
+    if (elem->matrix) {
+      free_matrices(elem->matrix);
+      free(elem->matrix);
+    }
     elem->matrix = NULL;
     
     switch (elem->type) {
@@ -637,12 +765,14 @@ VMATRIX *compute_matrix(
         break;
       case T_WIGGLER:
 	wiggler = (WIGGLER*)elem->p_elem;
-	if (wiggler->K) {
+	if (wiggler->K>0) {
 	  double period;
 	  /* poles = 2*(wiggler->poles/2)+1; */
 	  period = 2*(wiggler->length/wiggler->poles);
 	  wiggler->radiusInternal = sqrt(sqr(elem->Pref_input)+1)*period/(PIx2*wiggler->K);
-	} else
+	} else if (wiggler->B>0)
+	  wiggler->radiusInternal = sqrt(sqr(elem->Pref_input)+1)/(particleCharge/particleMass/c_mks)/wiggler->B;
+	else 
 	  wiggler->radiusInternal = wiggler->radius;
 	if (wiggler->radiusInternal==0) {
 	  fprintf(stderr, "Error: wiggler radius is zero\n");
@@ -651,7 +781,7 @@ VMATRIX *compute_matrix(
 	}
         elem->matrix = wiggler_matrix(wiggler->length, wiggler->radiusInternal, wiggler->poles,
 				      wiggler->dx, wiggler->dy, wiggler->dz, wiggler->tilt,
-				      run->default_order);
+				      run->default_order, wiggler->focusing);
 	break;
       case T_CWIGGLER:
 	cwiggler = (CWIGGLER*)elem->p_elem;
@@ -669,6 +799,29 @@ VMATRIX *compute_matrix(
           /* printf("Wiggler %s radii are %le  and %le,  length is %le, with %ld periods\n",
              elem->name, cwiggler->radiusInternal[0], cwiggler->radiusInternal[1], 
              cwiggler->length, cwiggler->periods);
+             */
+          pSave = run->p_central;
+          run->p_central = elem->Pref_input;
+          elem->matrix = determineMatrix(run, elem, NULL, NULL);
+          run->p_central = pSave;
+        }
+        break;
+      case T_APPLE:
+	apple = (APPLE*)elem->p_elem;
+        InitializeAPPLE(apple->Input, apple);
+	if (apple->BPeak[0]==0 && apple->BPeak[1]==0) {
+	  fprintf(stderr, "*** Warning: APPLE has zero field in both planes\n");
+          elem->matrix = drift_matrix(apple->length, run->default_order);
+          apple->radiusInternal[0] = apple->radiusInternal[1] = HUGE_VAL;
+	} else {
+          apple->radiusInternal[0] = apple->radiusInternal[1] = HUGE_VAL;
+          if (apple->BPeak[0])
+            apple->radiusInternal[0] = elem->Pref_input/(particleCharge/particleMass/c_mks)/apple->BPeak[0];
+          if (apple->BPeak[1])
+            apple->radiusInternal[1] = elem->Pref_input/(particleCharge/particleMass/c_mks)/apple->BPeak[1];
+          /* printf("Wiggler %s radii are %le  and %le,  length is %le, with %ld periods\n",
+             elem->name, apple->radiusInternal[0], apple->radiusInternal[1], 
+             apple->length, apple->periods);
              */
           pSave = run->p_central;
           run->p_central = elem->Pref_input;
@@ -736,18 +889,29 @@ VMATRIX *compute_matrix(
       case T_QUAD:
         quad = (QUAD*)elem->p_elem;
         elem->matrix = quadrupole_matrix(quad->k1, quad->length, 
-                                         quad->order?quad->order:run->default_order, quad->tilt, quad->ffringe,
-                                         quad->fse, quad->xkick, quad->ykick, quad->fringeType); 
+                                         quad->order?quad->order:run->default_order, quad->tilt, 
+                                         quad->fse, quad->xkick, quad->ykick, 
+                                         quad->edge1_effects, quad->edge2_effects,
+                                         quad->fringeType, quad->ffringe,
+                                         quad->fringeIntM, quad->fringeIntP, quad->radial); 
         if (quad->dx || quad->dy || quad->dz)
-            misalign_matrix(elem->matrix, quad->dx, quad->dy, quad->dz, 0.0);
+          misalign_matrix(elem->matrix, quad->dx, quad->dy, quad->dz, 0.0);
         break;
       case T_SEXT:
         sext = (SEXT*)elem->p_elem;
         elem->matrix = sextupole_matrix(sext->k2, sext->length, 
                                         sext->order?sext->order:run->default_order, sext->tilt,
-                                        sext->fse);
+                                        sext->fse, sext->ffringe);
         if (sext->dx || sext->dy || sext->dz)
             misalign_matrix(elem->matrix, sext->dx, sext->dy, sext->dz, 0.0);
+        break;
+      case T_OCT:
+        oct = (OCTU*)elem->p_elem;
+        elem->matrix = octupole_matrix(oct->k3, oct->length, 
+                                        oct->order?oct->order:run->default_order, oct->tilt,
+                                        oct->fse);
+        if (oct->dx || oct->dy || oct->dz)
+            misalign_matrix(elem->matrix, oct->dx, oct->dy, oct->dz, 0.0);
         break;
       case T_ALPH:
         alph = (ALPH*)elem->p_elem;
@@ -883,8 +1047,11 @@ VMATRIX *compute_matrix(
         if (kquad->n_kicks<1)
             bombElegant("n_kicks must by > 0 for KQUAD element", NULL);
         elem->matrix = quadrupole_matrix(kquad->k1, kquad->length, 
-                                         (run->default_order?run->default_order:1), kquad->tilt, 0.0,
-                                         kquad->fse, kquad->xkick, kquad->ykick, NULL);
+                                         (run->default_order?run->default_order:1), kquad->tilt, 
+                                         kquad->fse, kquad->xkick, kquad->ykick,
+                                         kquad->edge1_effects, kquad->edge2_effects,
+                                         "integrals", 0.0,
+                                         kquad->fringeIntM, kquad->fringeIntP, 0);
         if (kquad->dx || kquad->dy || kquad->dz)
             misalign_matrix(elem->matrix, kquad->dx, kquad->dy, kquad->dz, 0.0);
         readErrorMultipoleData(&(kquad->systematicMultipoleData),
@@ -902,13 +1069,29 @@ VMATRIX *compute_matrix(
             bombElegant("n_kicks must by > 0 for KSEXT element", NULL);
         elem->matrix = sextupole_matrix(ksext->k2, ksext->length, 
                                         (run->default_order?run->default_order:2), ksext->tilt,
-                                        ksext->fse);
+                                        ksext->fse, 0.0);
         if (ksext->dx || ksext->dy || ksext->dz)
             misalign_matrix(elem->matrix, ksext->dx, ksext->dy, ksext->dz, 0.0);
         readErrorMultipoleData(&(ksext->systematicMultipoleData),
                                   ksext->systematic_multipoles, 0);
         readErrorMultipoleData(&(ksext->randomMultipoleData),
                                   ksext->random_multipoles, 0);
+        break;
+      case T_KOCT:
+        koct = (KOCT*)elem->p_elem;
+        if (koct->bore)
+            koct->k3 = 6*koct->B/ipow(koct->bore,3)*(particleCharge/(particleMass*c_mks*elem->Pref_input));
+        if (koct->n_kicks<1)
+            bombElegant("n_kicks must by > 0 for KOCT element", NULL);
+        elem->matrix = octupole_matrix(koct->k3, koct->length, 
+                                        (run->default_order?run->default_order:2), koct->tilt,
+                                        koct->fse);
+        if (koct->dx || koct->dy || koct->dz)
+            misalign_matrix(elem->matrix, koct->dx, koct->dy, koct->dz, 0.0);
+        readErrorMultipoleData(&(koct->systematicMultipoleData),
+                                  koct->systematic_multipoles, 0);
+        readErrorMultipoleData(&(koct->randomMultipoleData),
+                                  koct->random_multipoles, 0);
         break;
       case T_KQUSE:
         kquse = (KQUSE*)elem->p_elem;
@@ -1060,6 +1243,8 @@ VMATRIX *compute_matrix(
       case T_TWISSELEMENT:
 	if (((TWISSELEMENT*)elem->p_elem)->disable) 
 	  elem->matrix = drift_matrix(0.0, 1);
+	else if (((TWISSELEMENT*)elem->p_elem)->from0Values)
+	  elem->matrix = twissTransformMatrix1(&(((TWISSELEMENT*)elem->p_elem)->twiss), &(((TWISSELEMENT*)elem->p_elem)->twiss0));
 	else 
 	  elem->matrix = twissTransformMatrix((TWISSELEMENT*)elem->p_elem, NULL);
         break;
@@ -1099,7 +1284,10 @@ VMATRIX *compute_matrix(
         break;
       case T_RFDF:
 	/* elem->matrix = determineMatrix(run, elem, NULL, NULL); */
-	elem->matrix = rfdf_matrix((RFDF*)elem->p_elem, Pref_output);
+	if (((RFDF*)elem->p_elem)->driftMatrix)
+	  elem->matrix = drift_matrix(((RFDF*)elem->p_elem)->length, run->default_order);
+	else
+	  elem->matrix = rfdf_matrix((RFDF*)elem->p_elem, Pref_output);
         break;
       case T_KPOLY: case T_RFTMEZ0:  case T_RMDF:  case T_TMCF: case T_CEPL:  
       case T_TWPL:  case T_RCOL:  case T_PEPPOT: case T_MAXAMP: 
@@ -1563,8 +1751,10 @@ VMATRIX *rf_cavity_matrix(double length, double voltage, double frequency, doubl
       }
       free_matrices(Medge);
       tfree(Medge);
+      Medge = NULL;
       free_matrices(Mtot);
       tfree(Mtot);
+      Mtot = NULL;
     }
 
     if (change_p0)
@@ -1590,6 +1780,7 @@ VMATRIX *rf_cavity_matrix(double length, double voltage, double frequency, doubl
       free_matrices(Mtot);
       tfree(Medge);
       tfree(Mtot);
+      Medge = Mtot = NULL;
     }
 
     *P_central = Preference;
@@ -1657,6 +1848,7 @@ VMATRIX *twissTransformMatrix1(TWISS *twissWanted, TWISS *twissInput)
   free(Mtot);
   free(M2);
   free(M3);
+  Mtot = M2 = M3 = NULL;
   
   return M1;
 }
@@ -1830,13 +2022,15 @@ VMATRIX *rfdf_matrix(RFDF *rfdf, double pReference)
 {
   VMATRIX *M;
   double *C, **R, ***T;
-  double k, theta, omega, L, phi;
+  double k, theta, omega, L, phi, beta;
   double cphi, sphi;
 
-  if (rfdf->voltage==0)
+  if (rfdf->voltage==0 || rfdf->fse==-1)
     return drift_matrix(rfdf->length, 1);
-
-  theta = (particleCharge*rfdf->voltage)/(particleMass*sqr(c_mks)*pReference);
+  
+  beta = pReference/sqrt(sqr(pReference)+1);
+/*  theta = (particleCharge*rfdf->voltage*(1+rfdf->fse))/(particleMass*sqr(c_mks)*pReference*beta); */
+  theta = (particleCharge*rfdf->voltage*(1+rfdf->fse))/(particleMass*sqr(c_mks)*pReference); 
   omega = rfdf->frequency*PIx2;
   k = omega/c_mks;
   L = rfdf->length;
@@ -1855,12 +2049,18 @@ VMATRIX *rfdf_matrix(RFDF *rfdf, double pReference)
     C[5] = sqrt(sqr(C[1])+1)-1;
     R[0][0] = R[1][1] = R[2][2] = R[3][3] = R[4][4] = R[5][5] = 1;
     R[1][0] = -cphi*sphi*k*sqr(theta);
-    R[1][4] = -k*sphi*theta;
+    R[1][4] = -k*sphi*theta/beta;
     R[1][5] = -theta*cphi;
     R[5][5] = 1/sqrt(1 + sqr(cphi*theta));
     R[5][0] = k*sphi*theta*R[5][5];
     R[5][1] = theta*cphi*R[5][5];
-    R[5][4] = -k*cphi*sphi*sqr(theta)*R[5][5];
+    R[5][4] = -k*cphi*sphi*sqr(theta)*R[5][5]/beta;
+
+    if (rfdf->tilt)
+      tilt_matrices(M, rfdf->tilt);
+    if (rfdf->dx || rfdf->dy || rfdf->dz)
+      misalign_matrix(M, rfdf->dx, rfdf->dy, rfdf->dz, 0.0);
+
     return(M);
   } else {
     VMATRIX *Mt, *Mc, *Md, *Ms, *Mtmp;
@@ -1886,10 +2086,14 @@ VMATRIX *rfdf_matrix(RFDF *rfdf, double pReference)
     theta3 = theta*theta2;
     theta4 = theta2*theta2;
     k2 = k*k;
-    z = -rfdf->length/2+dz;
+    z = -rfdf->length/(2*beta)+dz;
     Mt->C[4] = -rfdf->length/2;
     for (i=0; i<n; i++) {
-      phase = rfdf->phase*PI/180 + k*(Mt->C[4]+dz);
+      if (rfdf->standingWave)
+        phase = rfdf->phase*PI/180 + k*(Mt->C[4]+dz)/beta;
+      else
+        phase = rfdf->phase*PI/180 + k*(Mt->C[4]+dz)*(1/beta-1);
+      
       cphi = cos(phase);
       sphi = sin(phase);
       cphi2 = cphi*cphi;
@@ -1899,13 +2103,13 @@ VMATRIX *rfdf_matrix(RFDF *rfdf, double pReference)
       C[5] = sqrt(cphi2*theta2+1)-1;
 
       R[1][0] = -k*cphi*sphi*theta2;
-      R[1][4] = -k*sphi*theta;
+      R[1][4] = -k*sphi*theta/beta;
       R[1][5] = -cphi*theta;
 
       R[5][0] = k*sphi*theta/sqrt(cphi2*theta2+1);
       R[5][1] = cphi*theta/sqrt(cphi2*theta2+1);
 
-      R[5][4] = -k*cphi*sphi*theta2/sqrt(cphi2*theta2+1);
+      R[5][4] = -k*cphi*sphi*theta2/sqrt(cphi2*theta2+1)/beta;
 
       R[5][5] = 1/sqrt(cphi2*theta2+1);
 
@@ -1941,11 +2145,222 @@ VMATRIX *rfdf_matrix(RFDF *rfdf, double pReference)
     free_matrices(Mc);
     free_matrices(Ms);
     free_matrices(Md);
+    free(Mc);
+    free(Ms);
+    free(Md);
+    Mc = Ms = Md = NULL;
     Mt->C[4] += rfdf->length/2;
     null_matrices(Mt, EXCLUDE_R+EXCLUDE_C);
     Mt->order = 1;
+
+    if (rfdf->tilt)
+      tilt_matrices(Mt, rfdf->tilt);
+    if (rfdf->dx || rfdf->dy || rfdf->dz)
+      misalign_matrix(Mt, rfdf->dx, rfdf->dy, rfdf->dz, 0.0);
     return(Mt);
   }
 
+}
+
+VMATRIX *sextupoleFringeMatrix(double K2, double length, long maxOrder, long side)
+{
+  VMATRIX *M;
+  double *C, **R, ***T, ****U;
+  double temp;
+  
+  M = tmalloc(sizeof(*M));
+  initialize_matrices(M, M->order=MIN(3,maxOrder));
+  R = M->R;
+  C = M->C;
+
+  R[0][0] = R[1][1] = R[2][2] = R[3][3] = R[4][4] = R[5][5] = 1;
+  C[4] = R[0][1] = R[2][3] = length;
+
+  if (side==-1) {
+    /* entrance */
+    if (M->order >= 2) {
+      T = M->T;
+      T[0][0][0] = -(K2*ipow(length,2))/12.;
+      T[0][1][0] = -(K2*ipow(length,3))/12.;
+      T[0][1][1] = -(K2*ipow(length,4))/40.;
+      T[0][2][2] = (K2*ipow(length,2))/12.;
+      T[0][3][2] = (K2*ipow(length,3))/12.;
+      T[0][3][3] = (K2*ipow(length,4))/40.;
+      T[1][0][0] = -(K2*length)/4.;
+      T[1][1][0] = -(K2*ipow(length,2))/3.;
+      T[1][1][1] = -(K2*ipow(length,3))/8.;
+      T[1][2][2] = (K2*length)/4.;
+      T[1][3][2] = (K2*ipow(length,2))/3.;
+      T[1][3][3] = (K2*ipow(length,3))/8.;
+      T[2][2][0] = (K2*ipow(length,2))/6.;
+      T[2][2][1] = (K2*ipow(length,3))/12.;
+      T[2][3][0] = (K2*ipow(length,3))/12.;
+      T[2][3][1] = (K2*ipow(length,4))/20.;
+      T[3][2][0] = (K2*length)/2.;
+      T[3][2][1] = (K2*ipow(length,2))/3.;
+      T[3][3][0] = (K2*ipow(length,2))/3.;
+      T[3][3][1] = (K2*ipow(length,3))/4.;
+      T[4][1][1] = length/2.;
+      T[4][3][3] = length/2.;
+      if (M->order >= 3) {
+        U =  M->Q;
+        U[0][0][0][0] = (ipow(K2,2)*ipow(length,4))/360.;
+        U[0][1][0][0] = (ipow(K2,2)*ipow(length,5))/252.;
+        U[0][1][1][0] = (13*ipow(K2,2)*ipow(length,6))/6720.;
+        U[0][1][1][1] = (ipow(K2,2)*ipow(length,7))/2880.;
+        U[0][2][2][0] = (ipow(K2,2)*ipow(length,4))/360.;
+        U[0][3][2][0] = (ipow(K2,2)*ipow(length,5))/252.;
+        U[0][3][2][1] = (ipow(K2,2)*ipow(length,6))/1120.;
+        U[0][3][3][0] = (ipow(K2,2)*ipow(length,6))/960.;
+        U[0][3][3][1] = (ipow(K2,2)*ipow(length,7))/2880.;
+        U[0][5][0][0] = (K2*ipow(length,2))/12.;
+        U[0][5][1][0] = (K2*ipow(length,3))/12.;
+        U[0][5][1][1] = (K2*ipow(length,4))/40.;
+        U[0][5][2][2] = -(K2*ipow(length,2))/12.;
+        U[0][5][3][2] = -(K2*ipow(length,3))/12.;
+        U[0][5][3][3] = -(K2*ipow(length,4))/40.;
+        U[1][0][0][0] = (ipow(K2,2)*ipow(length,3))/60.;
+        U[1][1][0][0] = (ipow(K2,2)*ipow(length,4))/36.;
+        U[1][1][1][0] = (13*ipow(K2,2)*ipow(length,5))/840.;
+        U[1][1][1][1] = (ipow(K2,2)*ipow(length,6))/320.;
+        U[1][2][2][0] = (ipow(K2,2)*ipow(length,3))/60.;
+        U[1][3][2][0] = (ipow(K2,2)*ipow(length,4))/36.;
+        U[1][3][2][1] = (ipow(K2,2)*ipow(length,5))/140.;
+        U[1][3][3][0] = (ipow(K2,2)*ipow(length,5))/120.;
+        U[1][3][3][1] = (ipow(K2,2)*ipow(length,6))/320.;
+        U[1][5][0][0] = (K2*length)/4.;
+        U[1][5][1][0] = (K2*ipow(length,2))/3.;
+        U[1][5][1][1] = (K2*ipow(length,3))/8.;
+        U[1][5][2][2] = -(K2*length)/4.;
+        U[1][5][3][2] = -(K2*ipow(length,2))/3.;
+        U[1][5][3][3] = -(K2*ipow(length,3))/8.;
+        U[2][2][0][0] = (ipow(K2,2)*ipow(length,4))/360.;
+        U[2][2][1][0] = (ipow(K2,2)*ipow(length,5))/252.;
+        U[2][2][1][1] = (ipow(K2,2)*ipow(length,6))/960.;
+        U[2][2][2][2] = (ipow(K2,2)*ipow(length,4))/360.;
+        U[2][3][1][0] = (ipow(K2,2)*ipow(length,6))/1120.;
+        U[2][3][1][1] = (ipow(K2,2)*ipow(length,7))/2880.;
+        U[2][3][2][2] = (ipow(K2,2)*ipow(length,5))/252.;
+        U[2][3][3][2] = (13*ipow(K2,2)*ipow(length,6))/6720.;
+        U[2][3][3][3] = (ipow(K2,2)*ipow(length,7))/2880.;
+        U[2][5][2][0] = -(K2*ipow(length,2))/6.;
+        U[2][5][2][1] = -(K2*ipow(length,3))/12.;
+        U[2][5][3][0] = -(K2*ipow(length,3))/12.;
+        U[2][5][3][1] = -(K2*ipow(length,4))/20.;
+        U[3][2][0][0] = (ipow(K2,2)*ipow(length,3))/60.;
+        U[3][2][1][0] = (ipow(K2,2)*ipow(length,4))/36.;
+        U[3][2][1][1] = (ipow(K2,2)*ipow(length,5))/120.;
+        U[3][2][2][2] = (ipow(K2,2)*ipow(length,3))/60.;
+        U[3][3][1][0] = (ipow(K2,2)*ipow(length,5))/140.;
+        U[3][3][1][1] = (ipow(K2,2)*ipow(length,6))/320.;
+        U[3][3][2][2] = (ipow(K2,2)*ipow(length,4))/36.;
+        U[3][3][3][2] = (13*ipow(K2,2)*ipow(length,5))/840.;
+        U[3][3][3][3] = (ipow(K2,2)*ipow(length,6))/320.;
+        U[3][5][2][0] = -(K2*length)/2.;
+        U[3][5][2][1] = -(K2*ipow(length,2))/3.;
+        U[3][5][3][0] = -(K2*ipow(length,2))/3.;
+        U[3][5][3][1] = -(K2*ipow(length,3))/4.;
+      }
+    }
+  } else {
+    /* exit */
+    if (M->order >= 2) {
+      T =  M->T;
+      T[0][0][0] = -(K2*ipow(length,2))/6.;
+      T[0][1][0] = -(K2*ipow(length,3))/12.;
+      T[0][1][1] = -(K2*ipow(length,4))/60.;
+      T[0][2][2] = (K2*ipow(length,2))/6.;
+      T[0][3][2] = (K2*ipow(length,3))/12.;
+      T[0][3][3] = (K2*ipow(length,4))/60.;
+      T[1][0][0] = -(K2*length)/4.;
+      T[1][1][0] = -(K2*ipow(length,2))/6.;
+      T[1][1][1] = -(K2*ipow(length,3))/24.;
+      T[1][2][2] = (K2*length)/4.;
+      T[1][3][2] = (K2*ipow(length,2))/6.;
+      T[1][3][3] = (K2*ipow(length,3))/24.;
+      T[2][2][0] = (K2*ipow(length,2))/3.;
+      T[2][2][1] = (K2*ipow(length,3))/12.;
+      T[2][3][0] = (K2*ipow(length,3))/12.;
+      T[2][3][1] = (K2*ipow(length,4))/30.;
+      T[3][2][0] = (K2*length)/2.;
+      T[3][2][1] = (K2*ipow(length,2))/6.;
+      T[3][3][0] = (K2*ipow(length,2))/6.;
+      T[3][3][1] = (K2*ipow(length,3))/12.;
+      T[4][1][1] = length/2.;
+      T[4][3][3] = length/2.;
+      if (M->order >= 3) {
+        U =  M->Q;
+        U[0][0][0][0] = (ipow(K2,2)*ipow(length,4))/144.;
+        U[0][1][0][0] = (3*ipow(K2,2)*ipow(length,5))/560.;
+        U[0][1][1][0] = (3*ipow(K2,2)*ipow(length,6))/2240.;
+        U[0][1][1][1] = (ipow(K2,2)*ipow(length,7))/6720.;
+        U[0][2][2][0] = (ipow(K2,2)*ipow(length,4))/144.;
+        U[0][2][2][1] = -(ipow(K2,2)*ipow(length,5))/720.;
+        U[0][3][2][0] = (17*ipow(K2,2)*ipow(length,5))/2520.;
+        U[0][3][2][1] = (ipow(K2,2)*ipow(length,6))/2016.;
+        U[0][3][3][0] = (17*ipow(K2,2)*ipow(length,6))/20160.;
+        U[0][3][3][1] = (ipow(K2,2)*ipow(length,7))/6720.;
+        U[0][5][0][0] = (K2*ipow(length,2))/6.;
+        U[0][5][1][0] = (K2*ipow(length,3))/12.;
+        U[0][5][1][1] = (K2*ipow(length,4))/60.;
+        U[0][5][2][2] = -(K2*ipow(length,2))/6.;
+        U[0][5][3][2] = -(K2*ipow(length,3))/12.;
+        U[0][5][3][3] = -(K2*ipow(length,4))/60.;
+        U[1][0][0][0] = (ipow(K2,2)*ipow(length,3))/60.;
+        U[1][1][0][0] = (11*ipow(K2,2)*ipow(length,4))/720.;
+        U[1][1][1][0] = (11*ipow(K2,2)*ipow(length,5))/2520.;
+        U[1][1][1][1] = (11*ipow(K2,2)*ipow(length,6))/20160.;
+        U[1][2][2][0] = (ipow(K2,2)*ipow(length,3))/60.;
+        U[1][2][2][1] = -(ipow(K2,2)*ipow(length,4))/240.;
+        U[1][3][2][0] = (7*ipow(K2,2)*ipow(length,4))/360.;
+        U[1][3][2][1] = (ipow(K2,2)*ipow(length,5))/630.;
+        U[1][3][3][0] = (ipow(K2,2)*ipow(length,5))/360.;
+        U[1][3][3][1] = (11*ipow(K2,2)*ipow(length,6))/20160.;
+        U[1][5][0][0] = (K2*length)/4.;
+        U[1][5][1][0] = (K2*ipow(length,2))/6.;
+        U[1][5][1][1] = (K2*ipow(length,3))/24.;
+        U[1][5][2][2] = -(K2*length)/4.;
+        U[1][5][3][2] = -(K2*ipow(length,2))/6.;
+        U[1][5][3][3] = -(K2*ipow(length,3))/24.;
+        U[2][2][0][0] = (ipow(K2,2)*ipow(length,4))/144.;
+        U[2][2][1][0] = (17*ipow(K2,2)*ipow(length,5))/2520.;
+        U[2][2][1][1] = (17*ipow(K2,2)*ipow(length,6))/20160.;
+        U[2][2][2][2] = (ipow(K2,2)*ipow(length,4))/144.;
+        U[2][3][0][0] = -(ipow(K2,2)*ipow(length,5))/720.;
+        U[2][3][1][0] = (ipow(K2,2)*ipow(length,6))/2016.;
+        U[2][3][1][1] = (ipow(K2,2)*ipow(length,7))/6720.;
+        U[2][3][2][2] = (3*ipow(K2,2)*ipow(length,5))/560.;
+        U[2][3][3][2] = (3*ipow(K2,2)*ipow(length,6))/2240.;
+        U[2][3][3][3] = (ipow(K2,2)*ipow(length,7))/6720.;
+        U[2][5][2][0] = -(K2*ipow(length,2))/3.;
+        U[2][5][2][1] = -(K2*ipow(length,3))/12.;
+        U[2][5][3][0] = -(K2*ipow(length,3))/12.;
+        U[2][5][3][1] = -(K2*ipow(length,4))/30.;
+        U[3][2][0][0] = (ipow(K2,2)*ipow(length,3))/60.;
+        U[3][2][1][0] = (7*ipow(K2,2)*ipow(length,4))/360.;
+        U[3][2][1][1] = (ipow(K2,2)*ipow(length,5))/360.;
+        U[3][2][2][2] = (ipow(K2,2)*ipow(length,3))/60.;
+        U[3][3][0][0] = -(ipow(K2,2)*ipow(length,4))/240.;
+        U[3][3][1][0] = (ipow(K2,2)*ipow(length,5))/630.;
+        U[3][3][1][1] = (11*ipow(K2,2)*ipow(length,6))/20160.;
+        U[3][3][2][2] = (11*ipow(K2,2)*ipow(length,4))/720.;
+        U[3][3][3][2] = (11*ipow(K2,2)*ipow(length,5))/2520.;
+        U[3][3][3][3] = (11*ipow(K2,2)*ipow(length,6))/20160.;
+        U[3][5][2][0] = -(K2*length)/2.;
+        U[3][5][2][1] = -(K2*ipow(length,2))/6.;
+        U[3][5][3][0] = -(K2*ipow(length,2))/6.;
+        U[3][5][3][1] = -(K2*ipow(length,3))/12.;
+      }
+    }
+  }
+
+  /* 
+  if (side==-1) 
+    print_matrices(stdout, "entrance fringe matrix:\n", M);
+  else
+    print_matrices(stdout, "exit fringe matrix:\n", M);
+    */
+
+  return M;
 }
 

@@ -8,6 +8,7 @@
 #namelist global_settings static
      long inhibit_fsync = 0;
      long echo_namelists = 1;
+     long mpi_randomization_mode = 3;
      STRING log_file = NULL;
      STRING error_log_file = NULL;
 #end

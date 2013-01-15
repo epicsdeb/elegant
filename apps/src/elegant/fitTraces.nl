@@ -4,12 +4,7 @@
  * Michael Borland, 1997
  */
 /*
- * $Log: fitTraces.nl,v $
- * Revision 1.6  2000/10/25 20:52:00  borland
- * Added FLUSH_INTERVAL parameter to WATCH element.
- * Improvements to trace fitting.
- * Optimization includes ability to supply weights for each term.
- *
+ * $Log: not supported by cvs2svn $
  * Revision 1.5  1998/06/08 16:50:43  borland
  * Fixed problems with SVD.  Added more reporting.
  *

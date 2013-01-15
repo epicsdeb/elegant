@@ -3,10 +3,7 @@
 exec oagwish "$0" "$@"
 
 #
-# $Log: quickSDDSUrgent,v $
-# Revision 1.3  2006/07/31 23:44:49  jiaox
-# Made the mode and method selection based on which calculation code(us or urgent) used. Now users can see these as text descriptions instead of numbers.
-#
+# $Log: not supported by cvs2svn $
 # Revision 1.2  2006/07/14 15:41:30  jiaox
 # Corrected the number of  skiplines from 26 to 25 for the US output data. The previous one omitted the first data point.
 #

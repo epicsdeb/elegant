@@ -191,6 +191,8 @@ int run_coupled_twiss_output(RUN *run, LINE_LIST *beamline, double *starting_coo
     }
     M = accumulate_matrices(eptr0, run, M1, concat_order, 0);
     free_matrices(M1);
+    free(M1);
+    M1 = NULL;
   } else
     M = accumulate_matrices(eptr0, run, NULL, concat_order, 0);
   R = M->R;
@@ -223,7 +225,9 @@ int run_coupled_twiss_output(RUN *run, LINE_LIST *beamline, double *starting_coo
     }
   }
   free_matrices(M);
-
+  free(M);
+  M = NULL;
+  
   /*--- Changing time sign for symplecticity... */
   if (matDim == 6) {
     for (i=0; i<6; i++) {

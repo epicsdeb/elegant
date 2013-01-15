@@ -13,10 +13,7 @@
  *
  * Michael Borland, 2000
  *
- $Log: sddsanalyzebeam.c,v $
- Revision 1.6  2009/12/20 19:53:08  borland
- Removed definition of SDDS_DEFINITION.
-
+ $Log: not supported by cvs2svn $
  Revision 1.5  2009/07/21 14:29:49  borland
  Added symbols to the columns.
 

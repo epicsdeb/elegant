@@ -9,6 +9,9 @@
 &error_element  name=*, element_type=*BEN*,
 	item=DX, amplitude=<dxBend>, type = "gaussian", cutoff=2.0, 
         bind=0, fractional=0, allow_missing_elements=1 &end
+&error_element  name=*, element_type=*MON*,
+	item=DX, amplitude=<dxMoni>, type = "gaussian", cutoff=2.0, 
+        bind=0, fractional=0, allow_missing_elements=1 &end
 
 &error_element  name=*, element_type=*QUAD*,
 	item=DY, amplitude=<dyQuad>, type = "gaussian", cutoff=2.0, 
@@ -18,6 +21,9 @@
         bind=0, fractional=0, allow_missing_elements=1 &end
 &error_element  name=*, element_type=*BEN*,
 	item=DY, amplitude=<dyBend>, type = "gaussian", cutoff=2.0, 
+        bind=0, fractional=0, allow_missing_elements=1 &end
+&error_element  name=*, element_type=*MON*,
+	item=DY, amplitude=<dyMoni>, type = "gaussian", cutoff=2.0, 
         bind=0, fractional=0, allow_missing_elements=1 &end
 
 &error_element  name=*, element_type=*QUAD*,

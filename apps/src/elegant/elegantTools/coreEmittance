@@ -1,0 +1,163 @@
+#!/usr/bin/tclsh
+
+# Script to compute core slice emittance from elegant beam file output data
+# X. Dong, ANL
+# $Log: not supported by cvs2svn $
+# Revision 1.2  2011/06/21 17:42:03  borland
+# Added standard commandline argument parsing.
+# Added png output.
+#
+# Revision 1.1  2011/06/10 18:26:24  borland
+# First version, by X. Dong.
+# 
+#
+
+proc APSSetVarsFromList {args} {
+    set valueList ""
+    set variableList ""
+    if {[APSStrictParseArguments {valueList variableList}] || \
+          ![llength $valueList] || [llength $valueList]!=[llength $variableList]} {
+        return -code error "APSSetVarsFromList: invalid arguments/values"
+    }
+    foreach value $valueList variable $variableList {
+        uplevel 1 "set $variable \"$value\""
+    }
+}
+
+proc APSStrictParseArguments {optlist} {
+    upvar args arguments
+    set length [llength $arguments]
+    set index 0
+    set leftovers {}
+    while {$index<$length} {
+        set arg [lindex $arguments $index]
+        if {[string index $arg 0]=="-"} {
+            set keywordName [string range $arg 1 end]
+            if {[lsearch -exact $optlist $keywordName]!=-1} {
+                incr index
+                if {$index==$length} {
+                    lappend leftovers $arg
+                } else {
+                    set valueString [lindex $arguments $index]
+                    uplevel "set $keywordName {$valueString}"
+                    incr index
+                }
+            } else {
+                incr index
+                lappend leftovers $arg
+            }
+        } else {
+            lappend leftovers $arg
+            incr index
+        }
+    }
+    set arguments [concat $leftovers]
+    if {$arguments != ""} {
+        set procName [lindex [info level [expr {[info level] - 1}]] 0]
+        puts stderr "Unknown option(s) given to $procName \"$arguments\""
+        return -1
+    } else {
+        return 0
+    }
+}
+
+
+set input ""
+set pngRoot ""
+set nSlices 30
+set pngThickness 2
+set usage {usage: coreEmittance -input <filename> [-nSlices <number>(100)] [-pngRoot <string> [-pngThickness <integer>(2)]]}
+set args $argv
+if {[APSStrictParseArguments {input pngRoot nSlices pngThickness}] || ![string length $input] || $nSlices<2} {
+    return -code error "$usage"
+}
+
+set rootname $input
+set nslice $nSlices
+
+set charge [exec sdds2stream -par=Charge $rootname]
+
+exec sddsanalyzebeam $rootname $rootname.ana
+
+set nrows [exec sdds2stream -rows=bare $rootname]
+
+set betax [exec sdds2stream $rootname.ana -col=betax]
+set alphax [exec sdds2stream $rootname.ana -col=alphax]
+set gammax [expr (1+$alphax*$alphax)/$betax]
+set betay [exec sdds2stream $rootname.ana -col=betay]
+set alphay [exec sdds2stream $rootname.ana -col=alphay]
+set gammay [expr (1+$alphay*$alphay)/$betay]
+
+exec sddsprocess $rootname -pipe=out \
+  "-define=col,CSx,$gammax x sqr * 2 $alphax * x * xp * + $betax xp sqr * +" \
+  "-define=col,CSy,$gammay y sqr * 2 $alphay * y * yp * + $betay yp sqr * +" \
+  "-define=col,A,CSx sqr CSy sqr + sqrt" \
+  -delete=col,dt \
+  | sddssort -pipe=in $rootname.sorted.sdds \
+  -col=A,increasing
+
+
+set plist [list 8000 9000 9500 10000]
+set w1 10
+set w2 21
+set sep +-[string repeat - $w1]-+-[string repeat - $w2]-+-[string repeat - $w2]-+
+puts $sep
+puts [format "| %-*s | %-*s | %-*s |" $w1 "Percentage" $w2 "Normalized emittanc x" $w2 "Normalized emittanc y"]
+puts [format "| %-*s | %-*s | %-*s |" $w1 "          " $w2 "    (pi mm-mrad )    " $w2 "    (pi mm-mrad )    "]
+puts $sep
+
+set fileList ""
+foreach n $plist {
+    set keep [expr $n*$nrows/10000]
+    set percentage [format "%3d%%" [expr $n/100]]
+    exec sddsprocess $rootname.sorted.sdds -pipe=out \
+      -clip=$keep,0,invert \
+      -process=t,average,tmean \
+      "-define=col,dt,t tmean -" \
+      -process=dt,maximum,tmax \
+      -process=dt,minimum,tmin \
+      | sddssort -pipe=in $rootname.xxp.sdds \
+      -col=dt,increasing
+    
+    exec sddsanalyzebeam $rootname.xxp.sdds $rootname.xxp.sdds.ana
+    set results [exec sdds2stream $rootname.xxp.sdds.ana -col=enx,eny]
+    set enx [lindex $results 0]
+    set eny [lindex $results 1]
+    puts [format "| %*s | %-*s | %-*s |" $w1 $percentage $w2 [expr $enx*1e6] $w2 [expr $eny*1e6]]
+    
+    set tmax [exec sdds2stream $rootname.xxp.sdds -par=tmax]
+    set tmin [exec sdds2stream $rootname.xxp.sdds -par=tmin]
+    set stepsize [expr ($tmax-$tmin)/($nslice-1)]
+    exec sddsbreak $rootname.xxp.sdds -pipe=out \
+      -changeOf=dt,amount=$stepsize,base=$tmin \
+      | sddsprocess -pipe=in,out \
+      -process=dt,average,dtmean \
+      "-redefine=par,dtmean,dtmean 1e12 *,units=ps,symbol=t" \
+      "-define=par,I,n_rows $charge * $nrows / $stepsize /,units=A" \
+      | sddsanalyzebeam -pipe=in $rootname.ana$n.sdds
+    catch {exec sddsprocess $rootname.ana$n.sdds -print=par,percentage,$percentage} warning
+    lappend fileList $rootname.ana$n.sdds
+    file delete -force $rootname.xxp.sdds $rootname.xxp.sdds.ana $rootname.ana$n.sdds~
+}
+puts $sep
+file delete -force $rootname.sorted.sdds
+
+eval exec sddscombine -pipe=out $fileList \
+  | sddsprocess -pipe=in $rootname.slice \
+  "{-redefine=col,enx,enx 1e6 *,units=\$gp\$r mrad mm,symbol=\$ge\$r\$an\$h\$h\$bx;rms\$n}" \
+  "{-redefine=col,eny,eny 1e6 *,units=\$gp\$r mrad mm,symbol=\$ge\$r\$an\$h\$h\$by;rms\$n}"
+eval file delete $fileList
+
+exec sddsplot -thick=1 -line=0,thick=2 -col=dtmean,enx -graph=line,vary $rootname.slice -split=page -tickSettings=grid -legend=par=percentage &
+exec sddsplot -thick=1 -line=0,thick=2 -col=dtmean,eny -graph=line,vary $rootname.slice -split=page -tickSettings=grid -legend=par=percentage &
+exec sddsplot -thick=1 -line=0,thick=2 -col=dtmean,I   -graph=line,vary $rootname.slice -split=page -tickSettings=grid -legend=par=percentage &
+
+if [string length $pngRoot] {
+    exec sddsplot -device=lpng,onwhite -output=$pngRoot-enx.png -thick=$pngThickness -line=0,thick=$pngThickness -col=dtmean,enx -graph=line,vary $rootname.slice -split=page -tickSettings=grid -legend=par=percentage 
+    exec sddsplot -device=lpng,onwhite -output=$pngRoot-eny.png -thick=$pngThickness -line=0,thick=$pngThickness -col=dtmean,eny -graph=line,vary $rootname.slice -split=page -tickSettings=grid -legend=par=percentage 
+    exec sddsplot -device=lpng,onwhite -output=$pngRoot-I.png -thick=$pngThickness -line=0,thick=$pngThickness -col=dtmean,I   -graph=line,vary $rootname.slice -split=page -tickSettings=grid -legend=par=percentage
+}
+
+after 3000
+file delete -force $rootname.ana $rootname.ana10000.sdds $rootname.ana9500.sdds $rootname.ana9000.sdds $rootname.ana8000.sdds 
+

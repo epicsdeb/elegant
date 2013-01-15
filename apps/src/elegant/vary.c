@@ -65,6 +65,7 @@ void vary_setup(VARY *_control, NAMELIST_TEXT *nltext, RUN *run, LINE_LIST *beam
     _control->bunch_frequency = bunch_frequency;
     _control->n_passes = n_passes;
     _control->reset_rf_each_step = reset_rf_for_each_step;
+    _control->reset_scattering_seed = reset_scattering_seed;
     if (first_is_fiducial && n_passes!=1)
       bombElegant("can't have fiducial beam and multiple passes", NULL);
     _control->fiducial_flag = 0;
@@ -260,6 +261,9 @@ long vary_beamline(VARY *_control, ERRORVAL *errcon, RUN *run, LINE_LIST *beamli
     delete_phase_references();
   reset_special_elements(beamline, _control->reset_rf_each_step);
 
+  if (_control->reset_scattering_seed)
+    seedElegantRandomNumbers(0, RESTART_RN_SCATTER);
+  
   do_perturbations = step_incremented = 0;
 
   if (links && links->n_links) 
@@ -849,7 +853,7 @@ void assert_perturbations(char **elem_name, long *param_number, long *type, long
               /* save value if this is the first from a group */
               perturb[i_elem] = delta;
             if (elem_perturb_flags[i_elem]&ANTIBIND_ERRORS)
-                delta = -delta;
+                perturb[i_elem] = -delta;
             }
         }
     if (fp_log) {

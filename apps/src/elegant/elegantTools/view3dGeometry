@@ -1,0 +1,486 @@
+#!/bin/sh  
+# \
+exec oagtclsh "$0" "$@"
+
+if ![info exists env(OAG_TOP_DIR)] {
+    set env(OAG_TOP_DIR) /usr/local
+}
+set auto_path [linsert $auto_path 0  $env(OAG_TOP_DIR)/oag/apps/lib/$env(HOST_ARCH)]
+
+APSStandardSetup
+
+set usage "usage: view3dGeometry -rootname <string> -showNames <listOfElementTypes> -showCoordinates <listOfElementTypes> \nScript by Alexey Petrenko (Version 2, M. Borland)\n"
+set rootname ""
+set showNames *SBEN*
+set showCoordinates "MARK* WATCH*"
+set args $argv
+if {[APSStrictParseArguments {rootname showNames showCoordinates}] || ![string length $rootname] || \
+    ![string length $showNames] || ![string length $showCoordinates]} {
+    return -code error "$usage"
+}
+
+set pi 3.14159265358979
+
+set QUAD_width		0.4
+set BEND_width		[expr { 1.0  * $QUAD_width }]
+set BEND_angle_division [expr { 5.0  * $pi / 180   }]
+set SEXT_width		[expr { 0.8  * $QUAD_width }]
+set DRIFT_pipe_radius	[expr { 0.1  * $QUAD_width }]
+set RFCA_radius         [expr { 0.25 * $QUAD_width }]
+
+set show_names_for [join [split $showNames " ,"] " "]
+
+set show_coordinate_system_after [join [split $showCoordinates " ,"] " "]
+
+set bounding_box_offset 1.5
+
+if ![file exists $rootname.flr] {
+    return -code error "not found: $rootname.flr"
+}
+if ![file exists $rootname.param] {
+    return -code error "not found: $rootname.param"
+}
+set xyz $rootname.flr
+set x3d $rootname.x3d
+set par $rootname.param
+
+proc main {} {
+    global xyz x3d pi show_labels rootname
+
+    set f [open $x3d w]
+    set N_beam_points [exec sddsprocess $xyz -pipe=out -define=par,N,n_rows,type=long | sdds2stream -pipe=in -par=N]
+    set beam_points   [exec sdds2stream $xyz -col=X,Y,Z]
+    puts $f "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+    puts $f "<X3D profile='Interchange' version='3.1' xmlns:xsd='http://www.w3.org/2001/XMLSchema-instance' xsd:noNamespaceSchemaLocation='http://www.web3d.org/specifications/x3d-3.1.xsd'>
+    <head></head>
+    <Background skyColor='1 1 1'/>
+    "
+    puts $f [get_bounding_box]
+
+    puts $f "
+	<Shape>
+	    <Appearance>
+		<Material emissiveColor='0 0 1'/>
+	    </Appearance>
+	    <LineSet vertexCount='$N_beam_points' containerField='geometry'>
+		<Coordinate point='$beam_points'/>
+	    </LineSet>
+	</Shape>
+    "
+
+    # first element:
+    foreach {X1 Y1 Z1 theta1 phi1 psi1 ElementType ElementName} [exec sdds2stream $xyz -col=X,Y,Z,theta,phi,psi,ElementType,ElementName] {
+	set X     $X1
+	set Y     $Y1
+	set Z     $Z1
+	set theta $theta1
+	set phi   $phi1
+	set psi   $psi1
+	break
+    }
+    foreach {X1 Y1 Z1 theta1 phi1 psi1 ElementType ElementName} [exec sdds2stream $xyz -col=X,Y,Z,theta,phi,psi,ElementType,ElementName] {
+
+	set dx [expr {$X1 - $X}]
+	set dy [expr {$Y1 - $Y}]
+	set dz [expr {$Z1 - $Z}]
+	set L  [expr {sqrt($dx*$dx + $dy*$dy + $dz*$dz)}]
+
+	if [string match "*QUAD*" $ElementType] {
+	    set color "1 0 0"
+	    if {[element_par $ElementName K1] < 0} {
+		set color "0 0 1"
+	    }
+	    set coil_w   [expr {$::QUAD_width/3}]
+	    set coil_h   [expr {$::QUAD_width/5}]
+	    set coil_l   [expr {1.3*$L}]
+	    set coil_pos [expr {$::QUAD_width/4}]
+	    set coil_color "1.00000   0.74902   0.00000"
+	    puts $f "
+	<Transform   rotation='  0  1  0 $theta' translation='$X $Y $Z'>
+	 <Transform  rotation=' -1  0  0 $phi  '>
+	  <Transform rotation='  0  0  1 $psi  '>
+	    <Transform translation='0 0 [expr {$L/2}]'>
+		<Shape>
+		 <Box size='$::QUAD_width $::QUAD_width $L'/>
+		 <Appearance><Material diffuseColor='$color'/></Appearance>
+		</Shape>
+		<Transform translation='+$coil_pos +$coil_pos 0' rotation='0 0 1 [expr {+$pi/4}]' >
+		 <Shape>
+		  <Box size='$coil_h $coil_w $coil_l'/>
+		  <Appearance><Material diffuseColor='$coil_color'/></Appearance>
+		 </Shape>
+		</Transform>
+		<Transform translation='-$coil_pos -$coil_pos 0' rotation='0 0 1 [expr {+$pi/4}]' >
+		 <Shape>
+		  <Box size='$coil_h $coil_w $coil_l'/>
+		  <Appearance><Material diffuseColor='$coil_color'/></Appearance>
+		 </Shape>
+		</Transform>
+		<Transform translation='+$coil_pos -$coil_pos 0' rotation='0 0 1 [expr {-$pi/4}]' >
+		 <Shape>
+		  <Box size='$coil_h $coil_w $coil_l'/>
+		  <Appearance><Material diffuseColor='$coil_color'/></Appearance>
+		 </Shape>
+		</Transform>
+		<Transform translation='-$coil_pos +$coil_pos 0' rotation='0 0 1 [expr {-$pi/4}]' >
+		 <Shape>
+		  <Box size='$coil_h $coil_w $coil_l'/>
+		  <Appearance><Material diffuseColor='$coil_color'/></Appearance>
+		 </Shape>
+		</Transform>
+	    </Transform>
+	  </Transform>
+	 </Transform>
+	</Transform>
+	    "
+	}
+
+	if [string match "*SEXT*" $ElementType] {
+	    set color "0.36	0.54	0.66"
+	    set coil_w   [expr {$::SEXT_width/5}]
+	    set coil_h   [expr {$::SEXT_width/5}]
+	    set coil_l   [expr {1.3*$L}]
+	    set coil_pos [expr {$::SEXT_width/2.8}]
+	    set coil_color "1.00000   0.74902   0.00000"
+	    puts $f "
+	<Transform   rotation='  0  1  0 $theta' translation='$X $Y $Z'>
+	 <Transform  rotation=' -1  0  0 $phi  '>
+	  <Transform rotation='  0  0  1 $psi  '>
+	    <Transform translation='0 0 [expr {$L/2}]'>
+		<Shape>
+		 <Box size='$::SEXT_width $::SEXT_width $L'/>
+		 <Appearance><Material diffuseColor='$color'/></Appearance>
+		</Shape>
+		<Transform rotation='0 0 1 [expr {1*$pi/6}]'>
+		<Transform translation='$coil_pos 0 0'>
+		 <Shape>
+		  <Box size='$coil_h $coil_w $coil_l'/>
+		  <Appearance><Material diffuseColor='$coil_color'/></Appearance>
+		 </Shape>
+		</Transform>
+		</Transform>
+		<Transform rotation='0 0 1 [expr {3*$pi/6}]'>
+		<Transform translation='$coil_pos 0 0'>
+		 <Shape>
+		  <Box size='$coil_h $coil_w $coil_l'/>
+		  <Appearance><Material diffuseColor='$coil_color'/></Appearance>
+		 </Shape>
+		</Transform>
+		</Transform>
+		<Transform rotation='0 0 1 [expr {5*$pi/6}]'>
+		<Transform translation='$coil_pos 0 0'>
+		 <Shape>
+		  <Box size='$coil_h $coil_w $coil_l'/>
+		  <Appearance><Material diffuseColor='$coil_color'/></Appearance>
+		 </Shape>
+		</Transform>
+		</Transform>
+		<Transform rotation='0 0 1 [expr {7*$pi/6}]'>
+		<Transform translation='$coil_pos 0 0'>
+		 <Shape>
+		  <Box size='$coil_h $coil_w $coil_l'/>
+		  <Appearance><Material diffuseColor='$coil_color'/></Appearance>
+		 </Shape>
+		</Transform>
+		</Transform>
+		<Transform rotation='0 0 1 [expr {9*$pi/6}]'>
+		<Transform translation='$coil_pos 0 0'>
+		 <Shape>
+		  <Box size='$coil_h $coil_w $coil_l'/>
+		  <Appearance><Material diffuseColor='$coil_color'/></Appearance>
+		 </Shape>
+		</Transform>
+		</Transform>
+		<Transform rotation='0 0 1 [expr {11*$pi/6}]'>
+		<Transform translation='$coil_pos 0 0'>
+		 <Shape>
+		  <Box size='$coil_h $coil_w $coil_l'/>
+		  <Appearance><Material diffuseColor='$coil_color'/></Appearance>
+		 </Shape>
+		</Transform>
+		</Transform>
+	    </Transform>
+	  </Transform>
+	 </Transform>
+	</Transform>
+	    "
+	}
+
+	if [string match "*SBEN*" $ElementType] {
+	    set TILT  [element_par $ElementName TILT]
+	    set ANGLE [element_par $ElementName ANGLE]
+	    set R     [expr {$L/$ANGLE}]
+#	    set E1    [element_par $ElementName E1]
+#	    set E2    [element_par $ElementName E2]
+	    set w     [expr {1.00*$::BEND_width/2}]
+	    set h     [expr {0.75*$::BEND_width/2}]
+	    set color "0 1 0"
+	    if {$TILT != 0} {set color "0.00000   0.57647   0.68627"}
+
+	    set a1  0
+	    set da  $::BEND_angle_division
+	    if {$ANGLE<0} {set da [expr {-1*$da}]}
+	    set a2  0
+
+	    set bend_shapes ""
+	    for {set a1 0} {abs($a1) < abs($ANGLE)} {set a1 [expr {$a1+$da}]} {
+		set a2 [expr {$a1+$da}]
+		if {abs($a2) > abs($ANGLE)} {set a2 $ANGLE}
+		set x0 [expr {($R+$w)*cos($a1)-$R}]
+		set z0 [expr {($R+$w)*sin($a1)   }]
+		set x1 [expr {($R+$w)*cos($a2)-$R}]
+		set z1 [expr {($R+$w)*sin($a2)   }]
+		set x2 [expr {($R-$w)*cos($a2)-$R}]
+		set z2 [expr {($R-$w)*sin($a2)   }]
+		set x3 [expr {($R-$w)*cos($a1)-$R}]
+		set z3 [expr {($R-$w)*sin($a1)   }]
+		set bend_shapes "$bend_shapes
+		<Shape>
+		    <IndexedFaceSet coordIndex='
+			3 2 1 0 -1
+			4 5 6 7 -1
+			0 1 5 4 -1
+			7 6 2 3 -1
+			3 0 4 7 -1
+			1 2 6 5
+		    '>
+        		<Coordinate point='
+			     $x0 +$h $z0
+			     $x1 +$h $z1
+			     $x2 +$h $z2
+			     $x3 +$h $z3
+			     $x0 -$h $z0
+			     $x1 -$h $z1
+			     $x2 -$h $z2
+			     $x3 -$h $z3
+			'/>
+    		    </IndexedFaceSet>
+		    <Appearance><Material diffuseColor='$color'/></Appearance>
+		</Shape>
+		"
+	    }
+	    puts $f "
+	<Transform   rotation='  0  1  0 $theta' translation='$X $Y $Z'>
+	 <Transform  rotation=' -1  0  0 $phi  '>
+	  <Transform rotation='  0  0  1 $psi  '>
+	    <Transform rotation='0 0 1 $TILT'>
+		$bend_shapes
+	    </Transform>
+	  </Transform>
+	 </Transform>
+	</Transform>
+	    "
+	}
+
+	if [string match "*DRIF*" $ElementType] {
+	    set color "0.8 0.8 0.8"
+	    puts $f "
+	<Transform   rotation='  0  1  0 $theta' translation='$X $Y $Z'>
+	 <Transform  rotation=' -1  0  0 $phi  '>
+	  <Transform rotation='  0  0  1 $psi  '>
+	    <Transform translation='0 0 [expr {$L/2}]'>
+		<Transform rotation='1 0 0 [expr {$pi/2}]'>
+		    <Shape>
+			<Cylinder radius='$::DRIFT_pipe_radius' height='$L'/>
+			<Appearance><Material diffuseColor='$color'/></Appearance>
+		    </Shape>
+		</Transform>
+	    </Transform>
+	  </Transform>
+	 </Transform>
+	</Transform>
+	    "
+	}
+
+	if [string match "*RFCA*" $ElementType] {
+	    set color "0.9 0.1 0.1"
+	    puts $f "
+	<Transform   rotation='  0  1  0 $theta' translation='$X $Y $Z'>
+	 <Transform  rotation=' -1  0  0 $phi  '>
+	  <Transform rotation='  0  0  1 $psi  '>
+	    <Transform translation='0 0 [expr {$L/2}]'>
+		<Transform rotation='1 0 0 [expr {$pi/2}]'>
+		    <Shape>
+			<Cylinder radius='$::RFCA_radius' height='$L'/>
+			<Appearance><Material diffuseColor='$color'/></Appearance>
+		    </Shape>
+		</Transform>
+	    </Transform>
+	  </Transform>
+	 </Transform>
+	</Transform>
+	    "
+	}
+
+	set show_coordinate_system 0
+	foreach itm $::show_coordinate_system_after {
+	    if [string match $itm $ElementType] {
+		set show_coordinate_system 1
+	    }
+	}
+	if $show_coordinate_system {
+	    set axis_l  [expr {$::QUAD_width*2}]
+	    set arrow_l [expr {$axis_l/10}]
+	    puts $f "
+	<Transform   rotation='  0  1  0 $theta1' translation='$X1 $Y1 $Z1'>
+	 <Transform  rotation=' -1  0  0 $phi1  '>
+	  <Transform rotation='  0  0  1 $psi1  '>
+	   <Shape>
+	    <IndexedLineSet coordIndex='0 1 2 1 3 1'>
+	     <Coordinate point='
+	       0 			 0		           0
+	       $axis_l			 0       	           0
+	       [expr {$axis_l-$arrow_l}] [expr { $arrow_l/2}]      0
+	       [expr {$axis_l-$arrow_l}] [expr {-$arrow_l/2}]      0
+	     '/>
+	    </IndexedLineSet>
+	    <Appearance><Material emissiveColor='1 0 0'/></Appearance>
+	   </Shape>
+	   <Shape>
+	    <IndexedLineSet coordIndex='0 1 2 1 3 1'>
+	     <Coordinate point='
+	       0 			 0		           0
+	       0       			 $axis_l 	           0
+	       [expr { $arrow_l/2}]      [expr {$axis_l-$arrow_l}] 0
+	       [expr {-$arrow_l/2}]      [expr {$axis_l-$arrow_l}] 0
+	     '/>
+	    </IndexedLineSet>
+	    <Appearance><Material emissiveColor='0 0 1'/></Appearance>
+	   </Shape>
+	   <Shape>
+	    <IndexedLineSet coordIndex='0 1 2 1 3 1'>
+	     <Coordinate point='
+	       0 			 0		           0
+	       0                         0                         $axis_l
+	       0                         [expr { $arrow_l/2}]      [expr {$axis_l-$arrow_l}]
+	       0                         [expr {-$arrow_l/2}]      [expr {$axis_l-$arrow_l}]
+	     '/>
+	    </IndexedLineSet>
+	    <Appearance><Material emissiveColor='0 1 0'/></Appearance>
+	   </Shape>
+	  </Transform>
+	 </Transform>
+	</Transform>
+	    "
+	}
+
+	set show_name 0
+	foreach itm $::show_names_for {
+	    if [string match $itm $ElementType] {
+		set show_name 1
+	    }
+	}
+	if $show_name {
+	    set label_direction "0 1 0"
+	    set label_l  [expr {$::QUAD_width*0.8}]
+	    set lx [expr {$label_l*[lindex $label_direction 0]}]
+	    set ly [expr {$label_l*[lindex $label_direction 1]}]
+	    set lz [expr {$label_l*[lindex $label_direction 2]}]
+	    set x0 0
+	    set y0 0
+	    set z0 [expr {$L/2}]
+	    set color "0 0.9 0.9"
+	    puts $f "
+	<Transform   rotation='  0  1  0 $theta' translation='$X $Y $Z'>
+	 <Transform  rotation=' -1  0  0 $phi  '>
+	  <Transform rotation='  0  0  1 $psi  '>
+	   <Transform   translation='[expr {$x0+$lx}] [expr {$y0+$ly}] [expr {$z0+$lz}]'>
+	    <Billboard>
+    	     <Shape>
+              <Appearance>
+               <Material diffuseColor='0.1 0.1 0.1' emissiveColor='0.1 0.1 0.1'/>
+              </Appearance>
+              <Text string='$ElementName'>
+               <FontStyle DEF='LABEL_FONT' family='\"SANS\"' justify='\"MIDDLE\" \"MIDDLE\"' size='[expr {$::QUAD_width/3}]'/>
+              </Text>
+             </Shape>
+            </Billboard>
+	   </Transform>
+	  </Transform>
+	 </Transform>
+	</Transform>
+	    "
+	}
+
+	set X     $X1
+	set Y     $Y1
+	set Z     $Z1
+	set theta $theta1
+	set phi   $phi1
+	set psi   $psi1
+    }
+
+    puts $f "
+     </Transform>
+    </Scene>
+</X3D>"
+
+    close $f
+    exec freewrl $rootname.x3d &
+}
+
+proc element_par {element parameter} {
+    if [catch {exec \
+                 sddsprocess $::par -pipe=out -match=col,ElementName=$element -match=col,ElementParameter=$parameter | \
+                 sddsprocess -pipe -clip=1,0,invert | \
+                 sdds2stream -pipe=in -col=ParameterValue} result] {
+        if [string match "*-C" $element] {
+            regexp (.*)-C $element matched part1 part2
+            if [catch {exec \
+                         sddsprocess $::par -pipe=out -match=col,ElementName=$part1 -match=col,ElementParameter=$parameter | \
+                         sddsprocess -pipe -clip=1,0,invert | \
+                         sdds2stream -pipe=in -col=ParameterValue} result] {
+                return -code error "No parameter data found for element $element or $part1"
+            }
+            return $result
+        }
+    }
+    return $result
+}
+
+proc get_bounding_box {} {
+    set offset $::bounding_box_offset
+    foreach {Xmin Xmax Ymin Ymax Zmin Zmax} [exec \
+	sddsprocess $::xyz -pipe=out \
+	    -process=X,minimum,Xmin -process=X,maximum,Xmax \
+	    -process=Y,minimum,Ymin -process=Y,maximum,Ymax \
+	    -process=Z,minimum,Zmin -process=Z,maximum,Zmax | \
+	sddsprocess -pipe \
+	    "-redefine=par,Xmin,Xmin $offset -" "-redefine=par,Xmax,Xmax $offset +" \
+	    "-redefine=par,Ymin,Ymin $offset -" "-redefine=par,Ymax,Ymax $offset +" \
+	    "-redefine=par,Zmin,Zmin $offset -" "-redefine=par,Zmax,Zmax $offset +" | \
+	sdds2stream -pipe=in -par=Xmin,Xmax,Ymin,Ymax,Zmin,Zmax
+    ] {
+    # fieldOfView='0.1'
+	return "
+    <!--Viewpoint description='distant1' position='[expr {2*$Xmax}] [expr {2*$Ymax}] [expr {2*$Zmax}]'/-->
+    <Scene>
+     <Transform translation='[expr {-1*($Xmin+$Xmax)/2}] [expr {-1*($Ymin+$Ymax)/2}] [expr {-1*($Zmin+$Zmax)/2}]'>
+	<Shape>
+	    <IndexedLineSet coordIndex='0 1 2 3 4 5 6 7 4 3 0 7 6 1 2 5'>
+		<Coordinate point='
+		    $Xmin $Ymin $Zmin
+		    $Xmax $Ymin $Zmin
+		    $Xmax $Ymin $Zmax
+		    $Xmin $Ymin $Zmax
+		    $Xmin $Ymax $Zmax
+		    $Xmax $Ymax $Zmax
+		    $Xmax $Ymax $Zmin
+		    $Xmin $Ymax $Zmin
+		'/>
+	    </IndexedLineSet> 
+	    <Appearance><Material emissiveColor='0 0.8 0.8'/></Appearance>
+	</Shape>
+	<Transform translation='[expr {$Xmin+($Xmax-$Xmin)/2}] $Ymin [expr {$Zmin+($Zmax-$Zmin)/2}]'>
+	    <Shape DEF='Floor'>
+		<Box size='[expr {$Xmax-$Xmin}] 0.05 [expr {$Zmax-$Zmin}]'/>
+		<Appearance>
+		    <Material ambientIntensity='0.25' diffuseColor='0.1 0.1 1.0' shininess='0.5' specularColor='0.1 0.1 1.0' transparency='0.8'/>
+		</Appearance>
+	    </Shape>
+	</Transform>
+	"
+    }
+}
+
+main

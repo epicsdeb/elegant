@@ -42,6 +42,14 @@ long rectangular_collimator(
   x_center = rcol->dx;
   y_center = rcol->dy;
 
+  if (rcol->invert && rcol->length) {
+    TRACKING_CONTEXT tc;
+    getTrackingContext(&tc);
+    fprintf(stderr, "Problem for %s#%ld:\n", tc.elementName, tc.elementOccurrence);
+    bombElegant("Cannot have invert=1 and non-zero length for RCOL", NULL);
+  }
+  
+
   if (xsize<=0 && ysize<=0) {
     exactDrift(initial, np, rcol->length);
     return(np);
@@ -59,6 +67,8 @@ long rectangular_collimator(
     } else if (isinf(ini[0]) || isinf(ini[2]) ||
                isnan(ini[0]) || isnan(ini[2]) )
       lost = 1;
+    if (rcol->invert)
+      lost = !lost;
     if (lost) {
       swapParticles(initial[ip], initial[itop]);
      if (accepted)
@@ -285,6 +295,7 @@ long elliptical_collimator(
       rcol.y_max = ecol->y_max;
       rcol.dx = ecol->dx;
       rcol.dy = ecol->dy;
+      rcol.invert = 0;
       rcol.openSide = ecol->openSide;
       return rectangular_collimator(initial, &rcol, np, accepted, z, Po);
     } 
@@ -325,8 +336,8 @@ long elliptical_collimator(
     lost = 0;
     ini[0] += length*ini[1];
     ini[2] += length*ini[3];
-    xo = ini[0]/xsize;
-    yo = ini[2]/ysize;
+    xo = (ini[0]-dx)/xsize;
+    yo = (ini[2]-dy)/ysize;
     if ((ipow(xo, ecol->exponent) + ipow(yo, ecol->exponent))>1)
       lost = openCode ? evaluateLostWithOpenSides(openCode, xo, yo, 1, 1) : 1;
     else if (isinf(ini[0]) || isinf(ini[2]) ||
@@ -671,12 +682,12 @@ long track_through_pfilter(
     }
 #if USE_MPI
     if (notSinglePart) {
-      if (isMaster)
-	itop = 0; 
       if (USE_MPI) {
 	long itop_total;
-	MPI_Allreduce(&itop, &itop_total, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD); 
-	reference /= (itop_total+1);
+	double reference_total;
+	MPI_Allreduce(&itop, &itop_total, 1, MPI_LONG, MPI_SUM, MPI_COMM_WORLD);
+	MPI_Allreduce(&reference, &reference_total, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+	reference = reference_total/(itop_total+n_processors);
       }
     } else
       reference /= (itop+1);
@@ -894,7 +905,7 @@ long evaluateLostWithOpenSides(long code, double dx, double dy, double xsize, do
 long determineOpenSideCode(char *openSide)
 {
   TRACKING_CONTEXT context;
-  long value;
+  long value = -1;
   
   if (!openSide)
     return 0;

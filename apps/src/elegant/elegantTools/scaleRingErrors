@@ -1,0 +1,90 @@
+#!/bin/sh  
+# \
+exec oagtclsh "$0" "$@"
+
+set auto_path [linsert $auto_path 0  /usr/local/oag/apps/lib/$env(HOST_ARCH)]
+set auto_path [linsert $auto_path 0 /usr/local/oag/lib_patch/$env(HOST_ARCH)]
+APSStandardSetup
+
+# scaleRingErrors: scale quad strength and tilt errors for a ring to give desired beta beat and vertical emittance
+# reference: .twi and .mom files without errors
+# input: .twi and .mom files with errors, plus .erl file
+# output: parameter file with scaled errors to give desired ey and beat
+
+set usage {usage: scaleRingErrors -reference <rootname> -input <rootname> -output <filename> -ey <target-in-pm> -beat <target-in-percent>}
+set reference ""
+set input ""
+set output ""
+set ey 1.0
+set beat 1.0
+set args $argv
+if {[APSStrictParseArguments {reference input output ey beat}] || ![string length $reference] || \
+	![string length $input] || ![string length $output] || [expr $ey<0] || [expr $beat<0]} {
+    return -code error "$usage"
+}
+
+foreach exten {twi mom} {
+    if ![file exists $reference.$exten] {
+	return -code error "not found: $reference.$exten"
+    }
+}
+
+foreach exten {twi mom erl} {
+    if ![file exists $input.$exten] {
+	return -code error "not found: $input.$exten"
+    }
+}
+
+if [file exists $output.erl] {
+    return -code error "in use: $output.erl"
+}
+
+exec sddsconvert $input.erl $input.erlc -delete=parameter,*
+
+# Adjust K1 for quads based on rms beta beat
+# RMS beta beat is proportional to RMS K1 error
+
+exec sddsxref $input.twi $reference.twi -pipe=out -match=ElementName -take=beta? -rename=col,betax=betax0,betay=betay0 \
+    -reuse=page \
+    | sddsprocess -pipe=in $input.beat \
+    "-redefine=col,dbetaxFracSqr,betax betax0 - betax0 / sqr" \
+    "-redefine=col,dbetayFracSqr,betay betay0 - betay0 / sqr" \
+    -process=dbetaxFracSqr,sum,%sSum \
+    -process=dbetayFracSqr,sum,%sSum \
+    -process=dbetaxFracSqr,count,Count \
+    "-redefine=parameter,dbetaFracRms,dbetaxFracSqrSum dbetayFracSqrSum + 2 / Count / sqrt"
+
+exec sddsxref $input.erlc $input.beat -pipe=out -leave=* -transfer=parameter,dbetaFracRms \
+    | sddsprocess -pipe=in $output.k1 -redefine=parameter,SourcePage,i_page,type=short \
+    "-redefine=parameter,targetBeat,$beat 100 /" \
+    -match=col,ElementType=*QUAD*,ElementParameter=K1,& \
+    "-redefine=col,OldParameterValue,ParameterValue" \
+    "-redefine=col,OldParameterError,ParameterError" \
+    "-redefine=col,RefParameterValue,ParameterValue ParameterError 1 + /" \
+    "-redefine=col,ParameterError,ParameterError targetBeat dbetaFracRms / *" \
+    "-redefine=col,ParameterValue,RefParameterValue 1 ParameterError + *"
+
+# Adjust TILT for quads based on average emittance ey
+# Average ey is proportional to variance of tilt
+
+exec sddsprocess $input.mom $input.ey -process=ey,ave,%sAve
+
+exec sddsxref $input.erlc $input.ey -pipe=out -leave=* -transfer=param,eyAve \
+    | sddsprocess -pipe=in $output.tilt -redefine=parameter,SourcePage,i_page,type=short \
+    "-redefine=parameter,eyTarget,$ey 1e12 /,units=m" \
+    -match=col,ElementType=*QUAD*,ElementParameter=TILT,& \
+    -redefine=col,OldParameterValue,ParameterValue \
+    "-redefine=col,ParameterValue,ParameterValue eyTarget eyAve / sqrt *"
+
+# Combine results
+
+exec sddsprocess $input.erlc $output.erl0 -redefine=parameter,SourcePage,i_page,type=short -nowarning \
+    -filter=column,ParameterError,0,0,! \
+    -match=col,ElementParameter=TILT,!,ElementParameter=K1,!,&,ElementType=*QUAD*,!,| 
+
+exec sddscombine $output.k1 $output.tilt $output.erl0 -pipe=out \
+    | sddssort -pipe -parameter=SourcePage \
+    | sddscombine -pipe=in -merge=SourcePage $output.erl 
+
+eval file delete -force $output.k1 $output.tilt $output.erl0 $input.beat $input.ratio $input.erlc
+

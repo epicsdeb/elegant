@@ -20,6 +20,10 @@ void apply_canonical_multipole_kicks(double *qx, double *qy,
                                    double *sum_Fx, double *sum_Fy,
                                    double x, double y,
                                    long order, double KnL, long skew);
+void applyRadialCanonicalMultipoleKicks(double *qx, double *qy, 
+					double *sum_Fx_return, double *sum_Fy_return,
+					double x, double y,
+					long order, double KnL, long skew);
 void computeTotalErrorMultipoleFields(MULTIPOLE_DATA *totalMult,
                                       MULTIPOLE_DATA *systematicMult,
                                       MULTIPOLE_DATA *randomMult,
@@ -152,7 +156,7 @@ void initialize_fmultipole(FMULT *multipole)
   if (multData->initialized)
     return;
   if (!multipole->filename)
-    bombElegant("FMULT element doesn't have filename", NULL);
+    bombTracking("FMULT element doesn't have filename");
   if (!SDDS_InitializeInputFromSearchPath(&SDDSin, multipole->filename)) {
     sprintf(buffer, "Problem opening file %s (FMULT)\n", multipole->filename);
     SDDS_SetError(buffer);
@@ -162,7 +166,7 @@ void initialize_fmultipole(FMULT *multipole)
   if (SDDS_CheckColumn(&SDDSin, "order", NULL, SDDS_ANY_INTEGER_TYPE, stdout)!=SDDS_CHECK_OK ||
       SDDS_CheckColumn(&SDDSin, "KnL", NULL, SDDS_ANY_FLOATING_TYPE, stdout)!=SDDS_CHECK_OK ||
       SDDS_CheckColumn(&SDDSin, "JnL", NULL, SDDS_ANY_FLOATING_TYPE, stdout)!=SDDS_CHECK_OK)
-    bombElegant("problems with data in FMULT input file", NULL);
+    bombTracking("problems with data in FMULT input file");
   if (SDDS_ReadPage(&SDDSin)!=1)  {
     sprintf(buffer, "Problem reading FMULT file %s\n", multipole->filename);
     SDDS_SetError(buffer);
@@ -214,16 +218,16 @@ long fmultipole_tracking(
   MULTIPOLE_DATA multData;
   
   if (!particle)
-    bombElegant("particle array is null (fmultipole_tracking)", NULL);
+    bombTracking("particle array is null (fmultipole_tracking)");
 
   if (!multipole)
-    bombElegant("null MULT pointer (fmultipole_tracking)", NULL);
+    bombTracking("null MULT pointer (fmultipole_tracking)");
   
   if (!multipole->multData.initialized)
     initialize_fmultipole(multipole);
   
   if ((n_kicks=multipole->n_kicks)<=0)
-    bombElegant("n_kicks<=0 in multipole()", NULL);
+    bombTracking("n_kicks<=0 in fmultipole_tracking()");
 
   drift = multipole->length;
 
@@ -260,7 +264,7 @@ long fmultipole_tracking(
 
     if (!integrate_kick_multipole_ord4(coord, multipole->dx, multipole->dy, 0.0, 0.0, Po, rad_coef, 0.0,
                                        1, multipole->sqrtOrder, 0.0, n_kicks, drift, &multData, NULL, NULL,
-                                       &dummy, NULL)) {
+                                       &dummy, NULL, 0)) {
       is_lost = 1;
       break;
     }
@@ -332,23 +336,19 @@ long multipole_tracking(
     log_entry("multipole_tracking");
 
     if (!particle)
-        bombElegant("particle array is null (multipole_tracking)", NULL);
+        bombTracking("particle array is null (multipole_tracking)");
 
     if (!multipole)
-        bombElegant("null MULT pointer (multipole_tracking)", NULL);
+        bombTracking("null MULT pointer (multipole_tracking)");
 
-    if ((n_kicks=multipole->n_kicks)<=0) {
-      TRACKING_CONTEXT tc;
-      getTrackingContext(&tc);
-      fprintf(stderr, "error: n_kicks<=0 in multipole() for %s #%ld\n", tc.elementName, tc.elementOccurrence);
-      exitElegant(1);
-    }
+    if ((n_kicks=multipole->n_kicks)<=0) 
+      bombTracking("n_kicks<=0 in multipole_tracking()");
 
     if ((order=multipole->order)<0)
-        bombElegant("order < 0 in multipole()", NULL);
+      bombTracking("order < 0 in multipole_tracking()");
 
     if (!(coef = expansion_coefficients(order)))
-        bombElegant("expansion_coefficients() returned null pointer (multipole_tracking)", NULL);
+      bombTracking("expansion_coefficients() returned null pointer (multipole_tracking)");
 
     drift = multipole->length/n_kicks/2;
     if (multipole->bore)
@@ -582,20 +582,23 @@ long multipole_tracking2(
   KQUAD *kquad;
   KSEXT *ksext;
   KQUSE *kquse;
+  KOCT *koct;
+  static long sextWarning = 0, quadWarning = 0, octWarning = 0, quseWarning = 0;
+
   MULTIPOLE_DATA *multData = NULL, *steeringMultData = NULL;
-  long sqrtOrder;
+  long sqrtOrder, freeMultData=0;
   MULT_APERTURE_DATA apertureData;
   double K2L;
   
   log_entry("multipole_tracking2");
 
   if (!particle)
-    bombElegant("particle array is null (multipole_tracking)", NULL);
+    bombTracking("particle array is null (multipole_tracking)");
 
   if (!elem)
-    bombElegant("null element pointer (multipole_tracking2)", NULL);
+    bombTracking("null element pointer (multipole_tracking2)");
   if (!elem->p_elem)
-    bombElegant("null p_elem pointer (multipole_tracking2)", NULL);
+    bombTracking("null p_elem pointer (multipole_tracking2)");
 
   rad_coef = xkick = ykick = isr_coef = 0;
   sqrtOrder = 0;
@@ -625,6 +628,13 @@ long multipole_tracking2(
     if (!kquad->isr || (kquad->isr1Particle==0 && n_part==1))
       /* Minus sign indicates we accumulate into sigmaDelta^2 only, don't perturb particles */
       isr_coef *= -1;
+    if (kquad->length<1e-6 && (kquad->isr || kquad->synch_rad)) {
+      rad_coef = isr_coef = 0;  /* avoid unphysical results */
+      if (!quadWarning) {
+        printf("**** Warning: one or more quadrupoles with length < 1e-6 have had SYNCH_RAD=0 and ISR=0 forced to avoid unphysical results.\n");
+	quadWarning = 1;
+      }
+    }
     if (!kquad->multipolesInitialized) {
       /* read the data files for the error multipoles */
       readErrorMultipoleData(&(kquad->systematicMultipoleData),
@@ -665,6 +675,13 @@ long multipole_tracking2(
     if (!ksext->isr || (ksext->isr1Particle==0 && n_part==1))
       /* Minus sign indicates we accumulate into sigmaDelta^2 only, don't perturb particles */
       isr_coef *= -1;
+    if (ksext->length<1e-6 && (ksext->isr || ksext->synch_rad)) {
+      rad_coef = isr_coef = 0;  /* avoid unphysical results */
+      if (!sextWarning) {
+        printf("**** Warning: one or more sextupoles with length < 1e-6 have had SYNCH_RAD=0 and ISR=0 forced to avoid unphysical results.\n");
+	sextWarning = 1;
+      }
+    }
     if (!ksext->multipolesInitialized) {
       /* read the data files for the error multipoles */
       readErrorMultipoleData(&(ksext->systematicMultipoleData),
@@ -679,6 +696,50 @@ long multipole_tracking2(
                                      NULL,
                                      KnL, 2);
     multData = &(ksext->totalMultipoleData);
+    break;
+  case T_KOCT:
+    koct = ((KOCT*)elem->p_elem);
+    n_kicks = koct->n_kicks;
+    order = 3;
+    if (koct->bore)
+      /* KnL = d^nB/dx^n * L/(B.rho) = n! B(a)/a^n * L/(B.rho) * (1+FSE) */
+      KnL = 6*koct->B/ipow(koct->bore, 3)*(particleCharge/(particleMass*c_mks*Po))*koct->length*(1+koct->fse);
+    else
+      KnL = koct->k3*koct->length*(1+koct->fse);
+    drift = koct->length;
+    tilt = koct->tilt;
+    dx = koct->dx;
+    dy = koct->dy;
+    dz = koct->dz;
+    integ_order = koct->integration_order;
+    sqrtOrder = koct->sqrtOrder?1:0;
+    if (koct->synch_rad)
+      rad_coef = sqr(particleCharge)*pow3(Po)/(6*PI*epsilon_o*sqr(c_mks)*particleMass);
+    isr_coef = particleRadius*sqrt(55.0/(24*sqrt(3))*pow5(Po)*137.0359895);
+    if (!koct->isr || (koct->isr1Particle==0 && n_part==1))
+      /* Minus sign indicates we accumulate into sigmaDelta^2 only, don't perturb particles */
+      isr_coef *= -1;
+    if (koct->length<1e-6 && (koct->isr || koct->synch_rad)) {
+      rad_coef = isr_coef = 0;  /* avoid unphysical results */
+      if (!octWarning) {
+        printf("**** Warning: one or more octupoles with length < 1e-6 have had SYNCH_RAD=0 and ISR=0 forced to avoid unphysical results.\n");
+	octWarning = 1;
+      }
+    }
+    if (!koct->multipolesInitialized) {
+      /* read the data files for the error multipoles */
+      readErrorMultipoleData(&(koct->systematicMultipoleData),
+                             koct->systematic_multipoles, 0);
+      readErrorMultipoleData(&(koct->randomMultipoleData),
+                             koct->random_multipoles, 0);
+      koct->multipolesInitialized = 1;
+    }
+    computeTotalErrorMultipoleFields(&(koct->totalMultipoleData),
+                                     &(koct->systematicMultipoleData),
+                                     &(koct->randomMultipoleData),
+                                     NULL,
+                                     KnL, 3);
+    multData = &(koct->totalMultipoleData);
     break;
   case T_KQUSE:
     /* Implemented as a quadrupole with sextupole as a secondary multipole */
@@ -699,6 +760,13 @@ long multipole_tracking2(
     if (!kquse->isr || (kquse->isr1Particle==0 && n_part==1))
       /* Minus sign indicates we accumulate into sigmaDelta^2 only, don't perturb particles */
       isr_coef *= -1;
+    if (kquse->length<1e-6 && (kquse->isr || kquse->synch_rad)) {
+      rad_coef = isr_coef = 0;  /* avoid unphysical results */
+      if (!quseWarning) {
+        printf("**** Warning: one or more KQUSE's with length < 1e-6 have had SYNCH_RAD=0 and ISR=0 forced to avoid unphysical results.\n");
+	quseWarning = 1;
+      }
+    }
     K2L = kquse->k2*kquse->length*(1+kquse->fse2);
     if (K2L) {
       multData = tmalloc(sizeof(*multData));
@@ -709,6 +777,7 @@ long multipole_tracking2(
       multData->KnL = tmalloc(sizeof(*(multData->KnL))*1);
       multData->KnL[0] = K2L;
       multData->JnL = NULL;
+      freeMultData = 1;
     }
     break;
   default:
@@ -721,14 +790,14 @@ long multipole_tracking2(
     multData = NULL;
   
   if (n_kicks<=0)
-    bombElegant("n_kicks<=0 in multipole()", NULL);
+    bombTracking("n_kicks<=0 in multipole()");
   if (order<=0)
-    bombElegant("order <= 0 in multipole()", NULL);
+    bombTracking("order <= 0 in multipole()");
   if (integ_order!=2 && integ_order!=4) 
-    bombElegant("multipole integration_order must be 2 or 4", NULL);
+    bombTracking("multipole integration_order must be 2 or 4");
   
   if (!(coef = expansion_coefficients(order)))
-    bombElegant("expansion_coefficients() returned null pointer (multipole_tracking)", NULL);
+    bombTracking("expansion_coefficients() returned null pointer (multipole_tracking)");
 
   i_top = n_part-1;
   if (integ_order==4) {
@@ -772,6 +841,17 @@ long multipole_tracking2(
   if (tilt)
     rotateBeamCoordinates(particle, n_part, tilt);
 
+  /* Fringe treatment, if any */
+  switch (elem->type) {
+  case T_KQUAD:
+    if (kquad->edge1_effects>0)
+      quadFringe(particle, n_part, kquad->k1, kquad->fringeIntM, kquad->fringeIntP, -1, kquad->edge1_effects-1);
+    break;
+  default:
+    break;
+  }
+  
+
   if (sigmaDelta2)
     *sigmaDelta2 = 0;
   for (i_part=0; i_part<=i_top; i_part++) {
@@ -791,13 +871,15 @@ long multipole_tracking2(
                                         Po, rad_coef, isr_coef, order, sqrtOrder, KnL,
                                         n_parts, drift, 
                                         multData, steeringMultData,
-                                        &apertureData, &dzLoss, sigmaDelta2)) ||
+                                        &apertureData, &dzLoss, sigmaDelta2,
+					elem->type==T_KQUAD?kquad->radial:0)) ||
         (integ_order==2 &&
          !integrate_kick_multipole_ord2(coord, dx, dy, xkick, ykick,
                                         Po, rad_coef, isr_coef, order, sqrtOrder, KnL, 
                                         n_parts, drift,
                                         multData, steeringMultData,
-                                        &apertureData, &dzLoss, sigmaDelta2))) {
+                                        &apertureData, &dzLoss, sigmaDelta2,
+					elem->type==T_KQUAD?kquad->radial:0))) {
       swapParticles(particle[i_part], particle[i_top]);
       if (accepted)
         swapParticles(accepted[i_part], accepted[i_top]);
@@ -810,11 +892,29 @@ long multipole_tracking2(
   }
   if (sigmaDelta2)
     *sigmaDelta2 /= i_top+1;
+
+  /* Fringe treatment, if any */
+  switch (elem->type) {
+  case T_KQUAD:
+    if (kquad->edge2_effects>0)
+      quadFringe(particle, n_part, kquad->k1, kquad->fringeIntM, kquad->fringeIntP, 1, kquad->edge2_effects-1);
+    break;
+  default:
+    break;
+  }
   
   if (tilt)
     rotateBeamCoordinates(particle, n_part, -tilt);
   if (dx || dy || dz)
     offsetBeamCoordinates(particle, n_part, -dx, -dy, -dz);
+
+  if (freeMultData) {
+    if (multData->order)
+      free(multData->order);
+    if (multData->KnL)
+      free(multData->KnL);
+    free(multData);
+  }
 
   log_exit("multipole_tracking2");
   return(i_top+1);
@@ -825,7 +925,8 @@ int integrate_kick_multipole_ord2(double *coord, double dx, double dy, double xk
                                   long order, long sqrtOrder, double KnL, long n_kicks, double drift,
                                   MULTIPOLE_DATA *multData, 
                                   MULTIPOLE_DATA *steeringMultData,
-                                  MULT_APERTURE_DATA *apData, double *dzLoss, double *sigmaDelta2) 
+                                  MULT_APERTURE_DATA *apData, double *dzLoss, double *sigmaDelta2,
+				  long radial) 
 {
   double p, qx, qy, denom, beta0, beta1, dp, s;
   double x, y, xp, yp, sum_Fx, sum_Fy;
@@ -896,8 +997,11 @@ int integrate_kick_multipole_ord2(double *coord, double dx, double dy, double xk
       coord[2] = y;
       return 0;
     }
-    
-    apply_canonical_multipole_kicks(&qx, &qy, &sum_Fx, &sum_Fy, x, y, order, KnL, 0);
+
+    if (!radial)
+      apply_canonical_multipole_kicks(&qx, &qy, &sum_Fx, &sum_Fy, x, y, order, KnL, 0);
+    else
+      applyRadialCanonicalMultipoleKicks(&qx, &qy, &sum_Fx, &sum_Fy, x, y, order, KnL, 0);
 
     /* do kicks for spurious multipoles */
     if (multData) {
@@ -1010,7 +1114,8 @@ int integrate_kick_multipole_ord4(double *coord, double dx, double dy, double xk
                                   double Po, double rad_coef, double isr_coef,
                                   long order, long sqrtOrder, double KnL, long n_parts, double drift,
                                   MULTIPOLE_DATA *multData, MULTIPOLE_DATA *steeringMultData,
-                                  MULT_APERTURE_DATA *apData, double *dzLoss, double *sigmaDelta2) 
+                                  MULT_APERTURE_DATA *apData, double *dzLoss, double *sigmaDelta2,
+				  long radial) 
 {
   double p, qx, qy, denom, beta0, beta1, dp, s;
   double x, y, xp, yp, sum_Fx, sum_Fy;
@@ -1092,8 +1197,14 @@ int integrate_kick_multipole_ord4(double *coord, double dx, double dy, double xk
 
       if (!kickFrac[step])
         break;
-      apply_canonical_multipole_kicks(&qx, &qy, &sum_Fx, &sum_Fy, x, y, 
-                                      order, KnL*kickFrac[step], 0);
+
+      if (!radial)
+	apply_canonical_multipole_kicks(&qx, &qy, &sum_Fx, &sum_Fy, x, y, 
+					order, KnL*kickFrac[step], 0);
+      else 
+	applyRadialCanonicalMultipoleKicks(&qx, &qy, &sum_Fx, &sum_Fy, x, y, 
+					   order, KnL*kickFrac[step], 0);
+	
       if (multData) {
         /* do kicks for spurious multipoles */
         for (imult=0; imult<multData->orders; imult++) {
@@ -1241,6 +1352,52 @@ void apply_canonical_multipole_kicks(double *qx, double *qy,
     *sum_Fy_return = sum_Fy;
 }
 
+void applyRadialCanonicalMultipoleKicks(double *qx, double *qy, 
+					double *sum_Fx_return, double *sum_Fy_return,
+					double x, double y,
+					long order, double KnL, long skew)
+{
+  long i;
+  double sum_Fx, sum_Fy, xypow, ratio;
+  double *coef;
+  if (sum_Fx_return)
+    *sum_Fx_return = 0;
+  if (sum_Fy_return)
+    *sum_Fy_return = 0;
+  coef = expansion_coefficients(order);
+  if (x==0) {
+    if (y==0)
+      return;
+    xypow = ipow(y, order);
+    i = order;
+    ratio = 0;
+  }
+  else {
+    xypow = ipow(x, order);
+    ratio = y/x;
+    i = 0;
+  }
+  /* now sum up the terms for the multipole expansion */
+  for (sum_Fx=sum_Fy=0; i<=order; i++) {
+    if (ODD(i))
+      sum_Fx -= coef[i-1]*xypow;
+    else
+      sum_Fy += coef[i]*xypow;
+    xypow *= ratio;
+  }
+  if (skew) {
+    SWAP_DOUBLE(sum_Fx, sum_Fy);
+    sum_Fx = -sum_Fx;
+  }
+  /* add the kicks */
+  *qx -= KnL*sum_Fy;
+  *qy += KnL*sum_Fx;
+  if (sum_Fx_return)
+    *sum_Fx_return = sum_Fx;
+  if (sum_Fy_return)
+    *sum_Fy_return = sum_Fy;
+}
+
 void randomizeErrorMultipoleFields(MULTIPOLE_DATA *randomMult)
 {
   long i;
@@ -1273,39 +1430,38 @@ void computeTotalErrorMultipoleFields(MULTIPOLE_DATA *totalMult,
     if (steeringMult && steeringMult->orders) {
       if (!(steeringMult->KnL = SDDS_Malloc(sizeof(*steeringMult->KnL)*steeringMult->orders)) ||
           !(steeringMult->JnL = SDDS_Malloc(sizeof(*steeringMult->JnL)*steeringMult->orders)) )
-        bombElegant("memory allocation failure (computeTotalMultipoleFields)", NULL);
+        bombTracking("memory allocation failure (computeTotalMultipoleFields)");
     }
     /* make a list of unique orders for random and systematic multipoles */
     if (systematicMult->orders && randomMult->orders &&
         systematicMult->orders!=randomMult->orders)
-      bombElegant("The number of systematic and random multipole error orders must be the same for any given element", NULL);
+      bombTracking("The number of systematic and random multipole error orders must be the same for any given element");
     if (systematicMult->orders)
       totalMult->orders = systematicMult->orders;
     else
       totalMult->orders = randomMult->orders;
     if (totalMult->orders) {
       if (!(totalMult->order=SDDS_Malloc(sizeof(*totalMult->order)*(totalMult->orders))))
-        bombElegant("memory allocation failure (computeTotalMultipoleFields)", NULL);
+        bombTracking("memory allocation failure (computeTotalMultipoleFields)");
       if (systematicMult->orders &&
           (!(systematicMult->anMod=SDDS_Malloc(sizeof(*systematicMult->anMod)*systematicMult->orders)) ||
            !(systematicMult->bnMod=SDDS_Malloc(sizeof(*systematicMult->bnMod)*systematicMult->orders)) ||
            !(systematicMult->KnL=SDDS_Malloc(sizeof(*systematicMult->KnL)*systematicMult->orders)) ||
            !(systematicMult->JnL=SDDS_Malloc(sizeof(*systematicMult->JnL)*systematicMult->orders))))
-        bombElegant("memory allocation failure (computeTotalMultipoleFields)", NULL);
+        bombTracking("memory allocation failure (computeTotalMultipoleFields)");
       if (randomMult->orders &&
           (!(randomMult->anMod=SDDS_Malloc(sizeof(*randomMult->anMod)*randomMult->orders)) ||
            !(randomMult->bnMod=SDDS_Malloc(sizeof(*randomMult->bnMod)*randomMult->orders)) ||
            !(randomMult->KnL=SDDS_Malloc(sizeof(*randomMult->KnL)*randomMult->orders)) ||
            !(randomMult->JnL=SDDS_Malloc(sizeof(*randomMult->JnL)*randomMult->orders))))
-        bombElegant("memory allocation failure (computeTotalMultipoleFields", NULL);
+        bombTracking("memory allocation failure (computeTotalMultipoleFields");
       if (!(totalMult->KnL = SDDS_Malloc(sizeof(*totalMult->KnL)*totalMult->orders)) ||
           !(totalMult->JnL = SDDS_Malloc(sizeof(*totalMult->JnL)*totalMult->orders)) )
-        bombElegant("memory allocation failure (computeTotalMultipoleFields)", NULL);
+        bombTracking("memory allocation failure (computeTotalMultipoleFields)");
       for (i=0; i<totalMult->orders; i++) {
         if (systematicMult->orders && randomMult->orders &&
             systematicMult->order[i]!=randomMult->order[i])
-          bombElegant("multipole orders in systematic and random lists must match up for any given element.",
-               NULL);
+          bombTracking("multipole orders in systematic and random lists must match up for any given element.");
         if (systematicMult->orders) {
           totalMult->order[i] = systematicMult->order[i] ;
           systematicMult->anMod[i] = systematicMult->an[i]*dfactorial(systematicMult->order[i])/

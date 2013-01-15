@@ -5,8 +5,8 @@
 \documentclass[11pt]{article}
 \usepackage{html}
 \usepackage{longtable}
-\usepackage{epsfig}
 \usepackage{subfigure} 
+\usepackage[dvips]{graphicx}
 \pagestyle{plain}
 %\voffset=-0.75in
 \newenvironment{req}{\begin{equation} \rm}{\end{equation}}
@@ -20,7 +20,7 @@
 \begin{document}
 
 \title{User's Manual for {\tt elegant}}
-\author{Program Version 23.2\\Advanced Photon Source\\Michael Borland\\ \date{\today}}
+\author{Program Version 25.1.0\\Advanced Photon Source\\Michael Borland\\ \date{\today}}
 \maketitle
 
 Note: another source of help for {\tt elegant} is the on-line
@@ -32,119 +32,74 @@ bugs via email.
 A \htmladdnormallink{brief overview}{http://www.aps.anl.gov/elegant.html} of {\tt elegant} is also available, which introduces the capabilities
 at a high-level.
 
-\section{Highlights of What's New in Version 24.0}
+\section{Highlights of What's New in Version 25.1}
 
-Here is a summary of what's changed since release 23.1:
+Here is a summary of what's changed since release 25.0:
 
 \subsection{Bug Fixes for Elements}
 
 \begin{itemize}
-\item The third-order matrix for quadrupoles (used by the {\tt QUAD} element for tracking or by
-  {\tt KQUAD} for analysis) was improved to include all the terms.  The previous version had only
-  the most obvious terms.
-\item Parallel elegant: The fiducial time wasn't computed correctly for the {\tt MBUMPER} element, but is now fixed.
-\item Fixed a bug in {\tt CSRCSBEND} elements that resulted in incorrect edge angles when reflection was used.  This was reported
- by R. Hajima (JAEA).
-\item Fixed the fact that the {\tt TRFMODE} element ignored the {\tt RECORD} parameter (which was supposed to provide output
-  of the mode voltages).
+\item There was a bug in the \verb|ECOL| element when the length was nonzero and the offset (\verb|DX| or \verb|DY|) was nonzero.
+  This was fixed.
+\item To avoid numerical problems, synchrotron radiation is now disabled automatically for \verb|KSEXT| elements shorter than 1 $\mu$m
+  when performing beam moments calculations with radiation.
+\item In some cases, the matrix for the \verb|MATR| element would not get loaded prior to tracking, resulting in a crash. This was fixed.
+\item A bug was fixed in post-adjustment of synchrotron radiation losses in the \verb|CSRCSBEND| element, which made extremely small errors
+  in the results This was reported by K. Amyx (Tech-X).
 \end{itemize}
 
 \subsection{Bug Fixes for Commands}
 \begin{itemize}
-\item Optimization now allows access to the response matrix elements for a transport line.  This deficiency was pointed
-  out by C. Tennant (TJNAF).
-\item In some cases, the {\tt failed} semaphore file would not be created when a run failed.  This has been rectified.
-\item Fixed some problems with output from orbit correction.  In particular, there was no output of the orbit before
-  correction.  It is uncertain when this bug was introduced.
-\item The \verb|final_pass| parameter of the \verb|run_setup| command is more efficient, in that only the required
-  moments computations are performed.  This has a significant impact run time.
-\item The \verb|bunched_beam| command was generating incorrect results when \verb|momentum_chirp| was non-zero and
-  the dispersion parameters were non-zero.  This was fixed.
-\item The performance of the \verb|load_parameters| command was improved in that the user can now control what is
-  done in the case of duplicate settings for a given parameter.  This was done by Y. Wang (ANL).
+\item Determination of the matrix for the \verb|MAPSOLENOID| and \verb|TWMTA| elements was broken in version 22. This was fixed.
 \end{itemize}
 
 \subsection{New and Modified Elements}
 \begin{itemize}
-\item The {\tt FTABLE} element was added, which allows integration of particle trajectories through a 3D field table.  This was implemented
-  by A. Xiao (ANL).
-\item The {\tt ZTRANSVERSE} and {\tt TRWAKE} now have independent control of the 
-  exponents for the drive and witness beam coordinates.  This allows, for example,
-  simulation of quadrupole wakes, and was requested by Y.-C. Chae (ANL).
-  The {\tt XPOWER} amd {\tt YPOWER} parameters were removed, which may break old
-  input files.
-\item Radiation from steering correctors ({\tt HKICK}, {\tt VKICK},
-  and {\tt HVKICK}) are now included in computation of beam moments
-  ({\tt moments\_output} command) and in element-by-element tracking
-  (if requested).  However, they are not yet included in radiation integral computations.
-\item The {\tt RFDF} element now has a matrix that is used for single-pass Twiss parameter computations and the like. This
-  might be useful, for example, in designing an emittance exchange system.
-\item The {\tt ECOL} and {\tt MAXAMP} elements now have a {\tt YEXPONENT} parameter. If non-zero, it overrides the {\tt EXPONENT}
-  command and allows specifying a more general aperture shape. This was suggested by L. Emery (ANL).
-\item The {\tt EMATRIX} element now has misalignment parameters.
-\item The {\tt TWISS} element now has a {\tt DISABLE} parameter.
-\item The {\tt LSRMDLTR} element now has a {\tt TILT} parameter.
-\item The {\tt RFCW} element now has {\tt ZWAKE} and {\tt TRWAKE} parameters, which allow disabling the respective wakes.
-\item The \verb|LOCK_PHASE| parameter was added to the {\tt RFCA} element, allowing locking the phase of a cavity to the beam.
+\item Added the \verb|CORGPIPE| element, which implements a beam dechirper using a corrugated pipe wakefield, based on
+  the theoretical treatment of K. Bane \cite{Bane-SLAC14925}.  This was suggested by P. Emma (LBNL).
+\item If not set by the users, the \verb|N_KICKS| parameter of \verb|RFCA| and \verb|RFCW| will now be automatically set
+  in order to ensure a sufficient number of kicks, defined as 100 kicks per wavelength. This may be excessive for
+  high-energy beams.
+\item Automatic selection of the number of bins and bin size for the \verb|WAKE| element was modified to avoid warning
+  messages.
+\item The \verb|EDRIFT| element can now be subdivided using the usual element division commands.
+\item The \verb|CSRCSBEND| element was improved to support the integrated Green's function method for steady-state
+  wakes. This was done with the assistance of R. Ryne (LBNL).
+\item The \verb|NIBEND| element now allows positioning of the fringe region relative to the reference plane.
+  The fringe region may be inside, outside, or centered on the reference plane. This was added after discussions with
+  N. Nakamura (KEK).
 \end{itemize}
 
 \subsection{New and Modified Commands}
 \begin{itemize}
-\item The {\tt ramp\_elements} command was added.  It allows simplified ramping of essentially
- any numerical parameter of any element on a turn-by-turn basis.  This functionality was
- already provided by {\tt modulate\_elements}, but was more difficult to use in that form.
-\item The \verb|frequency_map| command now directly supports frequency maps that are a function of 
-  $x$, $y$, and $\delta$.  (In the past, variation of $\delta$ could be done using \verb|vary_elements|.)
-\item The \verb|touschek_scatter| command now supports multi-pass tracking.  This was implemented by A. Xiao (ANL).
-\item The $R_{6i}$ matrix elements now appear in the \verb|run_setup/final| output file, and can also be
-  optimized.
-\item The line-search mode for dynamic aperture determination now records the coordinates at which the boundary
-  particles are lost.
-\item The {\tt optimization\_variable} command has a new parameter, {\tt force\_inside}, which 
-  allows forcing the initial value of the variable inside the boundaries set by the 
-  {\tt lower\_limit} and {\tt upper\_limit} parameters.
-\item The printed output from optimization now flags any variables that are close to the
-  limits of the allowed range.
-\item The logic of elegant was improved so that the correction loop cycles over orbit/trajectory, tune, and chromaticity in a more
-  sensible way.  In the past, orbit/trajectory correction was not included in the tune/chromaticity loop, which could lead to
-  convergence problems.
-\item The output of the \verb|momentum_aperture| command now includes the element name and occurrence number.  This was
-  implemented by A. Xiao (ANL).
-\item It is now possible to optimize the values of radiation integrals at {\tt MARK} elements.
+\item When determining momentum aperture (\verb|momentum\_aperture|) the tunes near the aperture boundary are now recorded.
 \end{itemize}
-
-%\subsection{Other Changes}
-%\begin{itemize}
-%\end{itemize}
 
 \subsection{Changes for Parallel Version Only}
 
-This work was performed by Y. Wang (ANL).
+Changes to the parallel version are made by Y. Wang (ANL), unless otherwise noted.
 \begin{itemize}
-\item A new command, \verb|parallel_optimization_setup|, was added that provides access to parallel optimization. The methods include
-  a single-objective genetic algorithm, parallel hybrid simplex optimization, and particle swarm optimization.  See the
-  manual entry below for details.  
-\item The {\tt RAMPP} element was parallelized.
+\item In the last version, we added the ability to change the randomization mode for different processors. However, the default mode was not
+  changed to one of the improved methods, even though the documentation said it had been changed. The default mode has now been changed
+  mode 3 (see the documentation for \verb|global_settings|).
+\item Updated to get the correct latest result from genetic optimization by using the right population group. Improved population log file for multiple restarts.
 \end{itemize}
 
 \subsection{Changes to Related Programs and Files}
 
 \begin{itemize}
-\item {\tt sddsfindresonances}: The program now processes each page separately, so multi-page FMA files can be handled.
-  Also added the ability to increase the number of multipoles.
-\item {\tt sddsbrightness}: Added ability to take error factors from a file and multiply each harmonic by the specified factor.
-  In the event that the brightness can't be computed, the corresponding rows are now filled in with 0, instead of crashing.
-\item {\tt sddsfluxcurve}: Bugs were fixed related to use of the emittanceRatio parameter.
-\item {\tt sddsurgent}: Fixed bugs in computation of spatial distribution for harmonic greater than 1.  Now correctly 
-  computes K when the harmonic number is not 1 and the photon energy is given.
-\item {\tt elegantRingAnalysis}: Added control over the number of processors used for FMA.  Added the ability to compute
-  the kick aperture (kicker scan to find aperture) using parallel elegant.
+\item The scripts \verb|radiationEnvelope| was added. It allows computing the envelope over harmonics of brightness and flux tuning curves, such as those
+  obtained from \verb|sddsbrightness| and \verb|sddsfluxcurve|.
+\item The program \verb|sddsfluxcurve| now computes the flux in the central cone if computation of the flux density is requested.
+\item The programs \verb|ibsEmittance| and \verb|touschekLifetime| now accept an argument giving the vertical emittance.
 \end{itemize}
 
 \subsection{Known Bugs, Problems, and Limitations}
 \begin{itemize}
-\item Twiss output contains entries for the higher-order dispersion, tune shifts with amplitude, higher-order chromaticity, tune spreads
-  due to chromaticity and amplitude, and resonance driving terms {\em even when these are not calculated}, which is potentially
+\item Setting \verb|CHANGE_T=1| on \verb|RFCA| and \verb|RFCW| elements can give invalid results when tracking beams with very 
+  large time spread compared to the bunch length.
+\item Twiss output contains entries for the higher-order dispersion, tune shifts with amplitude, higher-order chromaticity, and tune spreads
+  due to chromaticity and amplitude {\em even when these are not calculated}, which is potentially
   misleading.   The values are zero when the calculation is not requested.
 \item Computation of closed orbits and Twiss parameters will not always include the effects of synchrotron
   radiation losses when these are imposed using {\tt SREFFECTS} elements.  See
@@ -158,12 +113,21 @@ This work was performed by Y. Wang (ANL).
  \verb|save_lattice| are subsequently used, \verb|elegant| crashes.   These problems were reported by 
  V. Sajaev (ANL).
 \item Computation of radiation integrals does not include the effect of steering magnets.
+\item There is a bug related to using {\tt ILMATRIX} that will result in a crash
+if one does not request computation of the twiss parameters. If you encounter this
+problem, just add the following statement after the \verb|run_setup| command:
+\begin{verbatim}
+&twiss_output
+        matched = 1
+&end
+\end{verbatim}
 \end{itemize}
 
 \section{Credits}
 
-Contributors to {\tt elegant} include M. Borland, W. Guo, R. Soliday, V. Sajaev, Y. Wang, Y. Wu, and A. Xiao.
-Contributors to related programs include M. Borland, R. Dejus, L. Emery, H. Shang, and Y. Wang.
+Contributors to {\tt elegant} include M. Borland, W. Guo, R. Soliday, V. Sajaev, C. Wang, Y. Wang, Y. Wu, and A. Xiao.
+Contributors to related programs include M. Borland, R. Dejus, L. Emery, A. Petrenko, H. Shang, Y. Wang, 
+A. Xiao, and B. Yang.
 R. Soliday is responsible for multi-platform builds and distribution.
 Of course, we also appreciate the many suggestions, comments, and bug reports from users.
 
@@ -465,6 +429,22 @@ note that, unlike FORTRAN namelists, these namelists need not come in
 a predefined order; {\tt elegant} is able to detect which namelist is
 next in the file and react appropriately.
 
+\subsection{Commandline Syntax}
+
+The commandline syntax for {\tt elegant} is of the form
+\begin{flushleft}{\tt
+elegant \{{\em inputfile}|-pipe=in\} [-rpnDefns={\em filename}] -macro={\em tag1}={\em value1}[,{\em
+tag2}={\em value2}...]  }\end{flushleft} 
+{\em inputfile} is the name of the command input file, which is a series of
+namelist commands directing the calculations.
+Alternatively, one may give the \verb|-pipe=in| option, allowing {\tt elegant } to be
+fed a stream of commands by another program or script.
+The \verb|-rpnDefns| option allows providing the name of the RPN definitions file as an alternative
+to defining the \verb|RPN_DEFNS| environment variable.
+The \verb|-macro| option allows performing text substitutions in the command stream.
+Multiple \verb|-macro| options may be given.
+Usage is described in more detail below.
+
 \subsection{General Command Syntax}
 
 Each namelist has a number of variables associated with it, which are
@@ -551,8 +531,9 @@ parameters without editing the input file.  Macros inside the input
 file have one of two forms: \verb|<tag>| or \verb|\$tag|.  To perform
 substitution, use the syntax
 \begin{flushleft}{\tt
-elegant {\em inputfile} -macro={\em tag1}={\em value1}[,{\em
-tag2}={\em value2}...]  }\end{flushleft} When using this feature, it
+elegant {{\em inputfile}|-pipe=in} -macro={\em tag1}={\em value1}[,{\em
+tag2}={\em value2}...]  }\end{flushleft} 
+When using this feature, it
 is important to substitute the value of {\tt rootname} (in run\_setup)
 so that one can get a new set of output files (assuming use of the
 suggested ``\%s'' field in all the output file names).
@@ -681,6 +662,7 @@ Command name & Type & Description \\\hline
 \hyperref{{\tt parallel\_optimization\_setup}}{{\tt parallel\_optimization\_setup}}{}{subsec:paralleloptimizationsetup} & setup & Perform initial parallel optimization setup. \\ \hline
 \hyperref{{\tt print\_dictionary}}{{\tt print\_dictionary}}{}{subsec:printdictionary} & action & Print the element dictionary. \\ \hline
 \hyperref{{\tt ramp\_elements}}{{\tt ramp\_elements}}{}{subsec:rampelements} & setup & Set up turn-by-turn ramping of elements. \\ \hline
+\hyperref{{\tt rf\_setup}}{{\tt rf\_setup}}{}{subsec:rfsetup} & setup/action & Set up RF cavity elements for storage rings. \\ \hline
 \hyperref{{\tt rpn\_expression}}{{\tt rpn\_expression}}{}{subsec:rpnexpression} & action & Execute an expression in the rpn interpreter. \\ \hline
 \hyperref{{\tt rpn\_load}}{{\tt rpn\_load}}{}{subsec:rpnload} & action & Load values from SDDS file into rpn interpreter. \\ \hline
 \hyperref{{\tt run\_control}}{{\tt run\_control}}{}{subsec:runcontrol} & setup & Set up simulation steps and passes. \\ \hline
@@ -1279,6 +1261,8 @@ during the computations.
     long closed_orbit_iterations = 10;
     double closed_orbit_iteration_fraction = 1;
     long use_perturbed_matrix = 0;
+    long disable = 0;
+    long use_response_from_computed_orbits = 0;
 &end
 \end{verbatim}
 
@@ -1340,6 +1324,9 @@ use at each iteration.
 \item \verb|use_perturbed_matrix| --- If nonzero, specifies that prior to each 
 	correction \verb|elegant| shall recompute the response matrix.  This
 	is useful if the lattice is changing significantly between corrections.
+\item \verb|disable| --- If nonzero, the command is ignored.
+\item \verb|use_response_from_computed_orbits| --- If nonzero, in-plane response matrices are computed
+  using differences of closed orbits, which is slower but may be more accurate. For cross-plane matrices, this is always the case.
 \end{itemize}
 
 \begin{latexonly}
@@ -1363,6 +1350,7 @@ use at each iteration.
     long output_before_tune_correction = 0;
     long fixed_length = 0;
     long coupled = 0;
+    long use_response_from_computed_orbits = 0;
 &end
 \end{verbatim}
 
@@ -1386,6 +1374,8 @@ each simulation step.  By default, the data is output immediately for the define
 \item \verb|fixed_length| --- Flag that, if set, specifies output of the fixed-path-length
 matrix.
 \item \verb|coupled| --- If nonzero, the cross-plane response matrices are computed.
+\item \verb|use_response_from_computed_orbits| --- If nonzero, in-plane response matrices are computed
+  using differences of closed orbits, which is slower but may be more accurate. For cross-plane matrices, this is always the case.
 \end{itemize}
 
 \begin{latexonly}
@@ -1645,12 +1635,32 @@ parameter.  If zero, then the errors replace the prior value of the parameter.
 
 \begin{itemize}
 \item \verb|clear_error_settings| --- Clear all previous error settings.
-\item \verb|summarize_error_settings| --- Summarize current error settings.
+\item \verb|summarize_error_settings| --- Summarize current error settings.  {\em If non-zero, then the command has no other function  except
+    showing a summary of the current error settings.}
 \item \verb|no_errors_for_first_step| --- If non-zero, then there will be no errors for the first step.  This can be useful for
  fiducialization of phase and momentum profiles.
 \item \verb|error_log| --- The (incomplete) name of a SDDS file to which error values will be written.  Recommended value: ``\%s.erl''.
 \item \verb|error_factor| --- A value by which to multiply the error amplitudes in all \verb|error| commands.
 \end{itemize}
+
+The proper use of this command can be confusing.  A typical sequence will be as follows:
+\begin{verbatim}
+&error_control
+ clear_error_settings = 1,
+ error_log = %s.erl
+&end
+
+&error_element ... &end
+&error_element ... &end
+.
+.
+.
+&error_element ... &end
+
+&error_control
+ summarize_error_settings = 1
+&end
+\end{verbatim}
 
 \begin{latexonly}
 \newpage
@@ -1865,6 +1875,7 @@ Use of this feature results in a doubling of the number of turns tracked.
     long echo_namelists = 1;
     STRING log_file = NULL;
     STRING error_log_file = NULL;
+    long mpi_randomization_mode = 1;
 &end
 \end{verbatim}
 
@@ -1880,7 +1891,15 @@ Use of this feature results in a doubling of the number of turns tracked.
 \item \verb|error_log_file| --- By default, \verb|elegant| writes error messages to the terminal.  If a filename is supplied
   for this parameter, the output will instead go to the file.  On Linux and Unix, using \verb|/dev/null| will result in 
   the output being discarded.
-\end{itemize}
+\item \verb|mpi_randomization_mode| --- Controls how the random numbers are seeded on multiple processors
+  \begin{itemize}
+    \item[1] --- This is the original default, which showed issues in some simulations. The seed on the $i^{th}$ processor is $s_0+2*i$.
+    \item[2] --- The seed on the $i^{th}$ processor is $s_0+2*i^2$.
+    \item[3] --- This is the new default. The seed on the $i^{th}$ processor is $s_0+i*(i+1)$.
+    \item[4] --- The seed on the $i^{th}$ processor is $s_0+R_i$, where $R_i$ is the $i^{th}$ random integer returned by
+      the system rand() function.
+    \end{itemize}
+  \end{itemize}
 
 \begin{latexonly}
 \newpage
@@ -1902,6 +1921,8 @@ Use of this feature results in a doubling of the number of turns tracked.
         STRING name = NULL;
         STRING type = NULL;
         STRING exclude = NULL;
+        double s_start = -1;
+        double s_end = -1;
         long skip = 1;
         long disable = 0;
         long add_at_end = 0;
@@ -1913,12 +1934,15 @@ Use of this feature results in a doubling of the number of turns tracked.
 
 \begin{itemize}
 \item \verb|name| --- Possibly wild-card containing string specifying the
-   name of the elements after which the new element is inserted.
+   names of the elements after which the new element is inserted. A list of comma- or space-separated names may be given.
 \item \verb|type| --- Possibly wild-card containing string specifying the
    type of the elements after which the new element is inserted.
 \item \verb|exclude| --- Possibly wild-card containing string specifying 
    the names of elements to be excluded from the specification.
 \item \verb|skip| --- New elements are inserted at every $n^{th}$ specified location.
+\item \verb|s_start|, \verb|s_end| --- If positive, these give the starting and ending s locations for insertion of new elements.
+  Note that the s locations are not updated as elements are inserted, but only after completion of all insertions covered by
+  a single command.
 \item \verb|disable| --- If nonzero, the command is ignored.
 \item \verb|add_at_end| --- If nonzero, the element is also inserted to the end of the beamline.
 \item \verb|element_def| --- The definition of the new element should be just as it would be entered in 
@@ -1959,6 +1983,7 @@ rings. }
         long vertical = 0;
         long horizontal = 0;
         long nonlinear = 0;
+	long uniform_distribution = 0;
 &end
 \end{verbatim}
 
@@ -1976,6 +2001,8 @@ rings. }
         If zero, only one space charge kick is inserted at the end of beamline. 
 \item \verb|vertical|, \verb|horizontal|, \verb|nonlinear| --- If non-zero, then space charge is
 included in the plane in question.
+\item \verb|uniform_distribution| --- Used for bi-Gaussian distributed beam (coasting beam), i.e., beam that is
+  uniform in z but gaussian in x and y.
 \end{itemize}
 
 Note: Some users use \verb|matched_to_cell| or
@@ -2140,13 +2167,15 @@ assigned to the target parameter.
         long clear_settings = 0;
         long allow_missing_elements = 0;
         long allow_missing_parameters = 0;
+        long allow_missing_files = 0;
 	long force_occurence_data = 0;
         long verbose = 0;
+        long use_first = 0;
 &end
 \end{verbatim}
 
 \begin{itemize}
-\item \verb|filename| --- Name (possibly containing the ``%s'' field) 
+\item \verb|filename| --- Name (possibly containing the ``\%s'' field) 
 of SDDS file from which to take data.  The file
 must contain some of the following columns:
 \begin{itemize}
@@ -2206,6 +2235,15 @@ This behavior can be altered with the next control.
 \item \verb|force_occurence_data| --- If set, then occurence data is
 used even in \verb|change_defined_values| mode.
 
+\item \verb|use_first| --- It is possible that the input file will contain
+multiple lines for any given parameter.  In this case, {\tt elegant} will
+by default process all lines.  For example, if the lines give differential values,
+then all would be included. However, if the lines give absolute values, then the
+last one will overwrite the previous values; this flag allows overriding the
+behavior in this case to force {\tt elegant} to use the first value.
+This can have speed advantages for cases where there are many identical
+occurences of the same element.
+
 \item \verb|clear_settings| --- If set, clear all settings and files
 being used for loading parameters.
 
@@ -2215,6 +2253,9 @@ data is simply ignored.
 
 \item \verb|allow_missing_parameters| --- If set, it is not an error
 if any element in the lattice lacks a parameter that exists in the file.
+
+\item \verb|allow_missing_files| --- If set, it is not an error
+if any listed file is missing.
 
 \item \verb|verbose| --- If set, provide informational printouts about
 changes to parameters.
@@ -2289,6 +2330,7 @@ number of the occurrence of the named element from which to start.
     STRING filename = NULL;
     STRING time_column = NULL;
     STRING amplitude_column = NULL;
+    long refresh_matrix = 0;
     long differential = 1;
     long multiplicative = 0;
     long start_occurence = 0;
@@ -2323,6 +2365,11 @@ is modulated.
 \item \verb|amplitude_column| --- Name of column in \verb|filename| giving amplitude data
   for the modulation.  Together, \verb|time_column| and \verb|amplitude_column| define
   a function $A(t)$.
+\item \verb|refresh_matrix| --- Frequently there is a matrix associated with an element even
+  if tracking through the element does not use the matrix.  In this case, {\tt elegant} doesn't
+  normally update the matrix for the element as it modulates the element, since that may involve
+  a significant time penalty.  If this parameter is set to a non-zero value, the matrix will
+  be updated.  For elements that use a matrix for tracking, the matrix is always updated.
 \item \verb|differential|, \verb|multiplicative| --- Determine how the amplitude function
   $A(t)$ is used to obtain the new value of the parameter.  There are four cases
   \begin{itemize}
@@ -2700,6 +2747,8 @@ variables and covariable may be accessed via names like \verb|<element-name>.<pa
     STRING method = "simplex";
     double tolerance = -0.01;
     double target = 0;
+    long center_on_orbit = 0;
+    long center_momentum_also = 1;
     long soft_failure = 1;
     long n_passes = 2;
     long n_evaluations = 500; 
@@ -2761,7 +2810,8 @@ with \verb|output_at_each_step=1|:
 \item Final Twiss parameters, e.g., \verb|betax|, \verb|alphax|, \verb|etax|.  The names
 are the same as the column names in the twiss output file.
 \item Statistics of Twiss parameters in the form \verb|<statistic>.<parameter-name>|,
-where \verb|<statistic>| is either \verb|min| or \verb|max|.
+where \verb|<statistic>| is \verb|min|, \verb|max|, \verb|ave|, \verb|p99|, \verb|p98|, or
+\verb|p96|.  \verb|p99| is the 99$^{th}$ pencentile value, a similarly for \verb|p98| and \verb|p96|.
 \item Tunes and chromaticities via symbols \verb|nux|, \verb|dnux/dp|, (and corresponding
 symbols for y).
 \item First- and second-order momentum compaction factors via symbols \verb|alphac| and \verb|alphac2|.  
@@ -2837,6 +2887,12 @@ and not-equal functions, which have the names {\tt segt}, {\tt selt}, and
 a fractional criterion.
 \item \verb|target| --- The value which, if reached, results in immediate termination of the optimization,
 whether it has converged or not.
+
+\item \verb|center_on_orbit| --- A flag indicating whether to center the beam transverse coordinates on the closed orbit
+  before tracking.
+
+\item \verb|center_momentum_also| --- A flag indicating whether to center the momentum coordinate also.
+
 \item \verb|soft_failure| --- A flag indicating, if set, that failure of an optimization pass should not
 result in termination of the optimization.
 
@@ -2935,15 +2991,16 @@ a significant difference in the optimization speed.
     STRING population_log = NULL;
     long print_all_individuals = 0;
     long output_sparsing_factor = 1;
+    STRING crossover = "twopoint";
 &end
 \end{verbatim}
 
 \begin{itemize}
-\item \verb|method| --- May be one of "genetic", "hybridsimplex" or "swarm". If the default "simplex" method is chosen, all the processors will do the same optimization as the serial version and then track in parallel. All algorithms can be used for global optimization. "swarm" is recommended when there is sufficient computation resource available, so it can reach the optimization target fast. "hybridsimplex" is recommended when the initial point is close to the optimal result. "genetic" can be chosen for a global optimizer with a random start point (0 should be avoided for any initial coordinate). 
+\item \verb|method| --- May be one of ``genetic'', ``hybridsimplex'' or ``swarm''. If the default ``simplex'' method is chosen, all the processors will do the same optimization as the serial version if there is only one particle for optimization tracking, or do optimization tracking in parallel if the number of particles is larger than the number of CPUs. All algorithms can be used for global optimization. ``swarm'' is recommended when there is sufficient computation resource available, so it can reach the optimization target fast. ``hybridsimplex'' is recommended when the initial point is close to the optimal result. ``genetic'' can be chosen for a global optimizer with a random start point (0 should be avoided for any initial coordinate). 
 
 \item \verb|random_factor| --- The factor to scale the step size for both parallel swarm and genetic methods.
 
-\item \verb|n_restarts| --- For the parallel "hybridsimplex" method, this number should be set larger than 1, so the the best result across all processors can be used for the next restart. The parameter is not used for the swarm method.
+\item \verb|n_restarts| --- For the parallel ``hybridsimplex'' method, this number should be set larger than 1, so the the best result across all processors can be used for the next restart. The parameter is not used for the swarm method.
 
 \item \verb|n_iterations| --- The maximal number of generations/iterations for the parallel genetic and particle swarm optimization. 
 
@@ -2958,6 +3015,8 @@ a significant difference in the optimization speed.
 \item \verb|print_all_individuals| --- If nonzero, all the strings in a population will be recorded in the population\_log file. This is supported for the genetic method only.
 
 \item \verb|output_sparsing_factor| --- For genetic optimization, this is used to set the frequency of printing strings in the log file with the number of generations as the interval.
+
+\item \verb|crossover| --- For genetic optimization, it allows the user to choose a crossover type from ``onepoint'', ``twopoint'' and ``uniform''. ``twopoint'' is the default crossover type. If the dimension is 2, it will be set to onepoint crossover.
 
 \end{itemize}
 
@@ -3069,6 +3128,7 @@ at the beginning of such a name.
     double upper_limit = 0;
     double step_size = 1;
     long disable = 0;
+    long force_inside = 0;
 &end
 \end{verbatim}
 
@@ -3079,6 +3139,7 @@ at the beginning of such a name.
 equal, the range of the parameter is unlimited.
 \item \verb|step_size| --- The initial step size (``simplex'' optimization ) or the grid size in this dimension (``grid'' or ``sample'' optimization).
 \item \verb|disable| --- If nonzero, the covariable is ignored.
+\item \verb|force_inside| --- If nonzero, the initial value is forced inside the allowed range defined by the \verb|lower_limit| and \verb|upper_limit| parameters.
 \end{itemize}
 
 \begin{latexonly}
@@ -3130,6 +3191,7 @@ equal, the range of the parameter is unlimited.
     long multiplicative = 0;
     long start_occurence = 0;
     long end_occurence = 0;
+    double exponent = 1;
     double s_start = -1;
     double s_end = -1;
     STRING before = NULL;
@@ -3182,6 +3244,65 @@ Note that $i=0$ on the first pass.
  that precede the named element in the beamline. 
 \item \verb|verbose| --- If nonzero, information is printed to the standard output as changes are
         made.  Use for debugging only, since otherwise it may slow the simulation.
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|rf_setup|}\end{center}
+\end{latexonly}
+\subsection{rf\_setup\label{subsec:rfsetup}}
+
+\begin{itemize}
+\item type: setup/action command.
+\item function: set up rf cavity frequency, phase, and voltage for a storage ring
+\end{itemize}
+
+\begin{verbatim}
+&rf_setup
+    STRING name = NULL;
+    long start_occurence = -1;
+    long end_occurence = -1;
+    double s_start = -1;
+    double s_end = -1;
+    long set_for_each_step = 0;
+    double near_frequency = 0; 
+    long harmonic = -1;
+    double bucket_half_height = 0;
+    double over_voltage = 0;
+&end
+\end{verbatim}
+
+This command must follow a \verb|twiss_output| command that includes radiation integral computation, since the 
+energy loss per turn is needed to set up the rf cavities.
+Note that the command includes features to allow selecting a subset of the RFCA elements in the beamline.
+The selected subset is assumed to include all of the cavities that will impart net energy to the beam.
+
+\begin{itemize}
+\item \verb|name| --- A possibly-wildcard-containing string giving the names of the
+        elements to set.  If not given, all RFCA elements are selected.
+\item \verb|start_occurence|, \verb|end_occurence| --- If nonzero, these give the starting and
+ ending occurrence numbers of elements that will be set. 
+\item \verb|s_start|, \verb|s_end| --- If non-negative, these give the gaving and ending position
+ limits for the end-of-element locations of elements to be set.
+\item \verb|set_for_each_step| --- If nonzero, then the setup is repeated at each simulation step.
+  In this case, one must also give \verb|output_at_each_step=1| for \verb|twiss_output|.
+\item \verb|near_frequency| -- If nonzero, then the rf frequency is chosen to be the closest harmonic
+  to the given frequency.
+\item \verb|harmonic| --- If nonzero, then the rf frequency is set to the given harmonic of the revolution
+  frequency.
+\item \verb|bucket_half_height| --- If nonzero, the voltage is computed so as to give the specified bucket
+  half height. 
+\begin{equation}
+\left(\frac{\Delta p}{p}\right)_{\rm bucket} = \sqrt{\frac{U_0}{\pi \alpha h E}}\sqrt{F(q)},
+\end{equation} 
+where $U_0$ is the energy loss per turn, $\alpha$ is the momentum compaction factor, $h$ is the harmonic, 
+$E$ is the beam energy, 
+\begin{equation}
+F(q) = 2 \left(\sqrt{q^2-1} - \arcsin \frac{1}{q}\right),
+\end{equation}
+and $q$ is the overvoltage factor, related to the rf voltage by $q = V/U_0$. (See Wiedemann, Vol. 1, 8.2.2.)
+\item \verb|over_voltage| --- If nonzero, the voltage is set to the given factor relative to the 
+energy loss per turn.
 \end{itemize}
 
 \begin{latexonly}
@@ -3679,6 +3800,9 @@ and is useful for tracking very large numbers of particles.
 \item {\tt done} --- Gives the (incomplete) filename of a file to create when the program
         exits without error.  If the file exists, it is deleted when a valid {\tt run\_setup}
         command is given.
+\item {\tt failed} --- Gives the (incomplete) filename of a file to create when the program
+        exits with an error.  If the file exists, it is deleted when a valid {\tt run\_setup}
+        command is given.
 \end{itemize}
 
 \begin{latexonly}
@@ -3735,8 +3859,8 @@ long final_values_only = 0;
 
 \begin{itemize}
 \item \verb|command| --- The text of the command to execute.  The command may
-use the sequence ``%s'' for substitution of the rootname as set by \verb|run_setup|.
-A literal ``%s'' must be entered as ``%%s''.
+use the sequence ``\%s'' for substitution of the rootname as set by \verb|run_setup|.
+A literal ``\%s'' must be entered as ``\%\%s''.
 \end{itemize}
 
 \begin{latexonly}
@@ -3749,10 +3873,9 @@ A literal ``%s'' must be entered as ``%%s''.
 \item type: setup command.
 \item function: setup for use of a given parameter of a given element as a steering corrector.
 \item N.B.: any use of this command disables the built-in definition of HKICK, VKICK, and HVKICK elements
-as steering elements.  For trajectory correction, this facility works without any effort by the user.
-It will not work for orbit correction unless the user does two things: First, all correction elements
-for each plane must be the same.  Second, the gain must be less than the ratio of the angle kick to
-unit parameter change for the element.
+as steering elements.  For trajectory correction, this facility works without any additional effort by the user.
+However, it will not work for orbit correction unless the user also sets \verb|use_response_from_computed_orbits=1| in
+\verb|&correct|.
 \end{itemize}
 
 \begin{verbatim}
@@ -3840,6 +3963,9 @@ unit parameter change for the element.
         long i_start = 0;
         long i_end = 1;
         long do_track = 0;
+	long match_position_only = 0;
+	long overwrite_files = 1;
+        long verbosity = 0;
 &end
 \end{verbatim}
 
@@ -3864,7 +3990,7 @@ unit parameter change for the element.
    tables are ignored.
    \item \verb|bunch| --- The (incomplete) name of an SDDS file to which the phase-space coordinates of 
    the simulated scattered particles are to be written. Recommended value: ``\%s-\%03ld.bun''. If ``\%03ld''
-   is not provided then only the last simulated bunch is kept (One bunch for one \verb|TSCATTER| element).
+   or the equivalent is not provided then only the last simulated bunch is kept (One bunch for one \verb|TSCATTER| element).
    \item \verb|loss| --- The (incomplete) name of an SDDS file to which the original and final 
    phase-space coordinates of the lost simulated scattered particles are to be written. 
    Recommended value: ``\%s-\%03ld.los''. Used together with \verb|do_track = 1|.
@@ -3886,6 +4012,13 @@ unit parameter change for the element.
    \verb|TSCATTER| element along the beamline.    
    \item \verb|do_track| --- If non-zero, then scattered particles will be tracked from the location they are
    generated to the end of the beamline. The loss property can be analysised using \verb|output| or \verb|loss|. 
+   \item \verb|match_position_only| --- If non-zero, then matching of the momentum aperture data to the lattice
+     is done using the position data only (\verb|s| column), rather than the element names.  Can be helpful if
+     errors appear about files ending prematurely or data not matching.
+   \item \verb|overwrite_files| --- If non-zero, then output files will be overwritten.  If set to zero, then
+     when output files are found, the corresponding computations are skipped.  This can be used to restart a
+     Touschek scattering run, provided the output filenames are index (e.g., of the form ``\%s-\%03ld.los''
+     rather than ``\%s.los''.)
 \end{itemize}
 
 \begin{latexonly}
@@ -4016,6 +4149,7 @@ unit parameter change for the element.
     long reflect_reference_values = 0;
     long cavities_are_drifts_if_matched = 1;
     long compute_driving_terms = 0;
+    long leading_order_driving_terms_only = 0;
     long local_dispersion = 1;
 &end
 \end{verbatim}
@@ -4079,10 +4213,14 @@ used that gives the second-order chromaticity only.
   results are generally small, but the default behavior disagrees with the results of \verb|moments_output|.
   This feature is not available for cavities that change the beam energy (\verb|CHANGE_P0=1| in element definition 
   or \verb|always_change_p0=1| on \verb|run_setup|).
-\item \verb|compute_driving_terms| --- If nonzero, then resonance driving terms \cite{Bengtsson} and
- tune shifts with amplitude are computed by summing over dipole, quadrupole, and sextupole elements.  For dipoles, only the effects of gradients and
+\item \verb|compute_driving_terms| --- If nonzero, then resonance driving terms \cite{Bengtsson, WangCXDrivingTerms, Bengtsson-SSC232} and
+ tune shifts with amplitude are computed by summing over dipole, quadrupole, sextupole, and octupole elements.  For dipoles, only the effects of gradients and
  sextupole terms are included; curvature effects are not present in the theory.   In addition, these quantities may be optimized 
  by using those names in optimization terms (see list below).
+\item \verb|leading_order_driving_terms_only| --- If nonzero, only the leading order driving terms are computed. I.e., terms involving double sums
+  over sextupole and quadrupole strengths are not computed. However, leading-order octupole terms are computed, even though they affect the same
+  terms as the second-order sextupole and quadrupole terms. This option is provided because computing the higher-order terms is time-consuming and
+  not always worthwhile.
 \item \verb|local_dispersion| ---  Normally, {\tt elegant} will ignore acceleration in computing the
   dispersion.  That is, the dispersion would be the ``local'' dispersion $\frac{\partial x}{\partial \delta}$, where $\delta$
   was the local fractional momentum deviation.  In a linac or other systems with rf elements, one might also be interested in the ``global'' dispersion
@@ -4425,6 +4563,8 @@ given with no arguments.
   the astra2sdds program on the ASTRA website, because the latter produces ASCII SDDS
   files that are quite slow to read and does not perform the correct computations
   for low-energy beams.
+\item {\tt coreEmittance} --- Computes the slice emittance for the beam core (e.g., 80\% of the beam).
+  (Program by X. Dong.)
 \item {\tt csrImpedance} --- Computes the shielded steady-state CSR impedance for a dipole magnet.
  The output can be used immediately with {\tt elegant}'s \verb|ZLONGIT| element.
  (Program by Y. Wang, H. Shang, and M. Borland.)
@@ -4467,6 +4607,8 @@ given with no arguments.
         The file may, for example, be the file produced
         by the {\tt final} field of the {\tt run\_setup} command.  The quadrupole scan can be
         executed inside of {\tt elegant} using {\tt vary\_elements}. (Program by M. Borland.)
+\item {\tt sddsfindresonances} --- Uses output from frequency map analysis to find and identify resonance lines.
+ (Program by H. Shang, M. Borland.)
 \item {\tt sddsfluxcurve} --- Uses twiss parameter output or data from {\tt sddsanalyzebeam} to
   compute undulator flux tuning curves.  (Program by M. Borland, H. Shang, R. Dejus.)
 \item {\tt sddsmatchtwiss} --- Transforms a beam of macro-particles to match to given beta
@@ -4497,6 +4639,7 @@ given with no arguments.
   This gives a profile of the beamline that can be plotted with other data.
 \item The scripts \verb|makeSkewResponseCP| and \verb|correctCoupling| can be used to compute the cross-plane response
   matrices for skew quadrupoles and to perform coupling correction using those matrices.
+\item {tt view3dGeometry} --- Uses freewrl viewer to display 3D geometry of a lattice.
 \end{itemize}
 
 \begin{latexonly}
@@ -4533,6 +4676,38 @@ astra2elegant [{\em inputFile}] [{\em outputFile}] [-centerReference] [-pipe=[in
 \end{itemize}
 
 \item {\bf authors:} M. Borland (ANL/APS).
+
+\end{itemize}
+
+\begin{latexonly}
+\newpage
+\begin{center}{\Large\verb|coreEmittance|}\end{center}
+\end{latexonly}
+\subsection{coreEmittance}
+
+\begin{itemize}
+\item {\bf description:} Computes the slice emittance for 80\%, 85\%, 90\%, 95\%, and 100\% fractions of the beam.
+
+\item {\bf synopsis:}
+\begin{flushleft}{\tt 
+coreEmittance -input {\em inputFilename} [-nSlices {\em numberOfSlices}] [-pngRoot <string>] [-pngThickness <integer>(2)]
+}
+\end{flushleft}
+
+\item {\bf files:}
+\begin{itemize}
+\item The input file is a particle output file from {\tt elegant} or a compatible program.
+\end{itemize}
+
+\item {\bf switches}
+\begin{itemize}
+\item \verb|-input| --- Specify the name of the input file.
+\item \verb|-nSlices| --- Optionally specify the number of longitudinal slices. The default is 100.
+\item \verb|-pngRoot| --- Optionally specify the file rootname for PNG graphics files. If omitted, no PNG files are created.
+\item \verb|-pngThickness| --- Optionally change the thickness of lines for PNG graphics.  The default is 2.
+\end{itemize}
+
+\item {\bf author:} X. Dong.
 
 \end{itemize}
 
@@ -4719,12 +4894,12 @@ ibsEmittance aps.twi aps.ibs -charge=5 -coupling=0.02 -rf=voltage=9,harmonic=129
 \item {\bf synopsis:}
 \begin{flushleft}{\tt 
 ibsEmittance {\em twissFile} {\em resultsFile}
- {-charge=<nC>|-particles=<value>} -coupling=<value>
- [-emitxInput=<value>] [-deltaInput=<value>] 
- [-superperiods=<value>] [-isRing=1|0]
- \{-RF=Voltage=<MV>,harmonic=<value>|-length=<mm>\}
- [-energy=<MeV>] 
- [\{-growthRatesOnly | -integrate=turns=<number>[,stepSize=<number>]\}]
+ {-charge={\em nC}|-particles={\em value} }\{-coupling={\em value}|-emityInput={\em value}\}
+ [-emitInput={\em value}] [-deltaInput={\em value}] 
+ [-superperiods={\em value}] [-isRing=1|0]
+ \{-RF=Voltage={\em MV},harmonic={\em value}|-length={\em mm}\}
+ [-energy={\em MeV}] 
+ [\{-growthRatesOnly | -integrate=turns={\em number}[,stepSize={\em number}]\}]
  [-noWarning] 
 }\end{flushleft}
 
@@ -4737,7 +4912,8 @@ ibsEmittance {\em twissFile} {\em resultsFile}
 \item {\bf -charge}, {\bf -particles} --- Give the charge (in nanocoulombs) or the
  number of electrons.
 \item {\bf -coupling} --- Give the emittance coupling ratio, $\epsilon_y/\epsilon_x$.
-\item {\bf -emitxInput} --- Give the initial x emittance in meters.  If not specified,
+\item {\tt -emityInput} --- Give the vertical emittance in meters.
+\item {\bf -emitInput} --- Give the initial total emittance in meters.  If not specified,
 the value from the parameter \verb|ex0| in {\em twissFile} is used.
 \item {\bf -deltaInput} --- Give the initial rms fractional momentum spread.  If not
 specified, the value from the parameter \verb|Sdelta0| in {\em twissFile} is used.
@@ -5120,6 +5296,50 @@ removed and the fit is repeated.
 
 \begin{latexonly}
 \newpage
+\begin{center}{\Large\verb|sddsfindresonances|}\end{center}
+\end{latexonly}
+\subsection{sddsfindresonances}
+
+\begin{itemize}
+\item {\bf description:} {\tt sddsfindresonances} scans frequency map analysis data and
+identifies resonances.
+
+\item {\bf examples:}
+\begin{flushleft}{\tt
+sddsfindresonances run.fma run.res -multipoles=dipole,quad,sext,oct -type=skew
+sddsfindresonances run.fma run.res -multipoles=sext,oct -type=skew,norm
+}\end{flushleft}
+
+\item {\bf synopsis:}
+\begin{flushleft}{\tt
+sddsfindresonances [-pipe=[input][,output]] [{\em inputFile}] [{\em outputfile}]
+ -multipoles=[all={\em integer}]|[dipole,][quadrupole,][sextupole,][octupole,]
+ [-type=[normal,][skew]] [-variables={\em firstColumn},{\em secondColumn}]
+}\end{flushleft}
+
+\item {\bf files:}
+\begin{itemize}
+\item {\em inputFile} --- By default, frequency map analysis output file from {\tt elegant}'s {\tt frequency\_map} command
+or equivalent, containing at minimum the columns {\tt x}, {\tt y}, {\tt nux}, and {\tt nuy}.  Each page of the file is
+treated separately.
+\item {\em outputFile} --- Contains the identified resonance lines, one resonance line per page.  The file contains
+the columns {\tt x}, {\tt y}, {\tt nux}, and {\tt nuy}, along with parameters that identify the resonance.
+\end{itemize}
+
+\item {\bf switches:}
+\begin{itemize}
+\item {\tt pipe} --- The standard SDDS Toolkit pipe option.
+\item {\tt multipoles=[all={\em integer}]|[dipole,][quadrupole,][sextupole,][octupole,]} --- Choose what order of resonances to 
+  search for by naming the type of magnet that nominally drives it, or by giving the maximum order to search ({\tt all} option).
+\item {\tt -type=[normal,][skew]} --- Specify normal- or skew-driven resonances.  Default is both.
+\item {\tt -variables={\em firstColumn},{\em secondColumn}} --- Use to change the default names for the coordinate variables.
+\end{itemize}
+
+\item {\bf authors:} H. Shang, M. Borland. (ANL).
+\end{itemize}
+
+\begin{latexonly}
+\newpage
 \begin{center}{\Large\verb|sddsfluxcurve|}\end{center}
 \end{latexonly}
 \subsection{sddsfluxcurve}
@@ -5210,8 +5430,11 @@ sddsmatchtwiss elegantBeam.out FELBeam.in -xPlane=beta=1.0,alpha=-0.2 -yPlane=be
 \item {\bf synopsis:}
 \begin{flushleft}{\tt
 sddsmatchtwiss [-pipe=[input][,output]] {\em inputfile} {\em outputfile}
+[-saveMatrices={\em filename}] [-loadMatrices={\em filename}]
 [-xPlane=[beta={\em meters},alpha={\em value}][,etaValue={\em meters}][,etaSlope={\em value}]]
 [-yPlane=[beta={\em meters},alpha={\em value}][,etaValue={\em meters}][,etaSlope={\em value}]]
+[-zPlane=[deltaStDev={\em value}][,tStDev={\em value}]
+\hspace*{4mm}[{,correlation={\em seconds}|alpha={\em value}}][,chirp={\em seconds}][,betaGamma={\em value}]]
 [-nowarnings]
 }\end{flushleft}
 
@@ -5238,10 +5461,23 @@ passed to {\em outputfile} unchanged.
         its slope, $\frac{\partial \eta}{\partial s}$.
 \item {\tt -yPlane=[beta={\em meters},alpha={\em value}][,etaValue={\em meters}][,etaSlope={\em value}]} ---
         Same as {\tt -xPlane}, except for the vertical plane.
+\item {\tt -zPlane=[deltaStDev={\em value}][,tStDev={\em value}]}
+  {\tt [,\{correlation={\em seconds}|alpha={\em value}\}][,chirp={\em seconds}][,betaGamma={\em value}]} ---
+  {\tt deltaStDev} is $\sigma_\delta = \langle \sqrt{(\delta - \langle \delta \rangle)^2}$, 
+  {\tt tStDev} is $\sigma_t = \langle \sqrt{(t - \langle t \rangle)^2}$,  and
+  {\tt correlation} is $\sigma_{t,\delta} = \langle (\delta - \langle \delta \rangle)((t - \langle t \rangle)\rangle$, in terms of which
+  the longitudinal emittance is $\epsilon = \sqrt{\sigma_t^2*\sigma_\delta^2 - \sigma_{t,\delta}^2}$.
+  {\tt alpha} is $-\sigma_{t,\delta}/\epsilon$.
+  The {\tt chirp}, if requested, is added after generation of the beam according to the other parameters.
+  If {\tt betaGamma} is given, the beam is ``accelerated'' to the given average value of $\beta\gamma$ 
+  in a idealized sense, preserving the momentum spread and transforming the transverse coordinates
+  by the factor $\sqrt{\langle \beta\gamma\rangle_0/(\beta\gamma)_{\rm desired}}$.
+\item {\tt -saveMatrices={\em filename}} --- Requests saving the transformation matrices to a file.
+\item {\tt -loadMatrices={\em filename}} --- Requests loading the transformation matrices from a file.
 \item {\tt -nowarnings} --- Suppresses warning messages.
 \end{itemize}
 
-\item {\bf author:} M. Borland, ANL/APS.
+\item {\bf authors:} M. Borland, H. Shang, ANL/APS.
 \end{itemize}
 
 \begin{latexonly}
@@ -5519,6 +5755,7 @@ the beam will vary step-wise from slice to slice.  This discontinuous variation 
 \item {\bf see also:} {\tt doubleDist6}
 \end{itemize}
 
+
 \begin{latexonly}
 \newpage
 \begin{center}{\Large\verb|touschekLifetime|}\end{center}
@@ -5538,11 +5775,11 @@ touschekLifetime aps.life -twiss=aps.twi -aper=aps.aper -part=2e10 -coupling=0.0
 \item {\bf synopsis:}
 \begin{flushleft}{\tt 
 touschekLifetime {\em outputFile}
- -twiss=<twissFile> -aperture=<momentumApertureFile>
- {-charge=<nC>|-particles=<value>} -coupling=<value>
- {-RF=Voltage=<MV>,harmonic=<value>|-length=<mm>} 
- [-emitxInput=<value>] [-deltaInput=<value>] [-verbosity=<value>]
- [-ignoreMismatch] [-deltaLimit=<value>]
+ -twiss={\em twissFile} -aperture={\em momentumApertureFile}
+ {-charge={\em nC}|-particles={\em value}} \{-coupling={\em value}|-emityInput={\em value}\}
+ {-RF=Voltage={\em MV},harmonic={\em value}[,limit] | -length={\em mm}} 
+ [-emitInput={\em valueInMeters}] [-deltaInput={\em value}] [-verbosity={\em value}]
+ [-ignoreMismatch] [-deltaLimit={\em valueInPercent}]
 }\end{flushleft}
 
 \item {\bf files:}
@@ -5562,21 +5799,74 @@ yield incorrect results.
  number of electrons.
 \item {\tt -coupling} --- Give the emittance coupling ratio, $\epsilon_y/\epsilon_x$.  This is
  used to compute the horizontal and vertical emittance from the natural emittance.
-\item {\tt -RF=Voltage={\em MV},harmonic={\em value}} --- Specify rf voltage and harmonic number.
+\item {\tt -emityInput} --- Give the vertical emittance in meters.
+\item {\tt -RF=Voltage={\em MV},harmonic={\em value}[,limit]} --- Specify rf voltage and harmonic number.
+ The {\tt limit} qualifier, if given means that the momentum acceptance is limited by the bucket
+ half-height.
  N.B.: If the data files cover only a portion of the ring, using this option will give incorrect results!
 \item {\tt -length={\em mm}} --- Specify the rms bunch length.  This is an alternative to giving rf parameters.
-\item {\tt -emitxInput} --- Give the initial x emittance in meters.  If not specified,
+\item {\tt -emitInput} --- Give the initial total emittance in meters.  If not specified,
 the value from the parameter \verb|ex0| in {\em twissFile} is used.
 \item {\tt -deltaInput} --- Give the initial rms fractional momentum spread.  If not
 specified, the value from the parameter \verb|Sdelta0| in {\em twissFile} is used.
 \item {\tt -verbosity} --- If nonzero, program execution information is printed to the standard output.
 \item {\tt -ignoreMismatch} --- If given, then mismatch of element names between the twiss and momentum
   aperture files is ignored.  May be useful if there are zero-length elements.
-\item {\tt -deltaLimit} --- Give the maximum value for the momentum aperture.  If not specified,
-  the values in the momentum aperture input file are used unaltered.
+\item {\tt -deltaLimit} --- Give the maximum value for the momentum aperture, in percent.  If not specified,
+  the values in the momentum aperture input file are used, possibly altered by the use of the
+  {\tt -RF} option with the {\tt limit} qualifier.  If both {\tt -deltaLimit} and {\tt -RF=limit...} are
+  given, the smaller is enforced.
 \end{itemize}
 
 \item {\bf author:} A. Xiao, ANL/APS.
+
+\end{itemize}
+
+\begin{latexonly}
+
+\newpage
+\begin{center}{\Large\verb|view3dGeometry|}\end{center}
+\end{latexonly}
+\subsection{view3dGeometry}
+
+\begin{itemize}
+
+\item {\bf description:} Allows viewing the 3D geometry of a beamline using the freewrl viewer.
+
+\item {\bf examples:}
+To generate 3d data and view:
+\begin{flushleft}{\tt
+view3dGeometry -rootname aps -showNames ``*QUAD* *BEN*'' -showCoordinates ``*MON*''
+}\end{flushleft}
+To view again:
+\begin{flushleft}{\tt
+freewrl aps.x3d
+}\end{flushleft}
+
+\item {\bf synopsis:}
+\begin{flushleft}{\tt 
+view3dGeometry -rootname {\em string} -showNames {\em listOfElementTypes} -showCoordinates {\em listOfElementTypes}
+}\end{flushleft}
+
+\item {\bf input files:}
+  \begin{itemize}
+  \item {\em rootname}.flr --- Contains floor coordinate output from {\tt elegant} (\verb|floor_coodinates| command).
+  \item {\em rootname}.param --- Contains parameter output from {\tt elegant} (\verb|run_setup| command).
+  \end{itemize}
+
+\item {\bf output files:}
+{\em rootname}.x3d --- Input data to freewrl.
+
+\item {\bf switches:}
+\begin{itemize}
+\item {\tt -rootname} --- Gives the rootname of the run, used to identify the input and output files.
+\item {\tt -showNames} --- Gives list of element types, with optional wildcards, for which the element name will be shown 
+  in the viewer.  Default: ``*SBEN*''.
+\item {\tt -showCoordinates} --- Gives list of element types, with optional wildcards, for which the local coordinate system will be
+  shown in the viewer.  Default: ``MARK* WATCH*''.
+\end{itemize}
+
+\item {\bf author:} A. Petrenko, BINP.
 
 \end{itemize}
 
@@ -5612,6 +5902,14 @@ that accept element names as input do not perform any translation.
 Hence, when referring to element names in commands, the user must
 enter the names in upper case unless they are protected by double
 quotes in the lattice file.  
+
+When the lattice file is very complex, it is sometimes convenient to 
+separate it into several files. These can then be imported into a main lattice file
+using the \verb|#INCLUDE| directive, as in
+\begin{verbatim}
+#INCLUDE: part1.lte
+#INCLUDE: part2.lte
+\end{verbatim}
 
 The rules for naming elements and beamlines are as follows:
 \begin{itemize}
@@ -5846,6 +6144,21 @@ J. Qiang {\em et al.},  J.~Comp.~Phys. 163, 434 (2000).
 
 \bibitem{Chi2005}
   H. Chi {\em et al.}, Mathematics and Computers in Simulation {\bf 70} (2005) 9-21.
+
+\bibitem{Zhou-IPAC10}
+  D. Zhou {\em et al.}, ``Explicit maps for the fringe field of a quadrupole,'' Proc. IPAC10, to be published.
+
+\bibitem{Irwin-PAC95}
+  J. Irwin {\em et al.}, ``Explicit soft fringe maps of a quadrupole,'' Proc. PAC95.
+
+\bibitem{WangCXDrivingTerms}
+ C. X. Wang, ``Second-order driving terms due to sextupoles and chromatic effects of quadrupoles'', AOP-TN-2009-020.
+
+\bibitem{Bengtsson-SSC232}
+  J. Bengtsson and J. Irwin, ``Analytical Calculations of Smear and Tune Shift,'' SSC-232, Feb. 1990.
+
+\bibitem{Bane-SLAC14925}
+ K. Bane, ``Corrugated Pipe as a Beam Dechirper,'' SLAC-PUB-14925, April 2012.
 
 \end{thebibliography}
 

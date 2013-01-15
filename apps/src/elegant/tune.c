@@ -314,8 +314,11 @@ long do_tune_correction(TUNE_CORRECTION *tune, RUN *run, LINE_LIST *beamline,
       context = NULL;
       while ((context=find_element(tune->name[i], &context, &(beamline->elem)))) {
         K1 = (((QUAD*)context->p_elem)->k1 += tune->dK1->a[i][0]);
-        if (context->matrix)
+        if (context->matrix) {
           free_matrices(context->matrix);
+          free(context->matrix);
+          context->matrix = NULL;
+        }
         compute_matrix(context, run, NULL);
         type = context->type;
       }

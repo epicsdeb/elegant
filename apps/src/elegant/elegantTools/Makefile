@@ -7,12 +7,9 @@
 # in the file LICENSE that is included with this distribution. 
 #*************************************************************************
 #
-# $Id: Makefile,v 1.1 2007/03/30 16:50:27 soliday Exp $
+# $Id: Makefile,v 1.1 2007-03-30 16:50:27 soliday Exp $
 #
-# $Log: Makefile,v $
-# Revision 1.1  2007/03/30 16:50:27  soliday
-# Moved from directory above.
-#
+# $Log: not supported by cvs2svn $
 #
 #
 

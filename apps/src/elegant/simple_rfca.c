@@ -61,8 +61,8 @@ double findFiducialTime(double **part, long np, double s0, double sOffset,
 	tFid = (part[0][4]+sOffset)/(c_mks*beta_from_delta(p0, np?part[0][5]:0.0)); 
       else
 	bombElegant("0 particle for the FID_MODE_FIRST mode in findFiducialTime on processor 1", NULL);
-      MPI_Bcast(&tFid, 1, MPI_DOUBLE, 1, MPI_COMM_WORLD);
-    }
+    }	
+    MPI_Bcast(&tFid, 1, MPI_DOUBLE, 1, MPI_COMM_WORLD);
     /*
     fprintf(stdout, "FID_MODE_FIRST mode is not supported in the current parallel version.\n");
     fprintf(stdout, "Please use serial version.\n");
@@ -449,7 +449,7 @@ long trackRfCavityWithWakes
 
     if (!matrixMethod) {
       double *inverseF;
-      inverseF = tmalloc(sizeof(*inverseF)*np);
+      inverseF = calloc(sizeof(*inverseF), np);
       
       for (ik=0; ik<nKicks; ik++) {
         dgammaOverGammaAve = dgammaOverGammaNp = 0;
@@ -483,11 +483,10 @@ long trackRfCavityWithWakes
 	      dgammaOverGammaAve += dgamma/gamma;
 	    }
           
-	    inverseF[ip] = 0;
 	    if (length) {
-	      if (rfca->end1Focus) {
+	      if (rfca->end1Focus && ik==0) {
 		/* apply focus kick */
-		inverseF[ip] = dgamma/(2*gamma*length);
+                inverseF[ip] = dgamma/(2*gamma*length);
 		coord[1] -= coord[0]*inverseF[ip];
 		coord[3] -= coord[2]*inverseF[ip];
 	      } 
@@ -503,7 +502,7 @@ long trackRfCavityWithWakes
 	      coord[5] = -1;
 	    else 
 	      /* compute inverse focal length for exit kick */
-	      inverseF[ip] *= -1*gamma/gamma1;
+	      inverseF[ip] = -dgamma/(2*gamma1*length);
 	  }
 	}
         if (!wakesAtEnd) {
@@ -513,17 +512,18 @@ long trackRfCavityWithWakes
           if (trwake)
             track_through_trwake(part, np, trwake, *P_central, run, iPass, charge);
           if (LSCKick) {
-            if (dgammaOverGammaNp)
 #if !USE_MPI
+            if (dgammaOverGammaNp)
               dgammaOverGammaAve /= dgammaOverGammaNp;           
 #else
 	    if (notSinglePart) {
               double t1 = dgammaOverGammaAve;
               long t2 = dgammaOverGammaNp;
-	      MPI_Allreduce (&t1, &dgammaOverGammaAve, 1, MPI_DOUBLE, MPI_SUM, workers);
-              MPI_Allreduce (&t2, &dgammaOverGammaNp, 1, MPI_LONG, MPI_SUM, workers);  
-              dgammaOverGammaAve /= dgammaOverGammaNp; 
-	    } else
+	      MPI_Allreduce (&t1, &dgammaOverGammaAve, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+              MPI_Allreduce (&t2, &dgammaOverGammaNp, 1, MPI_LONG, MPI_SUM, MPI_COMM_WORLD);
+	      if (dgammaOverGammaNp)
+		dgammaOverGammaAve /= dgammaOverGammaNp; 
+	    } else if (dgammaOverGammaNp)
 	      dgammaOverGammaAve /= dgammaOverGammaNp;
     
 #endif
@@ -538,7 +538,7 @@ long trackRfCavityWithWakes
 	      coord[0] += coord[1]*length/2;
 	      coord[2] += coord[3]*length/2;
 	      coord[4] += length/2*sqrt(1+sqr(coord[1])+sqr(coord[3]));
-	      if (rfca->end2Focus) {
+	      if (rfca->end2Focus && (ik==nKicks-1)) {
 		coord[1] -= coord[0]*inverseF[ip];
 		coord[3] -= coord[2]*inverseF[ip];
 	      }
@@ -570,7 +570,7 @@ long trackRfCavityWithWakes
           }
         }
       }
-      free(inverseF); 
+      free(inverseF);
     } else {
       double sin_phase=0.0, cos_phase, inverseF;
       double R11=1, R21=0, R22, R12, dP, ds1;
@@ -604,7 +604,7 @@ long trackRfCavityWithWakes
               }
             }
             
-            if (rfca->end1Focus && length) {
+            if (rfca->end1Focus && length && ik==0) {
               /* apply end focus kick */
               inverseF = dgamma/(2*gamma*length);
               coord[1] -= coord[0]*inverseF;
@@ -657,7 +657,7 @@ long trackRfCavityWithWakes
             
             if ((gamma += dgamma)<=1)
               coord[5] = -1;
-            if (rfca->end2Focus && length) {
+            if (rfca->end2Focus && length && ik==(nKicks-1)) {
               inverseF = -dgamma/(2*gamma*length);
               coord[1] -= coord[0]*inverseF;
               coord[3] -= coord[2]*inverseF;
@@ -847,4 +847,15 @@ long track_through_rfcw
 }
 
 
+
+/* See H. Wiedemann, Particle Accelerator Physics I, 8.2.2 */
+double rfAcceptance_Fq(double q) 
+{
+  return 2*(sqrt(q*q-1)-acos(1/q));
+}
+
+double solveForOverVoltage(double F, double q0)
+{
+  return zeroNewton(&rfAcceptance_Fq, F, q0, 1e-6, 1000, 1e-12);
+}
 

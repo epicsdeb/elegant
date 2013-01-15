@@ -7,9 +7,24 @@
 # in the file LICENSE that is included with this distribution. 
 #*************************************************************************
 #
-# $Id: Makefile.OAG,v 1.24 2010/02/23 14:23:50 borland Exp $
+# $Id: Makefile.OAG,v 1.30 2012-03-23 16:30:29 soliday Exp $
 #
-# $Log: Makefile.OAG,v $
+# $Log: not supported by cvs2svn $
+# Revision 1.29  2011/11/02 19:35:47  borland
+# Include generateBunch.
+#
+# Revision 1.28  2011/10/05 16:02:00  borland
+# Added view3dGeometry, based on scripts written by Alexey Petrenko.
+#
+# Revision 1.27  2011/06/21 20:17:31  borland
+# Added scaleRingErrors.
+#
+# Revision 1.26  2011/06/10 18:26:49  borland
+# Added coreEmittance script.
+#
+# Revision 1.25  2011/04/21 13:54:36  borland
+# Added pop2param.
+#
 # Revision 1.24  2010/02/23 14:23:50  borland
 # Added spiffe2elegant
 #
@@ -107,24 +122,64 @@ endif
 PRODOAG = sddsemitmeas sddsemitproc sddsTouschekInteg \
           recurseSetup haissinski sddsmatchtwiss \
           sddsanalyzebeam sddsrandmult sddsresdiag \
-          sddsfindresonances touschekLifetime csrImpedance astra2elegant rfgun2elegant
+          sddsfindresonances touschekLifetime astra2elegant rfgun2elegant
 
-SCRIPTS = elegantRingAnalysis beamLifetimeCalc fin2param elegant2shower shower2elegant longitCmd longitCalcs km2sdds elegant2astra smoothDist6s impact2sdds impact2elegant computeTwissBeats fracEmittance doubleDist6 track2sdds track2mag elegant2track makeSkewResponseCP correctCoupling spiffe2elegant
+SCRIPTS = elegantRingAnalysis beamLifetimeCalc fin2param pop2param elegant2shower shower2elegant longitCmd longitCalcs km2sdds elegant2astra smoothDist6s impact2sdds impact2elegant computeTwissBeats fracEmittance doubleDist6 track2sdds track2mag elegant2track makeSkewResponseCP correctCoupling spiffe2elegant coreEmittance scaleRingErrors view3dGeometry generateBunch radiationEnvelope
 
 PROD_HOST = $(PRODOAG)
 
 USR_CFLAGS = 	-I$(EPICS_EXTENSIONS)/src/SDDS/include -I$(EPICS_EXTENSIONS_INCLUDE) \
 		-DIEEE_MATH -DzLib -D_ISOC99_SOURCE
 
+
+GSLLIB = 
+
+#Look for private version of GSL used here at APS
+GSL = $(words $(wildcard $(EPICS_EXTENSIONS)/src/SDDS/gsl))
+ifeq ($(GSL), 1)
+PROD_HOST += csrImpedance
+csrImpedance_CFLAGS = -I$(EPICS_EXTENSIONS)/src/SDDS/gsl -DUSE_GSL
+GSLLIB = gsl
+gsl_DIR = $(EPICS_EXTENSIONS_LIB)
+else
+
+#Look for system version of GSL
+SYSGSL = $(words $(notdir $(wildcard \
+/usr/lib/libgsl.a \
+/usr/lib/libgsl.so \
+/usr/lib64/libgsl.a \
+/usr/lib64/libgsl.so \
+/lib/libgsl.a \
+/lib/libgsl.so \
+/lib64/libgsl.a \
+/lib64/libgsl.so \
+/sw/lib/libgsl.a \
+/sw/lib/libgsl.dylib \
+/usr/sfw/lib/libgsl.a \
+/usr/sfw/lib/libgsl.so )))
+
+ifneq ($(SYSGSL), 0)
+STATIC_BUILD=NO
+PROD_HOST += csrImpedance
+csrImpedance_CFLAGS = -DUSE_GSL
+csrImpedance_LDFLAGS += -lgsl -lgslcblas
+sddsrandmult_LDFLAGS += -lgsl -lgslcblas
+endif
+endif
+
+
+
+
+
 ifdef WIN32
 USR_LIBS = 	mdbcommon matlib fftpack SDDS1 \
-		namelist rpnlib mdbmth mdblib \
-		meschach z fdlibm gsl
+		namelist rpnlib $(GSLLIB) mdbmth mdblib \
+		meschach z fdlibm
 z_DIR = $(EPICS_EXTENSIONS_LIB)
 else
 USR_LIBS = 	mdbcommon matlib fftpack SDDS1 \
-		namelist rpnlib mdbmth mdblib \
-		meschach gsl
+		namelist rpnlib $(GSLLIB) mdbmth mdblib \
+		meschach
 SYS_PROD_LIBS_DEFAULT += z 
 SYS_PROD_LIBS_Linux += z
 SYS_PROD_LIBS_solaris += z curses rt 
@@ -141,7 +196,6 @@ rpnlib_DIR = $(EPICS_EXTENSIONS_LIB)
 meschach_DIR = $(EPICS_EXTENSIONS_LIB)
 fdlibm_DIR = $(EPICS_EXTENSIONS_LIB)
 gsl_DIR = /usr/lib
-
 
 astra2elegant_SRCS = astra2elegant.c
 
@@ -167,6 +221,7 @@ sddsanalyzebeam_SRCS = sddsanalyzebeam.c
 sddsanalyzebeam_CFLAGS = -I$(EPICS_EXTENSIONS)/src/SDDS/meschach
 
 csrImpedance_SRCS = csrImpedance.c
-csrImpedance_CFLAGS = -I$(EPICS_EXTENSIONS)/src/SDDS/gsl
-csrImpedance_LIBS = gsl
+
+
+
 

@@ -6,6 +6,7 @@
 #include "namelist.h"
 
 #namelist correct static
+    long disable = 0;
     STRING mode = "trajectory";
     STRING method = "global";
     STRING trajectory_output = NULL;
@@ -37,5 +38,6 @@
     long closed_orbit_iterations = 40;
     double closed_orbit_iteration_fraction = 0.9;
     long use_perturbed_matrix = 0;
+    long use_response_from_computed_orbits = 0;
 #end
 

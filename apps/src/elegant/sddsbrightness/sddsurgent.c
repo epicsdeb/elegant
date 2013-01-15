@@ -16,7 +16,10 @@
  *        and also the crossed-undulators scheme [Nikitin,Kim].
  * Hairong Shang, May 2005
 
-$Log: sddsurgent.c,v $
+$Log: not supported by cvs2svn $
+Revision 1.19  2011/02/17 18:33:41  shang
+changed the default value of nSigma to 3.
+
 Revision 1.18  2010/04/18 02:35:25  borland
 Correctly computes spatial distribution for harmonic > 1.
 
@@ -232,11 +235,19 @@ calculation   specifies calculation method and mode. \n\
                 \n\
               mode: both urgent and us has following mode: \n\
                 1 | fluxDistribution:        Angular/spatial flux density distribution \n\
+                                             Flux distribution at the energy chosen as minimum energy.\n\
                 2 | fluxSpectrum:            Angular/spatial flux density spectrum \n\
+                                             Spectrum at any given point in space as selected by the X and Y\n\
+                                             coordinate for the center of the pinhole. X is horizontal and Y is vertical \n\
                 3 | brightness | brilliance: On-axis brilliance spectrum \n\
                 4 | pinholeSpectrum:         Flux spectrum through a pinhole \n\
+                                             Spectrum through a pinhole centered at X-center and Y-center with \n\
+                                             size X-size and Y-size.  The energy range is from the minimum to the \n\
+                                             maximum energy. \n\
                 5 | integratedSpectrum:      Flux spectrum integrated over all angles \n\
+                                             The pinhole parameters have no significance here. \n\
                 6 | powerDensity:            Power density and integrated power \n\
+                                             Integrated over all energies, thus the energy parameters have no significance here.\n\
                 \n";
 char *USAGE3="  urgent can have -6 mode (only valid for harmonics<=0), \n\
                 which does everything mode=6 does, plus \n\
@@ -297,8 +308,12 @@ omega      steps specifies no. of steps in photon energy for the natural linesha
             in units (energy of fundamental/N) [2.0] i.e. the default value covers the range +/- \n\
             2/N of the natural lineshape. used in mode=2,3,4,5, method=1. \n\
 photonEnergy  specifies the maximum and minimum photon energy in eV, \n\
-               and the number of energy points to be computed.\n\
-";
+               and the number of energy points to be computed.\n\n\
+URGENT (converted to sddsurgent) is program for calculating undulator radiation spectra. It is designed for \n\
+the accurate and efficient calculation of the basic properties (angular, spectral, polarization, power density) \n\
+of the radiation generated in ideal plane, helical or elliptical undulators, and also the crossed-undulators scheme.\n\n\
+sddsurgent also incorporated US program by Roger Dejusto to calculate undulator spectra within the Bessel function \n\
+approximation for an ideal planar undulator or an ideal elliptical undulator (including polarization in both cases).\n\n";
 
 int main(int argc, char **argv) {
   char *inputfile, *outputfile, *undulatorType, *description, *output, *method_str, *mode_str;
@@ -349,7 +364,7 @@ int main(int argc, char **argv) {
   electron_param.current=0.1;
   electron_param.energy = 7.0;
   electron_param.energySpread = 0.0;
-  electron_param.nsigma = 4;
+  electron_param.nsigma = 3;
   electron_param.sigmaxp = electron_param.sigmayp = 0.0;
   electron_param.sigmax = electron_param.sigmay =0.0;
   undulator_param.itype=1;
@@ -726,7 +741,6 @@ int main(int argc, char **argv) {
       /*in us, current is in mA units, while urgent is in A units */
       period=undulator_param.period*100;
       current=electron_param.current*1000;
-      
       us_(&electron_param.energy, &current, &electron_param.sigmax,
           &electron_param.sigmay, &electron_param.sigmaxp, &electron_param.sigmayp,
           &period, &undulator_param.nPeriod, &undulator_param.kx, &undulator_param.ky,

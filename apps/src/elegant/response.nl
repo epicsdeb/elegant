@@ -14,5 +14,6 @@
     long output_before_tune_correction = 0;
     long fixed_length = 0;
     long coupled = 0;
+    long use_response_from_computed_orbits = 0;
 #end
 

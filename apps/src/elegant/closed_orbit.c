@@ -102,12 +102,14 @@ void setup_closed_orbit(NAMELIST_TEXT *nltext, RUN *run, LINE_LIST *beamline)
     log_exit("setup_closed_orbit");
     }
 
-long run_closed_orbit(RUN *run, LINE_LIST *beamline, double *starting_coord, BEAM *beam, long do_output)
+long run_closed_orbit(RUN *run, LINE_LIST *beamline, double *starting_coord, BEAM *beam, unsigned long flags)
 {
     double dp, deviation[6];
     long i, bad_orbit;
     VMATRIX *M;
+    long do_output;
     
+    do_output = flags&CLOSED_ORBIT_OUTPUT;
 #if USE_MPI
     if (isSlave)
       do_output = 0;
@@ -116,7 +118,7 @@ long run_closed_orbit(RUN *run, LINE_LIST *beamline, double *starting_coord, BEA
     if (!starting_coord)
         bombElegant("starting_coord array is NULL (run_closed_orbit)", NULL);
 
-    if (start_from_centroid || start_from_dp_centroid) {
+    if ((start_from_centroid || start_from_dp_centroid) && !(flags&CLOSED_ORBIT_IGNORE_BEAM)) {
       double initial[6];
       if (!beam)
         bombElegant("no beam present for closed-orbit calculation starting from centroid", NULL);

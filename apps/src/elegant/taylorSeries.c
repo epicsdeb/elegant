@@ -14,11 +14,7 @@
  */
 
 /*
- $Log: taylorSeries.c,v $
- Revision 1.4  2010/08/12 15:32:21  borland
- Added exitElegant() routine so that any exit will result in creation of
- semaphore files if requested.
-
+ $Log: not supported by cvs2svn $
  Revision 1.3  2010/02/05 17:48:07  soliday
  Fixed minor issues related to compiler warnings.
 

@@ -3,7 +3,35 @@
   exec oagwish "$0" "$@"
 
 #
-# $Log: elegantRingAnalysis,v $
+# $Log: not supported by cvs2svn $
+# Revision 1.32  2011/06/02 17:32:41  borland
+# Added ability to enable/disable orbit correction.
+#
+# Revision 1.31  2011/06/02 16:53:32  borland
+# Added saving/loading of correction() array.
+#
+# Revision 1.30  2011/06/02 16:35:58  borland
+# Moved correction controls to separate frame to indicate that they are active
+# without explicit errors.
+#
+# Revision 1.29  2011/06/02 16:20:41  borland
+# For FMA, can now specify using a single job (good for parallel mode).
+#
+# Revision 1.28  2011/06/02 16:16:48  borland
+# Added control of number of orbit correction SVs.
+#
+# Revision 1.27  2011/06/02 15:51:52  borland
+# Added BPM offset errors.
+#
+# Revision 1.26  2011/06/01 23:51:48  borland
+# Added portability improvements.  Added side tab option to elegantRingAnalysis.
+#
+# Revision 1.25  2011/05/26 17:04:56  borland
+# Added option to use parallel elegant for DA with errors.
+#
+# Revision 1.24  2011/04/06 15:21:37  borland
+# Added control of number of processors for FMA delta.
+#
 # Revision 1.23  2010/10/19 02:24:42  borland
 # Added control over number of processors for FMA.
 #
@@ -121,8 +149,11 @@
 #
 #
 
-set auto_path [linsert $auto_path 0  /usr/local/oag/apps/lib/$env(HOST_ARCH)]
-set auto_path [linsert $auto_path 0  /usr/local/oag/lib_patch/$env(HOST_ARCH)]
+if ![info exists env(OAG_TOP_DIR)] {
+    set env(OAG_TOP_DIR) /usr/local
+}
+set auto_path [linsert $auto_path 0  $env(OAG_TOP_DIR)/oag/apps/lib/$env(HOST_ARCH)]
+
 APSDebugPath
 
 set CVSRevisionAuthor "\$Author: borland $"
@@ -290,8 +321,29 @@ proc Display {args} {
 }
 
 proc FillErrorsFrame {widget args} {
-    global errors
-    APSFrame .f1 -parent $widget
+    global errors correction
+
+    APSFrame .f0 -parent $widget -label "Orbit correction"
+    set w0 $widget.f0.frame
+    APSRadioButtonFrame .disable -parent $w0 \
+	-label "Enable: " -valueList {0 1} -buttonList {Yes No} \
+	-variable correction(disableOrbitCorrection) -orientation horizontal 
+    APSLabeledEntryFrame .svs -parent $w0 \
+	-label "Singular values for H, V orbit correction: " \
+	-width 10 -orientation horizontal \
+	-variableList [list correction(horizontalSVs) correction(verticalSVs)]  -contextHelp \
+	"Enter the number of largest singular values to use for orbit correction.  If zero, chosen automatically, which is generally good unless the orbit correction configuration has issues."
+    APSLabeledEntry .accuracy -parent $w0 \
+	-label "Accuracy of orbit determination (m): " -width 10 -textVariable correction(orbitAccuracy) \
+	-contextHelp "Enter the required accuracy of orbit determination. If orbit is not found, try increasing this value." 
+    APSLabeledEntry .fraction -parent $w0 \
+	-label "Iteration fraction for orbit determination: " -width 10 -textVariable correction(orbitIterationFraction) \
+	-contextHelp "Enter the desired iteration fraction for orbit determination. If orbit is not found, try decreasing this value while increasing the number of iterations."
+    APSLabeledEntry .iterations -parent $w0 \
+	-label "Maximum iterations for orbit determination: " -width 10 -textVariable correction(orbitIterations) \
+	-contextHelp "Enter the maximum number of iterations for orbit determination. If orbit is not found, try increasing the number of iterations."
+
+    APSFrame .f1 -parent $widget -label "Error control"
     set w0 $widget.f1.frame
     APSRadioButtonFrame .on -parent $w0 \
       -label "Include error in computation?" -valueList {1 0} -buttonList {Yes No} \
@@ -307,13 +359,13 @@ proc FillErrorsFrame {widget args} {
       -contextHelp \
       "Enter the name of an optional file from which to read errors"
 
-    APSFrame .other -parent $widget
+    APSFrame .other -parent $widget -label "Error rms values"
     set w1 $widget.other.frame
     APSRadioButtonFrame .mask -parent $w1 -label "Mask?" -valueList {1 0} -buttonList {Yes No} \
         -variable errors(maskTable) -orientation horizontal \
         -commandList [list "APSDisableWidget $w1.fg" "APSEnableWidget $w1.fg" ]
     APSFrameGrid .fg -parent $w1 -xList "magnet dx dy dtilt fse" \
-      -yList "label bend quad sext"
+      -yList "label bend quad sext moni"
     if $errors(maskTable) {
         APSDisableWidget $w1.fg
     }
@@ -321,12 +373,12 @@ proc FillErrorsFrame {widget args} {
         label $w1.fg.$label.label.label -text "$label ($unit)"
         pack $w1.fg.$label.label.label 
     }
-    foreach magnet {Bend Quad Sext} type {bend quad sext} {
+    foreach magnet {Bend Quad Sext Moni} type {bend quad sext moni} {
         label $w1.fg.magnet.$type.label -text "${magnet}:" 
         pack $w1.fg.magnet.$type.label
     }
     foreach quantity {dx dy dtilt fse} {
-        foreach type {bend quad sext} magnet {Bend Quad Sext} {
+        foreach type {bend quad sext moni} magnet {Bend Quad Sext Moni} {
             entry $w1.fg.$quantity.$type.entry \
               -textvariable errors($quantity$magnet) \
               -width 10
@@ -850,6 +902,11 @@ proc FillDynamicApertureErrorsFrame {widget args} {
       -variable dynamicApertureErrors(includeApertures) -contextHelp \
       "Choose whether to include the effects of apertures that are defined in the beamline."
 
+    APSLabeledEntry .nproc -parent $widget \
+	-label "Number of cores per job: " -width 20 \
+	-textVariable dynamicApertureErrors(nCores) \
+	-contextHelp "Enter the number of cores per job.  If 1, then serial elegant is used."
+
     APSLabeledEntry .leaf -parent $widget \
       -label "Aperture file: " -width 80 -textVariable dynamicApertureErrors(apertureFile) \
       -fileSelectButton 1 -buttonsOnLeft 1 -fileSelectPattern *.sdds \
@@ -1031,13 +1088,16 @@ proc FillFrequencyMapFrame {widget args} {
       -label "Number of turns: " -width 20 -textVariable frequencyMap(turns) \
       -contextHelp \
       "Enter the number of turns to track."
-    APSLabeledEntry .le6a -parent $widget \
-	-label "Number of processors per job: " -width 20 -textVariable frequencyMap(processors) \
-	-contextHelp "Enter the number of processors per job."
     APSLabeledEntry .le7 -parent $widget \
       -label "Fractional momentum offset: " -width 20 -textVariable frequencyMap(delta) \
       -contextHelp "Enter the fractional momentum offset" 
-
+    APSLabeledEntry .le6a -parent $widget \
+	-label "Number of processors per job: " -width 20 -textVariable frequencyMap(processors) \
+	-contextHelp "Enter the number of processors per job."
+    APSRadioButtonFrame .rb2 -parent $widget \
+	-label "Single job: " -orientation horizontal -buttonList {Yes No} -valueList {1 0} \
+	-variable frequencyMap(singleJob) \
+	-contextHelp "Select to use a single job.  Probably makes sense if more than one processor per job is used."
 
     APSRadioButtonFrame .rb0 -parent $widget \
       -label "Compute diffusion: " -orientation horizontal -buttonList {Yes No} -valueList {1 0} \
@@ -1111,6 +1171,10 @@ proc FillFrequencyMapDeltaFrame {widget args} {
       -label "Run suffix: " -width 20 -textVariable frequencyMapDelta(userSuffix) \
       -contextHelp "Enter the suffix for the filenames."
     
+    APSLabeledEntry .le12 -parent $widget \
+	-label "Number of processors per job: " -width 20 -textVariable frequencyMapDelta(processors) \
+	-contextHelp "Enter the number of processors per job."
+
     APSButton .bu1 -parent $widget \
       -text "Run" -command "Run -computation FrequencyMapDelta"
     APSButton .bu2 -parent $widget \
@@ -1212,6 +1276,8 @@ proc FillMomentumApertureFrame {widget args} {
       -textVariable momentumAperture(userSuffix)
     APSButton .bu1 -parent $widget \
       -text "Run" -command "Run -computation MomentumAperture"
+    APSButton .bu15 -parent $widget \
+      -text "Process" -command "Run -computation MomentumAperture -processOnly 1"
     APSButton .bu2 -parent $widget \
       -text "Display" -command {Display -type MomentumAperture}
     global apsAbortElegantRun
@@ -1267,7 +1333,7 @@ proc DescribeSection {args} {
     }
 }
 
-lappend elegantSaveVarList errors
+lappend elegantSaveVarList errors correction
 lappend elegantSaveVarList momentum matrixLatticeFile kickLatticeFile mainParameterFile mainDirectory
 lappend elegantSaveVarList mainPrefix gridEngine forceOccurence makePngFiles
 lappend elegantSaveVarList matrixBeamline kickBeamline matrixOffsetElement kickOffsetElement
@@ -1279,8 +1345,13 @@ lappend elegantSaveVarList momentumAperture kickApertureErrors
 set args $argv
 set configuration ""
 set templateDirectory ""
-if {[APSStrictParseArguments {configuration templateDirectory}]} {
-    return -code error "usage: $argv0 \[-configuration <filename>\] \[-templateDirectory <path>\]"
+set sideTabs 0
+if {[APSStrictParseArguments {configuration templateDirectory sideTabs}]} {
+    return -code error "usage: $argv0 \[-configuration <filename>\] \[-templateDirectory <path>\] [-sideTabs 1\]"
+}
+set tabPosition n
+if $sideTabs {
+    set tabPosition w
 }
 if {[string length $configuration]} {
     if ![file exists $configuration] {
@@ -1294,7 +1365,7 @@ if [string length $templateDirectory] {
     set sourceDir $templateDirectory
 }
 
-set topTabList [APSTabFrame .top -parent .userFrame \
+set topTabList [APSTabFrame .top -parent .userFrame -tabPosition $tabPosition \
                   -labelList $topLabelList -frameIndexVariable topIndex \
                   -width 900 -height 600 -packOption "-expand true" \
                   -commandList \
@@ -1304,7 +1375,7 @@ set index 0
 foreach name $topLabelList widget $topTabList { 
     set tabList [set ${name}TabList]
     set len [llength $tabList] 
-    set tabFrameList [APSTabFrame .under$name -parent $widget  -packOption "-expand true"\
+    set tabFrameList [APSTabFrame .under$name -parent $widget  -packOption "-expand true" -tabPosition $tabPosition \
                         -labelList $tabList -width 900 -height 550 \
                         -frameIndexVariable ${name}Index \
                         -commandList \

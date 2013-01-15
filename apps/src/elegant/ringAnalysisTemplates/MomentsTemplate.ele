@@ -60,6 +60,22 @@ sinclude(<ERRORPARAM>)
 	iteration_fraction = 0.1,
 &end
 
+&correct
+	disable = <disableOrbitCorrection>,
+        mode = "orbit", method = "global",
+        verbose = 1, n_iterations = 4, n_xy_cycles = 100,
+        correction_fraction[0] = 0.5, 0.5,
+        bpm_noise[0] = 0e-6, 0e-6,
+        correction_accuracy[0] = 1e-6, 1e-6,
+        trajectory_output = "%s.orb",
+        corrector_output = "%s.cor",
+        statistics = "%s.scor",
+        closed_orbit_iteration_fraction = <orbitIterationFraction>
+        closed_orbit_iterations = <orbitIterations>,
+        closed_orbit_accuracy = <orbitAccuracy>,
+	keep_largest_SVs[0] = <horizontalSVs>, <verticalSVs>
+&end
+
 &twiss_output
         filename = "%s.twi",
         concat_order = <order>,
@@ -72,10 +88,10 @@ sinclude(<ERRORPARAM>)
         matched = 1
         equilibrium = 1
         output_at_each_step = 1
+	verbosity = 10
 &end
 
 &run_control 
-	n_steps = <numberOfSeeds>,
 &end
 
 sinclude(<ERROR>)

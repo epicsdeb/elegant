@@ -1,4 +1,3 @@
-
 /*************************************************************************\
 * Copyright (c) 2002 The University of Chicago, as Operator of Argonne
 * National Laboratory.
@@ -70,6 +69,7 @@ extern long particleIsElectron;
 /* various user-controlled global flags (global_settings namelist) */
 extern long inhibitFileSync;
 extern long echoNamelists;
+extern long mpiRandomizationMode;
 
 /* flag used to identify which processor is allowed to write to a file */
 extern long writePermitted;
@@ -100,6 +100,8 @@ extern long do_find_aperture; /* A flag to set singlePart tracking in dynamic ap
 extern long watch_not_allowed; /* A flag to indicate the watch point is not allowed for aperture searching for Pelegant */
 extern long last_optimize_function_call; /* A flag used to indicate if it is the last optimization function call (after exiting the optimization loop)  */
 extern int min_value_location; /* The location (which processor) of the optimization value */
+/* A flag used to specify if the output will be enabled for some special cases. E.g., simplex method in Pelegant */
+extern long enableOutput;
 #endif
 
 #ifndef __cplusplus
@@ -182,11 +184,11 @@ typedef struct {
 #define DO_NORMEMIT_SUMS 0
 
 typedef struct {
-    double centroid[6];  /* centroid[i] = Sum(x[i]/n) */
-    double sigma[6][6];  /* sigma[i][j] = Sum((x[i]-c[i])*(x[j]-c[j])/n) */
-    double maxabs[6];    /* maximum values for x, xp, y, yp, max deviation for s, max value for dp/p */
-    double min[6];
-    double max[6];
+    double centroid[7];  /* centroid[i] = Sum(x[i]/n), i=6 is time */
+    double sigma[7][7];  /* sigma[i][j] = Sum((x[i]-c[i])*(x[j]-c[j])/n) */
+    double maxabs[7];    /* maximum values for x, xp, y, yp, max deviation for s, max value for dp/p, max deviation for t */
+    double min[7];
+    double max[7];
     long n_part;         /* number of particles */
     double z;            /* z location */
     double p0;           /* reference momentum (beta*gamma) */
@@ -220,6 +222,7 @@ typedef struct element_list {
     double Pref_input, Pref_output;
     double Pref_output_fiducial;
     VMATRIX *matrix;      /* pure matrix of this element */
+    VMATRIX *savedMatrix; /* saved matrix of this element */
     VMATRIX *accumMatrix; /* accumulated matrix to the end of this element */
     TWISS *twiss;         /* computed from the above matrices */
     VMATRIX *Mld;         /* linear damping matrix (on-orbit, with trajectory ) */
@@ -267,20 +270,20 @@ typedef struct {
 /* radiation integrals and related values.  See SLAC 1193. */
 typedef struct {
   short computed;
-  double RI[5];
+  double RI[6];
   double Jx, Jy, Jdelta;
   double taux, tauy, taudelta;
   double ex0, sigmadelta, Uo;
 } RADIATION_INTEGRALS;
 
 typedef struct {
-  /* First-order geometric terms */
-  double h21000, h30000, h10110, h10020, h10200;
+  /* First-order geometric terms (abs, real, imag) */
+  double h21000[3], h30000[3], h10110[3], h10020[3], h10200[3];
   /* First order chromatic terms */
-  double h11001, h00111, h20001, h00201, h10002;
+  double h11001[3], h00111[3], h20001[3], h00201[3], h10002[3];
   /* Second-order geometric terms */
-  double h22000, h11110, h00220, h31000, h40000;
-  double h20110, h11200, h20020, h20200, h00310, h00400;
+  double h22000[3], h11110[3], h00220[3], h31000[3], h40000[3];
+  double h20110[3], h11200[3], h20020[3], h20200[3], h00310[3], h00400[3];
   /* tune shifts with amplitude */
   double dnux_dJx, dnux_dJy, dnuy_dJy;
 } DRIVING_TERMS;
@@ -353,12 +356,15 @@ typedef struct {
 #define DIFFERENTIAL_MOD   0x01
 #define MULTIPLICATIVE_MOD 0x02
 #define VERBOSE_MOD        0x04
+#define REFRESH_MATRIX_MOD 0x08
     double *unperturbedValue;    /* value without modulation */
     char **expression;           /* rpn expression for A(t) */
     long *dataIndex;             /* used for sharing of data tables */
     long *nData;                 /* number of data elements */
     double **timeData;           /* time values */
     double **modulationData;     /* amplitude values */
+    char **record;               /* output filenames */
+    FILE **fpRecord;             /* output file structures */
   } MODULATION_DATA;
 
 typedef struct {
@@ -419,6 +425,7 @@ typedef struct {
     long n_steps;                /* number of error sets/bunches levels */
     double bunch_frequency;      /* bunch interval, if timing is varied */
     long reset_rf_each_step;     /* whether to reset rf element phases/timing */
+    long reset_scattering_seed;  /* whether to reset random numbers for scattering for each step */
     unsigned long fiducial_flag; /* for track_beam/do_tracking */
     long n_passes;               /* number of times to go through beamline */
     long new_data_read;          /* new data has been read for variation of elements */
@@ -517,6 +524,10 @@ typedef struct {
 #define OPTIM_METHOD_SWARM      8
 #define N_OPTIM_METHODS         9
 
+
+  /* The definitions of PGA_CROSSOVER_ONEPT, PGA_CROSSOVER_TWOPT, PGA_CROSSOVER_UNIFORM can be found at pgapack.h */
+#define N_CROSSOVER_TYPES       3
+
 typedef struct {
     long mode, method;
     double tolerance, target;
@@ -548,6 +559,7 @@ typedef struct {
     long population_size;
     long print_all_individuals;
     SDDS_TABLE popLog;
+    long crossover_type;          /* For genetic optimization only */
     } OPTIMIZATION_DATA;
 
 /* structure to store particle coordinates */
@@ -558,6 +570,7 @@ typedef struct {
     double p0_original;     /* initial central momentum */
     double **particle;      /* current/final coordinates */
     long n_to_track;        /* initial number of particles being tracked. */
+    long n_lost;            /* number of lost paricles */
 #if SDDS_MPI_IO
   long n_to_track_total;    /* The total number of particles being tracked on all the processors */
   long n_original_total;    /* The total number of particles read from data file */
@@ -566,6 +579,7 @@ typedef struct {
     double p0;              /* current/final central momentum */
     double **accepted;      /* coordinates of accepted particles, with loss info on lost particles */
     long n_accepted;        /* final number of particles being tracked. */
+    double **lost;          /* coordinates of lost particles, with pass on which a particle is lost */	
     long *lostOnPass;       /* pass on which a particle is lost */
     double bunchFrequency;
     } BEAM;
@@ -596,15 +610,15 @@ typedef struct {
 } SASEFEL_OUTPUT;
 
 typedef struct {
-	char *name;
-	long nskip;
-	long horizontal, vertical, longitudinal;
-	long nonlinear;
-	double sigmax, sigmay, sigmaz, sigmap; 
-	double c0;   			/* c0=re*np/(2*Pi)^(3/2) -> calculate once.  */
-	double c1;	 			/* c1=c0/p0^3/sigmaz -> calculate every turn */
-	double dmux, dmuy;
-        double length;
+  char *name;
+  long nskip;
+  long horizontal, vertical, longitudinal, uniform;
+  long nonlinear;
+  double sigmax, sigmay, sigmaz, sigmap; 
+  double c0;   			/* c0=re*np/(2*Pi)^(3/2) -> calculate once.  */
+  double c1;	 			/* c1=c0/p0^3/sigmaz -> calculate every turn */
+  double dmux, dmuy;
+  double length;
 } SPACE_CHARGE;
 
 typedef struct {
@@ -798,7 +812,12 @@ extern char *final_unit[N_FINAL_QUANTITIES];
 #define T_EMITTANCE 102
 #define T_MHISTOGRAM 103
 #define T_FTABLE 104
-#define N_TYPES   105
+#define T_KOCT 105
+#define T_MRADINTEGRALS 106
+#define T_APPLE 107
+#define T_MRFDF 108
+#define T_CORGPIPE 109
+#define N_TYPES   110
 
 extern char *entity_name[N_TYPES];
 extern char *madcom_name[N_MADCOMS];
@@ -807,11 +826,11 @@ extern char *entity_text[N_TYPES];
 /* number of parameters for physical elements
  * a zero indicates an unsupported element
  */
-#define N_QUAD_PARAMS 16
+#define N_QUAD_PARAMS 29
 #define N_BEND_PARAMS 24
 #define N_DRIFT_PARAMS 2
-#define N_SEXT_PARAMS 8
-#define N_OCTU_PARAMS 0
+#define N_SEXT_PARAMS 9
+#define N_OCTU_PARAMS 8
 #define N_MULT_PARAMS 12
 #define N_SOLE_PARAMS 7
 #define N_HCOR_PARAMS 11
@@ -821,12 +840,12 @@ extern char *entity_text[N_TYPES];
 #define N_HMON_PARAMS 9
 #define N_VMON_PARAMS 9
 #define N_MONI_PARAMS 11
-#define N_RCOL_PARAMS 6
+#define N_RCOL_PARAMS 7
 #define N_ECOL_PARAMS 8
 #define N_MARK_PARAMS 3
 #define N_MATR_PARAMS 3
 #define N_ALPH_PARAMS 13
-#define N_RFDF_PARAMS 20
+#define N_RFDF_PARAMS 26
 #define N_RFTMEZ0_PARAMS 36
 #define N_RMDF_PARAMS 10
 #define N_TMCF_PARAMS 18
@@ -843,22 +862,22 @@ extern char *entity_text[N_TYPES];
 #define N_RECIRC_PARAMS 1
 #define N_QFRING_PARAMS 9
 #define N_SCRAPER_PARAMS 13
-#define N_CENTER_PARAMS 6
+#define N_CENTER_PARAMS 9
 #define N_KICKER_PARAMS 13
 #define N_KSEXT_PARAMS 17
 #define N_KSBEND_PARAMS 27
-#define N_KQUAD_PARAMS 24
+#define N_KQUAD_PARAMS 37
 #define N_MAGNIFY_PARAMS 6
 #define N_SAMPLE_PARAMS 2
 #define N_HVCOR_PARAMS 13
 #define N_SCATTER_PARAMS 6
-#define N_NIBEND_PARAMS 22
+#define N_NIBEND_PARAMS 24
 #define N_KPOLY_PARAMS 8
 #define N_RAMPRF_PARAMS 9
 #define N_RAMPP_PARAMS 1
 #define N_NISEPT_PARAMS 9
 #define N_STRAY_PARAMS 7
-#define N_CSBEND_PARAMS 47
+#define N_CSBEND_PARAMS 48
 #define N_MATTER_PARAMS 8
 #define N_RFMODE_PARAMS 23
 #define N_TRFMODE_PARAMS 20
@@ -876,16 +895,16 @@ extern char *entity_text[N_TYPES];
 #define N_CHARGE_PARAMS 2
 #define N_PFILTER_PARAMS 6
 #define N_HISTOGRAM_PARAMS 11
-#define N_CSRCSBEND_PARAMS 69
+#define N_CSRCSBEND_PARAMS 70
 #define N_CSRDRIFT_PARAMS 20
 #define N_REMCOR_PARAMS 6
 #define N_MAPSOLENOID_PARAMS 18
 #define N_RFCW_PARAMS 40
 #define N_REFLECT_PARAMS 1
 #define N_CLEAN_PARAMS 7
-#define N_TWISSELEMENT_PARAMS 13
-#define N_WIGGLER_PARAMS 8
-#define N_SCRIPT_PARAMS 32
+#define N_TWISSELEMENT_PARAMS 22
+#define N_WIGGLER_PARAMS 10
+#define N_SCRIPT_PARAMS 34
 #define N_FLOORELEMENT_PARAMS 6
 #define N_LTHINLENS_PARAMS 8
 #define N_LMIRROR_PARAMS 9
@@ -904,12 +923,17 @@ extern char *entity_text[N_TYPES];
 #define N_SCMULT_PARAMS 0		
 #define N_ILMATRIX_PARAMS 33
 #define N_TSCATTER_PARAMS 1
-#define N_KQUSE_PARAMS 14
+#define N_KQUSE_PARAMS 15
 #define N_UKICKMAP_PARAMS 13
 #define N_MKICKER_PARAMS 13
 #define N_EMITTANCEELEMENT_PARAMS 4
 #define N_MHISTOGRAM_PARAMS 12
 #define N_FTABLE_PARAMS 13
+#define N_KOCT_PARAMS 17
+#define N_MRADITEGRALS_PARAMS 1
+#define N_APPLE_PARAMS 25
+#define N_MRFDF_PARAMS 23
+#define N_CORGPIPE_PARAMS 15
 
 #define PARAM_CHANGES_MATRIX   0x0001UL
 #define PARAM_DIVISION_RELATED 0x0002UL
@@ -987,15 +1011,23 @@ typedef struct {
 
 extern ELEMENT_DESCRIPTION entity_description[N_TYPES];
 
+#define QFRINGE_SIMPLE 0
+#define QFRINGE_INSET  1
+#define QFRINGE_INTEGRALS 2
+
 /* names and storage structure for quadrupole physical parameters */
 extern PARAMETER quad_param[N_QUAD_PARAMS];
 
 typedef struct {
-    double length, k1, tilt, ffringe;
+    double length, k1, tilt;
     double dx, dy, dz, fse, xkick, ykick;
     double xKickCalibration, yKickCalibration;
     long xSteering, ySteering, order;
+    long edge1_effects, edge2_effects;
     char *fringeType;
+    double ffringe;
+    double fringeIntP[5], fringeIntM[5];
+    long radial;
     } QUAD;
 
 /* names and storage structure for bending magnet physical parameters */
@@ -1037,8 +1069,18 @@ extern PARAMETER sext_param[N_SEXT_PARAMS];
 typedef struct {
     double length, k2, tilt;
     double dx, dy, dz, fse;
+    double ffringe;
     long order;
     } SEXT;
+
+/* names and storage structure for octupole physical parameters */
+extern PARAMETER octu_param[N_OCTU_PARAMS];
+
+typedef struct {
+    double length, k3, tilt;
+    double dx, dy, dz, fse;
+    long order;
+    } OCTU;
 
 /* names and storage structure for solenoid */
 extern PARAMETER sole_param[N_SOLE_PARAMS] ;
@@ -1171,6 +1213,7 @@ extern PARAMETER rcol_param[N_RCOL_PARAMS] ;
 typedef struct {
     double length, x_max, y_max, dx, dy;
     char *openSide;
+    long invert;
     } RCOL;
 
 /* names and storage structure for elliptical collimator physical parameters */
@@ -1193,8 +1236,9 @@ typedef struct {
 /* storage structure for twiss element (sets twiss parameters) */
 typedef struct {
   TWISS twiss;
-  long fromBeam, computeOnce, applyOnce, verbose;
+  long fromBeam, from0Values, computeOnce, applyOnce, verbose;
   long disable;
+  TWISS twiss0;
   /* internal variables */
   long transformComputed;
 } TWISSELEMENT;
@@ -1210,6 +1254,11 @@ typedef struct {
   double position[3]; /* X, Y, Z */
   double angle[3];    /* theta, phi, psi */
 } FLOORELEMENT;
+
+/* storage structure for radiation integral multiplier */
+typedef struct {
+  double factor;
+} MRADINTEGRALS;
 
 /* storage structure for marker */
 
@@ -1255,13 +1304,12 @@ typedef struct {
     double gradient;   
     } ALPH;
 
-/* names and storage structure for RF deflector cavity done with
- * inaccurate method (electric field)
+/* names and storage structure for RF deflector cavity
  */
 extern PARAMETER rfdf_param[N_RFDF_PARAMS] ;
    
 typedef struct {
-  double length, phase, tilt, frequency, voltage;
+  double length, phase, tilt, frequency, voltage, fse;
   double time_offset;             /* equivalent to phase */
   long n_kicks, phase_reference;
   long standingWave;
@@ -1271,6 +1319,9 @@ typedef struct {
   double groupVoltageNoise, groupPhaseNoise;
   long voltageNoiseGroup, phaseNoiseGroup;
   long startPass, endPass;
+  long driftMatrix;
+  double dx, dy, dz;
+  long magneticDeflection;
   /* for internal use only */
   double t_first_particle;        
   long initialized, fiducial_seen;
@@ -1279,6 +1330,20 @@ typedef struct {
   double V_tFinal, V_tInitial;
   long n_Vpts;
 } RFDF;
+
+/* names and storage structure for multipole RF deflector cavity
+ */
+extern PARAMETER mrfdf_param[N_MRFDF_PARAMS] ;
+   
+typedef struct {
+  double factor, tilt;
+  double a[5], b[5], frequency[5], phase[5];
+  long phase_reference;
+  /* for internal use only */
+  double t_first_particle;        
+  long initialized, fiducial_seen;
+} MRFDF;
+
 
 /* names and storage structure for RF deflector cavity done with
  * correct TM110 mode fields
@@ -1622,10 +1687,10 @@ typedef struct {
 extern PARAMETER center_param[N_CENTER_PARAMS];
 
 typedef struct {
-    long x, xp, y, yp, onceOnly, onPass;
+    long doCoord[7], onceOnly, onPass;
     /* for internal use only */
-    long deltaSet[4];
-    double delta[4];
+    long deltaSet[7];
+    double delta[7];
     } CENTER;
 
 /* names and storage structure for beam correlation remover parameters */
@@ -1686,6 +1751,22 @@ typedef struct {
     MULTIPOLE_DATA totalMultipoleData;  /* generated when randomization takes place */
     } KSEXT;
 
+/* names and storage structure for kick octupole physical parameters */
+extern PARAMETER koct_param[N_KOCT_PARAMS];
+
+typedef struct {
+    double length, k3, tilt, bore, B;
+    double dx, dy, dz, fse;
+    long n_kicks, synch_rad;
+    char *systematic_multipoles, *random_multipoles;
+    long integration_order, sqrtOrder, isr, isr1Particle;
+    /* for internal use */
+    long multipolesInitialized;
+    MULTIPOLE_DATA systematicMultipoleData; 
+    MULTIPOLE_DATA randomMultipoleData;      
+    MULTIPOLE_DATA totalMultipoleData;  /* generated when randomization takes place */
+    } KOCT;
+
 /* names and storage structure for symplectic bending magnet physical parameters */
 extern PARAMETER ksbend_param[N_KSBEND_PARAMS];
 
@@ -1712,6 +1793,9 @@ typedef struct {
     long xSteering, ySteering, n_kicks, synch_rad;
     char *systematic_multipoles, *random_multipoles, *steering_multipoles;
     long integration_order, sqrtOrder, isr, isr1Particle;
+    long edge1_effects, edge2_effects;
+    double fringeIntP[5], fringeIntM[5];
+    long radial;
     /* for internal use */
     long multipolesInitialized;
     MULTIPOLE_DATA systematicMultipoleData; 
@@ -1849,14 +1933,15 @@ typedef struct {
     double etilt;               /* error tilt angle */
     double accuracy;
     char *model, *method;
-    long synch_rad, adjustBoundary, adjustField;
+    long synch_rad, adjustBoundary, adjustField, fudgePathLength, fringePosition;
     /* for internal use only: */
     long initialized;       /* initialization done */
     double flen;            /* distance from iron edge to end of fringe field */
     double rho0;            /* central bending radius */ 
     double fse_adjust;      /* if adjustField, drho/rho0 to get correct bending angle */
     double zeta_offset;     /* if adjustBoundary, offset of fringe field perpendicular 
-                             * to pole face to get correct bend angle */
+                             * to pole face to get correct bend angle. Also affected by the
+                             * setting of boundaryPosition */
     double x_correction;    /* used to fix spurious central trajectory offsets */
     double s_offset;        /* error in path length, which must be compensated with drifts before and after */
     long angleSign;         /* used internally to keep sign of angle separate from angle */
@@ -1939,7 +2024,7 @@ typedef struct {
     double fse;     /* Fractional Strength Error */
     double etilt;   /* error tilt angle */
     long n_kicks, nonlinear, synch_rad;
-    long edge1_effects, edge2_effects, edge_order;
+    long edge1_effects, edge2_effects, edge_order, fringe;
     long integration_order;
     double edge1_kick_limit, edge2_kick_limit;
     long kick_limit_scaling;
@@ -1967,7 +2052,7 @@ typedef struct {
     double binRangeFactor;
     long SGHalfWidth, SGOrder, SGDerivHalfWidth, SGDerivOrder, trapazoidIntegration;
     char *histogramFile;
-    long outputInterval, outputLastWakeOnly, steadyState;
+    long outputInterval, outputLastWakeOnly, steadyState, integratedGreensFunction;
     long use_bn, expansionOrder;
     double b1, b2, b3, b4, b5, b6, b7, b8;
     long isr, isr1Particle, csr, csrBlock;
@@ -2279,6 +2364,18 @@ typedef struct {
     double *W, *t, macroParticleCharge, dt;
   } WAKE;
 
+/* names and storage structure for longitudinal corrugated-pipe wake physical parameters */
+extern PARAMETER corgpipe_param[N_CORGPIPE_PARAMS];
+
+typedef struct {
+    double length, radius, period, gap, depth, dt, tmax;
+    long n_bins;
+    long interpolate;          /* flag to turn on interpolation */
+    long smoothing, SGHalfWidth, SGOrder;  /* flag to turn on smoothing plus control parameters */
+    long change_p0, allowLongBeam;
+    long rampPasses;           /* If nonzero, the number of passes over which to ramp wake up */
+  } CORGPIPE;
+
 /* names and storage structure for transverse wake physical parameters */
 extern PARAMETER trwake_param[N_TRWAKE_PARAMS];
 
@@ -2411,9 +2508,9 @@ typedef struct {
 /* names and storage structure for WIGGLER element */
 extern PARAMETER wiggler_param[N_WIGGLER_PARAMS];
 typedef struct {
-  double length, radius, K;
+  double length, radius, K, B;
   double dx, dy, dz, tilt;
-  long poles;
+  long poles, focusing;
   /* internal use only */
   double radiusInternal;  /* may be computed from K */
 } WIGGLER;
@@ -2442,6 +2539,31 @@ typedef struct {
   long fieldOutputRow, fieldOutputRows;
 } CWIGGLER;
 
+/* names and storage structure for APPLE-II element */
+extern PARAMETER apple_param[N_APPLE_PARAMS];
+typedef struct {
+  double length, BMax, shimScale;
+  double dx, dy, dz, tilt;
+  long periods, step, order, End_Pole, shimOn;
+  char *Input;
+  char *shimInput;
+  long sr, isr, isr1Particle;
+  double x0, gap0, dgap, phi1, phi2, phi3, phi4;
+  long verbosity;
+  /* for internal use */
+  long initialized;
+  long NxHarm, NzHarm, ShimHarm;
+  double C1, C2, C3, C4;
+  double S1, S2, S3, S4;
+  double **Cij, **kx, **ky, *kz;
+  double **CoZ, **CxXoZ, **CxYoZ, **CxXoYZ, **CxX2oYZ;
+  double **CxX2oZ, **CxXYoZ, **CxX3oYZ, **CxY2oZ;
+  double lz;
+  double kx_shim, *Ci_shim, *Si_shim;
+  long drift;
+  double BPeak[2], radiusInternal[2];
+} APPLE;
+
 /* names and storage structure for SCRIPT element */
 extern PARAMETER script_param[N_SCRIPT_PARAMS];
 typedef struct {
@@ -2450,6 +2572,8 @@ typedef struct {
   long useCsh, verbosity, startPass, onPass;
   char *directory, *rootname, *inputExtension, *outputExtension;
   long keepFiles, driftMatrix;
+  long useParticleID; 
+  long noNewParticles;
   double NP[10];
   char *SP[10];
 } SCRIPT;
@@ -2558,7 +2682,7 @@ typedef struct {
     double length, k1, k2, tilt;
     double dx, dy, dz, fse1, fse2;
     long n_kicks, synch_rad;
-    long integration_order, isr, isr1Particle;
+    long integration_order, isr, isr1Particle, matrixTracking;
   } KQUSE;
 
 /* names and storage structure for kick map physical parameters */
@@ -2604,7 +2728,8 @@ long determine_bend_flags(ELEMENT_LIST *eptr, long edge1_effects, long edge2_eff
 
 #define IS_BEND(type) ((type)==T_SBEN || (type)==T_RBEN || (type)==T_CSBEND || (type)==T_KSBEND || (type)==T_CSRCSBEND)
 #define IS_RADIATOR(type) ((type)==T_SBEN || (type)==T_RBEN || (type)==T_CSBEND || (type)==T_CSRCSBEND || \
-                           (type)==T_QUAD || (type)==T_KQUAD || (type)==T_SEXT || (type)==T_KSEXT || (type)==T_WIGGLER || (type)==T_CWIGGLER || \
+                           (type)==T_QUAD || (type)==T_KQUAD || (type)==T_SEXT || (type)==T_KSEXT || \
+			   (type)==T_WIGGLER || (type)==T_CWIGGLER || (type)==T_APPLE ||	\
 			   (type)==T_HCOR || (type)==T_VCOR || (type)==T_HVCOR)
 
 /* flags for run_awe_beam and run_bunched_beam */
@@ -2766,21 +2891,25 @@ void setupSliceAnalysis(NAMELIST_TEXT *nltext, RUN *run,
 /* prototypes for compute_matrices13.c: */
 extern VMATRIX *full_matrix(ELEMENT_LIST *elem, RUN *run, long order);
 extern VMATRIX *append_full_matrix(ELEMENT_LIST *elem, RUN *run, VMATRIX *M0, long order);
-VMATRIX *accumulate_matrices(ELEMENT_LIST *elem, RUN *run, VMATRIX *M0, long order, long full_matrix_only);
+extern VMATRIX *accumulate_matrices(ELEMENT_LIST *elem, RUN *run, VMATRIX *M0, long order, long full_matrix_only);
+extern void checkMatrices(char *label, ELEMENT_LIST *elem);
 extern long fill_in_matrices(ELEMENT_LIST *elem, RUN *run);
-VMATRIX *accumulateRadiationMatrices(ELEMENT_LIST *elem, RUN *run, VMATRIX *M0, long order, long radiation, long nSlices);
+extern VMATRIX *accumulateRadiationMatrices(ELEMENT_LIST *elem, RUN *run, VMATRIX *M0, long order, long radiation, long nSlices);
 extern long calculate_matrices(LINE_LIST *line, RUN *run);
 extern VMATRIX *drift_matrix(double length, long order);
 extern VMATRIX *wiggler_matrix(double length, double radius, long poles, double dx, double dy, double dz,
-			       double tilt, long order);
+			       double tilt, long order, long focusing);
 extern void GWigSymplecticPass(double **coord, long num_particles, double pCentral,
 			CWIGGLER *cwiggler);
-extern VMATRIX *sextupole_matrix(double K2, double length, long maximum_order, double tilt, double fse);
+extern void InitializeAPPLE(char *file, APPLE *apple);
+extern void APPLE_Track(double **coord, long num_particles, double pCentral,
+			APPLE *apple);
+extern VMATRIX *sextupole_matrix(double K2, double length, long maximum_order, double tilt, double fse, double ffringe);
 extern VMATRIX *solenoid_matrix(double length, double ks, long max_order);
 extern VMATRIX *compute_matrix(ELEMENT_LIST *elem, RUN *run, VMATRIX *Mspace);
 extern VMATRIX *determineMatrix(RUN *run, ELEMENT_LIST *eptr, double *startingCoord, double *stepSize);
 extern void determineRadiationMatrix(VMATRIX *Mr, RUN *run, ELEMENT_LIST *eptr, double *startingCoord, double *D, long slices, long order);
-extern void determineRadiationMatrix1(VMATRIX *Mr, RUN *run, ELEMENT_LIST *eptr, double *startingCoord, double *D);
+extern void determineRadiationMatrix1(VMATRIX *Mr, RUN *run, ELEMENT_LIST *eptr, double *startingCoord, double *D, long ignoreRadiation);
 extern void set_up_watch_point(WATCH *watch, RUN *run, long occurence, char *previousElementName);
 extern VMATRIX *magnification_matrix(MAGNIFY *magnif);
 extern void reset_special_elements(LINE_LIST *beamline, long includeRF);
@@ -2826,13 +2955,13 @@ extern long do_tracking(BEAM *beam, double **coord, long n_original, long *effor
                         long *n_z_points, TRAJECTORY *traj_vs_z, RUN *run, long step,
                         unsigned long flags, long n_passes, long passOffset, SASEFEL_OUTPUT *sasefel,
 			SLICE_OUTPUT *sliceAnalysis,
-                        double *finalCharge, long *lostOnTurn, ELEMENT_LIST *startElem);
+                        double *finalCharge, double **lostParticles, ELEMENT_LIST *startElem);
 extern void getTrackingContext(TRACKING_CONTEXT *trackingContext);
 extern void offset_beam(double **coord, long n_to_track, MALIGN *offset, double P_central);
 extern void do_match_energy(double **coord, long np, double *P_central, long change_beam);
 extern void set_central_energy(double **coord, long np, double new_energy, double *P_central);
 extern void set_central_momentum(double **coord, long np, double  P_new, double *P_central);
-extern void center_beam(double **part, CENTER *center, long np, long iPass);
+extern void center_beam(double **part, CENTER *center, long np, long iPass, double P0);
 void remove_correlations(double **part, REMCOR *remcor, long np);
 void drift_beam(double **part, long np, double length, long order);
 void exactDrift(double **part, long np, double length);
@@ -2843,7 +2972,7 @@ void store_fitpoint_beam_parameters(MARK *fpt, char *name, long occurence, doubl
 void setTrackingWedgeFunction(void (*wedgeFunc)(double **part, long np, long pass, double *pCentral),
                               ELEMENT_LIST *eptr);
 long transformBeamWithScript(SCRIPT *script, double pCentral, CHARGE *charge, BEAM *beam, double **part, 
-                             long np, long nLost, char *mainRootname, long iPass, long driftOrder);
+                             long np, long *nLost, char *mainRootname, long iPass, long driftOrder);
 
 extern void track_through_kicker(double **part, long np, KICKER *kicker, double p_central, long pass,
       long order);
@@ -2940,6 +3069,7 @@ void compute_twiss_parameters(RUN *run, LINE_LIST *beamline, double *starting_co
                               unsigned long *unstable);
 void update_twiss_parameters(RUN *run, LINE_LIST *beamline, unsigned long *unstable);
 void compute_twiss_statistics(LINE_LIST *beamline, TWISS *twiss_ave, TWISS *twiss_min, TWISS *twiss_max);
+void compute_twiss_percentiles(LINE_LIST *beamline, TWISS *twiss_p99, TWISS *twiss_p98, TWISS *twiss_p96);
 void dump_twiss_parameters(LINE_LIST *beamline, long n_elem, 
                            double *tune, RADIATION_INTEGRALS *radIntegrals, double *chromaticity, 
                            double *dbeta, double *acceptance, double *alphac,
@@ -2949,6 +3079,11 @@ void setup_twiss_output(NAMELIST_TEXT *nltext, RUN *run, LINE_LIST *beamline, lo
 void setupTuneShiftWithAmplitude(NAMELIST_TEXT *nltext, RUN *run);
 long run_twiss_output(RUN *run, LINE_LIST *beamline, double *starting_coord, long tune_corrected);
 void finish_twiss_output(void);
+void run_rf_setup(RUN *run, LINE_LIST *beamline);
+void setup_rf_setup(NAMELIST_TEXT *nltext, RUN *run, LINE_LIST *beamline, long do_twiss_output, long *do_rf_setup) ;
+double rfAcceptance_Fq(double q) ;
+double solveForOverVoltage(double F, double q0);
+
 void copy_doubles(double *source, double *target, long n);
 void completeRadiationIntegralComputation(RADIATION_INTEGRALS *RI, double Po, double revolutionLength);
 void setupTwissAnalysisRequest(NAMELIST_TEXT *nltext, RUN *run, 
@@ -2969,6 +3104,7 @@ void finishFrequencyMap();
 
 /* prototypes for elegant.c: */
 extern void getRunControlContext(VARY *context);
+extern void getRunSetupContext (RUN *context);
 extern char *compose_filename(char *templateString, char *root_name);
 char *compose_filename_occurence(char *templateString, char *root_name, long occurence);
 extern double find_beam_p_central(char *input);
@@ -2979,6 +3115,7 @@ void check_heap(void);
 void do_print_dictionary(char *filename, long latex_form, long SDDS_form);
 void print_dictionary_entry(FILE *fp, long type, long latex_form, long SDDS_form);
 void bombElegant(char *error, char *usage);
+void bombTracking(char *error);
 void exitElegant(long status);
 
 /* prototypes for error.c: */
@@ -3107,12 +3244,14 @@ int integrate_kick_multipole_ord2(double *coord, double dx, double dy, double xk
                                   double Po, double rad_coef, double isr_coef,
                                   long order, long sqrtOrder, double KnL, long n_kicks, double drift,
                                   MULTIPOLE_DATA *multData, MULTIPOLE_DATA *steeringMultData,
-                                  MULT_APERTURE_DATA *apData, double *dzLoss, double *sigmaDelta2);
+                                  MULT_APERTURE_DATA *apData, double *dzLoss, double *sigmaDelta2,
+				  long radial);
 int integrate_kick_multipole_ord4(double *coord, double dx, double dy, double xkick, double ykick,
                                   double Po, double rad_coef, double isr_coef,
                                   long order, long sqrtOrder, double KnL, long n_kicks, double drift,
                                   MULTIPOLE_DATA *multData, MULTIPOLE_DATA *steeringMultData,
-                                  MULT_APERTURE_DATA *apData, double *dzLoss, double *sigmaDelta2);
+                                  MULT_APERTURE_DATA *apData, double *dzLoss, double *sigmaDelta2,
+				  long radial);
 
 /* prototypes for taylorseries.c: */
 extern long taylorSeries_tracking(double **particle,  long n_part, TAYLORSERIES *taylorSeries,
@@ -3142,14 +3281,26 @@ extern void print_elem(FILE *fp, ELEMENT_LIST *eptr);
 extern void print_elem_names(FILE *fp, ELEMENT_LIST *eptr, long width);
 
 /* prototypes for quad_matrix3.c: */
-extern VMATRIX *quadrupole_matrix(double K1, double l, long maximum_order, double tilt, double ffringe, double fse,
-                                  double xkick, double ykick, char *fringeType);
+VMATRIX *quadrupole_matrix(double K1, double lHC, long maximum_order,
+                           double tilt, double fse,
+                           double xkick, double ykick,
+                           double edge1_effects, double edge2_effects,
+                           char *fringeType, double ffringe,
+                           double *fringeIntM, double *fringeIntP,
+			   long radial
+                           );
 extern VMATRIX *quad_fringe(double l, double ko, long order, long reverse, double fse);
 extern void qfringe_R_matrix(double *R11, double *R21, double *R12, double *R22, double dk_dz, double l);
 extern void qfringe_T_matrix(double *T116, double *T126, double *T216, double *T226,
     double *T511, double *T512, double *T522, double dk_dz, double l, long reverse);
 extern VMATRIX *qfringe_matrix(double K1, double l, double tilt, long direction, long order, double fse);
 extern VMATRIX *quse_matrix(double K1, double K2, double l, long maximum_order, double tilt, double fse1, double fse2);
+
+/* prototypes for fringe.c */
+void quadFringe(double **coord, long np, double K1, double *fringeIntM, double *fringeIntP, int inFringe, int higherOrder);
+void dipoleFringe(double *vec, double h, long inFringe, long higherOrder);
+VMATRIX *quadFringeMatrix(VMATRIX *Mu, double K1, long inFringe, double *fringeIntM, double *fringeIntP);
+VMATRIX *quadPartialFringeMatrix(VMATRIX *M, double K1, long inFringe, double *fringeInt, long part);
 
 /* prototypes for tilt_matrices.c: */
 extern void tilt_matrices0(VMATRIX *M, double tilt);
@@ -3216,9 +3367,10 @@ void add_optimization_covariable(OPTIMIZATION_DATA *_optimize, NAMELIST_TEXT *nl
 double optimization_function(double *values, long *invalid);
 #if USE_MPI
   long geneticMin(double *yReturn, double *xGuess, double *xLowerLimit, double *xUpperLimit, double *xStep,
-                long dimensions, double target, double (*func)(double *x, long *invalid), long maxIterations,
-		long maxNoChange, long populationSize, long printFrequency, long pirntAllPopulations,
-		  char *populations_log, SDDS_TABLE *logPtr, long verbose, OPTIM_VARIABLES *optim, OPTIM_COVARIABLES *co_optim);
+		  long dimensions, double target, double (*func)(double *x, long *invalid), long maxIterations,
+		  long maxNoChange, long populationSize, long printFrequency, long pirntAllPopulations,
+		  char *populations_log, SDDS_TABLE *logPtr, long verbose, long crossoverType,
+		  OPTIM_VARIABLES *optim, OPTIM_COVARIABLES *co_optim);
   
   long swarmMin(double *yReturn, double *xGuess, double *xLowerLimit, double *xUpperLimit, double *xStep, long dimensions, 
 		double target,double (*func)(double *x, long *invalid), long populationSize, long n_iterations, long max_iterations);
@@ -3234,6 +3386,7 @@ void run_rpn_expression(NAMELIST_TEXT *nltext);
 void process_trace_request(NAMELIST_TEXT *nltext);
 void log_entry(char *routine);
 void log_exit(char *routine);
+void show_traceback(FILE *fp);
 
 /* flag word for trace mode */
 extern long trace_mode;
@@ -3263,7 +3416,9 @@ long ramped_rf_cavity(double **part, long np, RAMPRF *ramprf, double P_central,
 /* prototypes for closed_orbit.c */
 extern void dump_closed_orbit(TRAJECTORY *traj, long n_elems, long step, double *deviation);
 void finish_clorb_output(void);
-long run_closed_orbit(RUN *run, LINE_LIST *beamline, double *starting_coord, BEAM *beam, long do_output);
+#define CLOSED_ORBIT_OUTPUT 0x01UL
+#define CLOSED_ORBIT_IGNORE_BEAM 0x02UL
+long run_closed_orbit(RUN *run, LINE_LIST *beamline, double *starting_coord, BEAM *beam, unsigned long flags);
 void setup_closed_orbit(NAMELIST_TEXT *nltext, RUN *run, LINE_LIST *beamline);
 
 /* prototypes for aperture_search.c */
@@ -3329,6 +3484,7 @@ void track_through_trwake(double **part, long np, TRWAKE *wakeData, double Po,
 void addLSCKick(double **part, long np, LSCKICK *LSC, double Po, CHARGE *charge, 
                 double lengthScale, double dgammaOverGamma);
 double computeTimeCoordinates(double *time, double Po, double **part, long np);
+void computeDistanceCoordinates(double *time, double Po, double **part, long np);
 long binTransverseTimeDistribution(double **posItime, double *pz, long *pbin, double tmin,
                                    double dt, long nb, double *time, double **part, double Po, long np,
                                    double dx, double dy, long xPower, long yPower);
@@ -3405,7 +3561,7 @@ void dump_particle_histogram(HISTOGRAM *histogram, long step, long pass, double 
 extern void dump_watch_particles(WATCH *watch, long step, long pass, double **particle, long particles, double Po,
                                  double length, double charge, double z);
 extern void dump_watch_parameters(WATCH *watch, long step, long pass, long n_passes, double **particle, long particles, 
-                           long original_particles,  double Po, double revolutionLength);
+				  long original_particles,  double Po, double revolutionLength, double z);
 extern void dump_watch_FFT(WATCH *watch, long step, long pass, long n_passes, double **particle, long particles,
                            long original_particles,  double Po);
 extern void do_watch_FFT(double **data, long n_data, long slot, long window_code);
@@ -3417,7 +3573,7 @@ extern void dump_phase_space(SDDS_TABLE *SDDS_table, double **particle, long par
                              double charge);
 extern void dump_sigma(SDDS_TABLE *SDDS_table, BEAM_SUMS *sums, LINE_LIST *beamline, long n_elements, long step,
                 double p_central);
-void computeEmitTwissFromSigmaMatrix(double *emit, double *emitc, double *beta, double *alpha, double sigma[6][6], long plane);
+void computeEmitTwissFromSigmaMatrix(double *emit, double *emitc, double *beta, double *alpha, double sigma[7][7], long plane);
 extern void doSASEFELAtEndOutput(SASEFEL_OUTPUT *sasefelOutput, long step);
 extern void computeSASEFELAtEnd(SASEFEL_OUTPUT *sasefelOutput, double **particle, long particles, 
                          double Po, double charge);
@@ -3497,7 +3653,7 @@ double computeRmsCoordinate_p(double **coord, long i1, long np, ELEMENT_LIST *ep
 #endif
 
 void do_insert_elements(NAMELIST_TEXT *nltext, RUN *run, LINE_LIST *beamline);
-long insertElem(char *name, long type, long *skip, long occurPosition);
+long insertElem(char *name, long type, long *skip, long occurPosition, double endPosition);
 long getAddElemFlag(); 
 char *getElemDefinition();
 long getAddEndFlag();
@@ -3546,7 +3702,12 @@ long approximate_percentiles_p(double *position, double *percent, long positions
 long find_median_of_row_p(double *best_particle, double **x, long index, long n, long n_total);
 #endif
 
-void seedElegantRandomNumbers(long seed, long restart);
+#define RESTART_RN_BEAMLINE 0x0001
+#define RESTART_RN_SCATTER  0x0002
+#define RESTART_RN_BPMNOISE 0x0004
+#define RESTART_RN_BEAMGEN  0x0008
+#define RESTART_RN_ALL      (RESTART_RN_BEAMLINE|RESTART_RN_SCATTER|RESTART_RN_BPMNOISE|RESTART_RN_BEAMGEN)
+void seedElegantRandomNumbers(long seed, unsigned long restart);
 
 /* compute long sum with Kahan's algorithm */
 double Kahan (long length, double a[], double *error);
@@ -3597,8 +3758,8 @@ int run_coupled_twiss_output(RUN *run, LINE_LIST *beamline, double *starting_coo
 void finish_coupled_twiss_output();
 void SortEigenvalues (double *WR, double *WI, double *VR, int matDim, int eigenModesNumber, int verbosity);
 
-long applyElementModulations(MODULATION_DATA *modData, double pCentral, double **coord, long np, RUN *run);
-void addModulationElements(MODULATION_DATA *modData, NAMELIST_TEXT *nltext, LINE_LIST *beamline);
+long applyElementModulations(MODULATION_DATA *modData, double pCentral, double **coord, long np, RUN *run, long i_pass);
+void addModulationElements(MODULATION_DATA *modData, NAMELIST_TEXT *nltext, LINE_LIST *beamline, RUN *run);
 
 void addRampElements(RAMP_DATA *rampData, NAMELIST_TEXT *nltext, LINE_LIST *beamline);
 long applyElementRamps(RAMP_DATA *rampData, double pCentral, RUN *run, long iPass);

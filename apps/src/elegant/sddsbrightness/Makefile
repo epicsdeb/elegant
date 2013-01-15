@@ -7,18 +7,12 @@
 # in the file LICENSE that is included with this distribution. 
 #*************************************************************************
 #
-# $Id: Makefile,v 1.13 2010/03/09 21:29:52 oag Exp $
+# $Id: Makefile,v 1.14 2011-02-08 03:24:07 soliday Exp $
 #
 #
 #
 
 TOP=../../..
-#If epics/extensions/configure directory exists, build with it.
-#Otherwise use epics/extensions/config.
-ifeq (0, $(words $(notdir $(wildcard $(TOP)/configure))))
-include $(TOP)/config/CONFIG_APPS
-include $(TOP)/config/RULES_ARCHS
-else
 include $(TOP)/configure/CONFIG
 include $(TOP)/src/elegant/sddsbrightness/Makefile.OAG
 include $(TOP)/configure/RULES
@@ -48,6 +42,7 @@ F77 = g77
 endif
 ifeq ($(OS_CLASS),Darwin)
 F77 = /sw/bin/gfortran
+#F77 = /usr/local/bin/gfortran -arch i386 -arch x86_64
 endif
 ifeq ($(HOST_ARCH),solaris)
 F77 = g77
@@ -87,12 +82,24 @@ ifeq ($(EPICS_HOST_ARCH),linux-x86)
 F77 = gfortran -m32 -ffixed-line-length-132
 endif
 
+#RATIONAL = purify
+#RATIONAL = quantify
+#RATIONAL = purecov
+ifdef RATIONAL
+HOST_OPT = NO
+STATIC_BUILD=NO
+F77 := $(RATIONAL) -best-effort $(F77)
+endif
+
+
 ifeq ($(OS_CLASS),Linux)
 ifeq ($(STATIC_BUILD),YES)
 static_flags = -Wl,-Bstatic -static-libgcc
 linux_libs = -lc
 endif
 endif
+
+
 
 usb$(OBJ) : 
 	$(F77) ../usb.f -c -o usb$(OBJ)	
@@ -156,4 +163,3 @@ sddsfluxcurve$(EXE): $(FLUXCURVE_OBJNAMES)
 	$(F77) -o $@ $(FLUXCURVE_OBJNAMES) $(static_flags) -L$(INSTALL_LIB) -L$(EPICS_EXTENSIONS_LIB) -loagphy -lmdbcommon -lmatlib -lfftpack -lSDDS1 -lrpnlib -lnamelist -lmdbmth -lmdblib -lz $(solaris_libs) $(linux_libs)
 endif
 
-endif

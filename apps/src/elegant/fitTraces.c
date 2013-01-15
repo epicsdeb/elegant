@@ -8,11 +8,7 @@
 \*************************************************************************/
 
 /*
- * $Log: fitTraces.c,v $
- * Revision 1.29  2010/08/12 15:32:20  borland
- * Added exitElegant() routine so that any exit will result in creation of
- * semaphore files if requested.
- *
+ * $Log: not supported by cvs2svn $
  * Revision 1.28  2010/02/04 15:17:26  borland
  * No longer use the bomb() routine.  Instead, use bombElegant(), which allows
  * better control of what happens when exiting.  Added "failed" semaphore option.

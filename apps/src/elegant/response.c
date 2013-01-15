@@ -309,8 +309,13 @@ void update_response(RUN *run, LINE_LIST *beamline, CORRECTION *correct)
       }
     }
     else if (correct->mode==ORBIT_CORRECTION) {
-      compute_orbcor_matrices(correct->CMx, &correct->SLx, 0, run, beamline, COMPUTE_RESPONSE_SILENT|(fixed_length?COMPUTE_RESPONSE_FIXEDLENGTH:0));
-      compute_orbcor_matrices(correct->CMy, &correct->SLy, 2, run, beamline, COMPUTE_RESPONSE_SILENT|(fixed_length?COMPUTE_RESPONSE_FIXEDLENGTH:0));
+      if (!use_response_from_computed_orbits) {
+	compute_orbcor_matrices(correct->CMx, &correct->SLx, 0, run, beamline, COMPUTE_RESPONSE_SILENT|(fixed_length?COMPUTE_RESPONSE_FIXEDLENGTH:0));
+	compute_orbcor_matrices(correct->CMy, &correct->SLy, 2, run, beamline, COMPUTE_RESPONSE_SILENT|(fixed_length?COMPUTE_RESPONSE_FIXEDLENGTH:0));
+      } else {
+	compute_orbcor_matrices1(correct->CMx, &correct->SLx, 0, run, beamline, COMPUTE_RESPONSE_SILENT|(fixed_length?COMPUTE_RESPONSE_FIXEDLENGTH:0));
+	compute_orbcor_matrices1(correct->CMy, &correct->SLy, 2, run, beamline, COMPUTE_RESPONSE_SILENT|(fixed_length?COMPUTE_RESPONSE_FIXEDLENGTH:0));
+      }
       if (coupled) {
         compute_orbcor_matrices1(&CMxy, &correct->SLy, 0, run, beamline, COMPUTE_RESPONSE_SILENT|(fixed_length?COMPUTE_RESPONSE_FIXEDLENGTH:0));
         compute_orbcor_matrices1(&CMyx, &correct->SLx, 2, run, beamline, COMPUTE_RESPONSE_SILENT|(fixed_length?COMPUTE_RESPONSE_FIXEDLENGTH:0));
@@ -373,12 +378,21 @@ void run_response_output(RUN *run, LINE_LIST *beamline, CORRECTION *correct, lon
       printf("Computing orbit correction matrices for output, with %s length.\n",
              fixed_length?"fixed":"variable");
       fflush(stdout);
-      compute_orbcor_matrices(correct->CMx, &correct->SLx, 0, run, beamline, 
-                              (!(inverse[0]==NULL || SDDS_StringIsBlank(inverse[0])) ? COMPUTE_RESPONSE_INVERT : 0)|COMPUTE_RESPONSE_SILENT|
-                              (fixed_length?COMPUTE_RESPONSE_FIXEDLENGTH:0));
-      compute_orbcor_matrices(correct->CMy, &correct->SLy, 2, run, beamline, 
-                              (!(inverse[1]==NULL || SDDS_StringIsBlank(inverse[1])) ? COMPUTE_RESPONSE_INVERT : 0)|COMPUTE_RESPONSE_SILENT|
-                              (fixed_length?COMPUTE_RESPONSE_FIXEDLENGTH:0));
+      if (!use_response_from_computed_orbits) {
+	compute_orbcor_matrices(correct->CMx, &correct->SLx, 0, run, beamline, 
+				(!(inverse[0]==NULL || SDDS_StringIsBlank(inverse[0])) ? COMPUTE_RESPONSE_INVERT : 0)|COMPUTE_RESPONSE_SILENT|
+				(fixed_length?COMPUTE_RESPONSE_FIXEDLENGTH:0));
+	compute_orbcor_matrices(correct->CMy, &correct->SLy, 2, run, beamline, 
+				(!(inverse[1]==NULL || SDDS_StringIsBlank(inverse[1])) ? COMPUTE_RESPONSE_INVERT : 0)|COMPUTE_RESPONSE_SILENT|
+				(fixed_length?COMPUTE_RESPONSE_FIXEDLENGTH:0));
+      } else {
+	compute_orbcor_matrices1(correct->CMx, &correct->SLx, 0, run, beamline, 
+				(!(inverse[0]==NULL || SDDS_StringIsBlank(inverse[0])) ? COMPUTE_RESPONSE_INVERT : 0)|COMPUTE_RESPONSE_SILENT|
+				(fixed_length?COMPUTE_RESPONSE_FIXEDLENGTH:0));
+	compute_orbcor_matrices1(correct->CMy, &correct->SLy, 2, run, beamline, 
+				(!(inverse[1]==NULL || SDDS_StringIsBlank(inverse[1])) ? COMPUTE_RESPONSE_INVERT : 0)|COMPUTE_RESPONSE_SILENT|
+				(fixed_length?COMPUTE_RESPONSE_FIXEDLENGTH:0));
+      }
       if (coupled) {
         compute_orbcor_matrices1(&CMxy, &correct->SLy, 0, run, beamline, COMPUTE_RESPONSE_SILENT);
         compute_orbcor_matrices1(&CMyx, &correct->SLx, 2, run, beamline, COMPUTE_RESPONSE_SILENT);

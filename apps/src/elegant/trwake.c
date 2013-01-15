@@ -495,6 +495,19 @@ double computeTimeCoordinates(double *time, double Po, double **part, long np)
 #endif
 }
 
+void computeDistanceCoordinates(double *time, double Po, double **part, long np)
+{
+  double P, beta;
+  long ip;
+
+  for (ip=0; ip<np; ip++) {
+    P = Po*(part[ip][5]+1);
+    beta = P/sqrt(sqr(P)+1);
+    part[ip][4] = c_mks*beta*time[ip];
+  }
+}
+
+
 long binTransverseTimeDistribution(double **posItime, double *pz, long *pbin, double tmin, double dt, long nb,
                                    double *time, double **part, double Po, long np,
                                    double dx, double dy, long xPower, long yPower)

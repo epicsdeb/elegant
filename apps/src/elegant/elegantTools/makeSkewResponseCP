@@ -2,7 +2,7 @@
 # \
 exec oagtclsh "$0" "$@"
 
-# $Log: makeSkewResponseCP,v $
+# $Log: not supported by cvs2svn $
 # Revision 1.2  2010/01/15 15:10:47  borland
 # Various refinements and improvements after testing.
 #
@@ -11,7 +11,7 @@ set auto_path [linsert $auto_path 0  /usr/local/oag/apps/lib/$env(HOST_ARCH)]
 set auto_path [linsert $auto_path 0 /usr/local/oag/lib_patch/$env(HOST_ARCH)]
 APSStandardSetup
 
-set usage {usage: makeSkewResponseCP -rootname <string> -lattice <filename> -input <parameterFile> -beamline <string> -skewPattern <string> -bpmPattern <string> -hcPattern <string> -vcPattern <string> -tweek <value> -order {1|2} -svalues <numberToKeep>}
+set usage {usage: makeSkewResponseCP -rootname <string> -lattice <filename> -input <parameterFile> -beamline <string> -skewPattern <string> -bpmPattern <string> -hcPattern <string> -vcPattern <string> -tweek <value> -order {1|2} -svalues <numberToKeep> -verbosity <integer>(1) -energy <MeV>}
 set lattice ""
 set rootname ""
 set input ""
@@ -24,8 +24,11 @@ set tweek 0.001
 set order 2
 set srcDir $OAGGlobal(OAGAppConfigDataDirectory)/elegant
 set svalues 10000
+set queue 1
+set verbosity 1
+set energy 7e3
 set args $argv
-if {[APSStrictParseArguments {input lattice beamline rootname skewPattern bpmPattern hcPattern vcPattern tweek srcDir order svalues}] || \
+if {[APSStrictParseArguments {input lattice beamline rootname skewPattern bpmPattern hcPattern vcPattern tweek srcDir order svalues queue verbosity energy}] || \
     ![string length $lattice] || ![string length $rootname]} {
     return -code error "$usage"
 }
@@ -37,18 +40,21 @@ if {![file exists $lattice]} {
 }
 
 # Do a basic run
-catch {exec elegant $srcDir/skewResponse0Template.ele -macro=rootname=${rootname}0,lattice=$lattice,beamline=$beamline,order=$order} result
+catch {exec elegant $srcDir/skewResponse0Template.ele -macro=rootname=${rootname}0,lattice=$lattice,beamline=$beamline,order=$order,pCentralMeV=$energy} result
 if ![file exists ${rootname}0.done] {
     puts stderr "$result"
     exit 1
 }
 APSAddToTempFileList ${rootname}0.done ${rootname}0.twi
 
-set hasCsub 1
-catch {exec csub} result
-if [string match "*no such file*" $result] {
-    puts stderr "No csub detected: using serial mode"
-    set hasCsub 0
+set hasCsub 0
+if $queue {
+    set hasCsub 1
+    catch {exec csub} result
+    if [string match "*no such file*" $result] {
+        puts stderr "No csub detected: using serial mode"
+        set hasCsub 0
+    }
 }
 
 # Make skew response matrix for cross-plane orbit response matrix
@@ -56,22 +62,23 @@ if [string match "*no such file*" $result] {
 # cross-plane matrix for K1=tweek and K1=-tweek.
 set doneList ""
 set index 0
-foreach skew [exec sddsprocess ${rootname}0.twi -pipe=out -match=col,ElementName=*QS -match=col,ElementType=*QUAD* | sdds2stream -col=ElementName -pipe] \
-    occurence [exec sddsprocess ${rootname}0.twi -pipe=out -match=col,ElementName=*QS -match=col,ElementType=*QUAD* | sdds2stream -col=ElementOccurence -pipe] {
+foreach skew [exec sddsprocess ${rootname}0.twi -pipe=out -match=col,ElementName=$skewPattern -match=col,ElementType=*QUAD* | sdds2stream -col=ElementName -pipe] \
+    occurence [exec sddsprocess ${rootname}0.twi -pipe=out -match=col,ElementName=$skewPattern -match=col,ElementType=*QUAD* | sdds2stream -col=ElementOccurence -pipe] {
 
     set fd [open ${rootname}-job$index.csh w]
-    puts $fd "elegant $srcDir/skewResponseCPTemplate.ele -macro=rootname=$rootname,skew=$skew,occurence=$occurence,tweek=$tweek,lattice=$lattice,hcPattern=$hcPattern,vcPattern=$vcPattern,bpmPattern=$bpmPattern,beamline=$beamline,input=$input,order=$order"
+    puts $fd "elegant $srcDir/skewResponseCPTemplate.ele -macro=pCentralMeV=$energy,rootname=$rootname,skew=$skew,occurence=$occurence,tweek=$tweek,lattice=$lattice,hcPattern=$hcPattern,vcPattern=$vcPattern,bpmPattern=$bpmPattern,beamline=$beamline,input=$input,order=$order"
     close $fd
 
     exec chmod +x ${rootname}-job$index.csh
     APSAddToTempFileList ${rootname}-job$index.csh
     if $hasCsub {
         catch {exec csub -noEmail 1 ${rootname}-job$index.csh} result
-        puts stderr "$result"
+        if $verbosity { puts stderr "$result" }
     } else {
+        if $verbosity {puts stderr "Running $rootname-job$index"}
         catch {exec ${rootname}-job$index.csh} result
     }
-
+    
     lappend doneList ${rootname}-$skew-$occurence.done
     incr index
 }
@@ -81,7 +88,7 @@ foreach skew [exec sddsprocess ${rootname}0.twi -pipe=out -match=col,ElementName
 set undone [llength $doneList]
 set undoneList $doneList
 while {$undone} {
-    puts stderr "Waiting for $undone runs... ($undoneList)"
+    if $verbosity { puts stderr "Waiting for $undone runs... ($undoneList)" }
     set undone 0
     set undoneList ""
     foreach done $doneList {
@@ -101,7 +108,7 @@ APSDeleteTempFiles
 foreach done $doneList {
     set skew [os editstring Z-S/-/100D $done]
     set occurence [os editstring 2Z-%/.done// $done]
-    puts stderr "Working on $skew $occurence"
+    if $verbosity { puts stderr "Working on $skew $occurence" }
     set index 0
     set fileList ""
     foreach pattern [list $vcPattern $hcPattern] type {hv vh} Type {HV VH} {
@@ -114,9 +121,10 @@ foreach done $doneList {
             # Process specific corrector data
             # Make a file with the response in a single column
 	    if ![string match $pattern $cor] continue
-	    if [catch {exec sddsxref $rmFile1 $rmFile0 -pipe=out -take=$cor -rename=column,${cor}=${cor}0 \
+            if $verbosity>1 { puts stderr "Processing data for $cor ($rmFile0, $rmFile1)" }
+	    if [catch {exec sddsxref $rmFile1 $rmFile0 -pipe=out -take=$cor -rename=column,${cor}=${cor}Ref \
                          | sddsprocess -pipe "-print=col,ElementTag,%s_${cor}_${skew}_${occurence},BPMName" \
-                         "-define=col,$skew#$occurence,$cor ${cor}0 -" \
+                         "-define=col,$skew#$occurence,$cor ${cor}Ref -" \
                          | sddsconvert -pipe=in ${rootname}-rvector.$index "-retain=col,$skew#$occurence,ElementTag" } result] {
 		puts stderr "$result"
 		exit 1
@@ -148,7 +156,7 @@ foreach done $doneList {
 # The size of the matrix is (BxCx2+B) by S, where B is the number of BPMs, C the number of correctors per plane,
 # and S the number of skews
 
-puts stderr "Combining and inverting"
+if $verbosity { puts stderr "Combining and inverting" }
 eval exec sddsxref $respList -pipe=out \
     | sddsprocess -pipe=in "{-redefine=col,%s,%s $tweek / 2 /,select=${skewPattern}#*}" ${rootname}.qsResp \
     {"-print=parameter,skewPattern,$skewPattern"} \

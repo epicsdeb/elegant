@@ -8,14 +8,7 @@
 \*************************************************************************/
 
 /*
- * $Log: sasefel.c,v $
- * Revision 1.28  2010/02/04 15:17:27  borland
- * No longer use the bomb() routine.  Instead, use bombElegant(), which allows
- * better control of what happens when exiting.  Added "failed" semaphore option.
- * Switched from process_namelist() to processNamelist() for better response
- * to errors.
- * Includes Y. Wang's changes to parallelize shell and line beam types.
- *
+ * $Log: not supported by cvs2svn $
  * Revision 1.27  2009/04/14 01:34:44  ywang25
  * Updated for Pelegant with parallel I/O
  *

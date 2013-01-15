@@ -7,13 +7,10 @@
 # in the file LICENSE that is included with this distribution. 
 #*************************************************************************
 #
-# $Id: Makefile,v 1.18 2010/10/04 22:28:06 borland Exp $
+# $Id: Makefile,v 1.18 2010-10-04 22:28:06 borland Exp $
 #
 #  Lowest Level Directroy Makefile
-# $Log: Makefile,v $
-# Revision 1.18  2010/10/04 22:28:06  borland
-# Added ramp_elements command.  Similar to modulate_elements, but easier to use.
-#
+# $Log: not supported by cvs2svn $
 # Revision 1.17  2010/03/24 14:29:27  borland
 # Added modulate_elements command.
 #
@@ -74,12 +71,6 @@
 #
 
 TOP=../..
-#If epics/extensions/configure directory exists, build with it.
-#Otherwise use epics/extensions/config.
-ifeq (0, $(words $(notdir $(wildcard $(TOP)/configure))))
-include $(TOP)/config/CONFIG_APPS
-include $(TOP)/config/RULES_ARCHS
-else
 include $(TOP)/configure/CONFIG
 include $(TOP)/src/elegant/Makefile.OAG
 include $(TOP)/configure/RULES
@@ -367,7 +358,6 @@ all buildInstall:
 
 endif
 
-endif
 
 
 clean::
