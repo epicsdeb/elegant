@@ -1,3 +1,9 @@
+elegant (25.1.0-1) unstable; urgency=low
+
+  * new upstream version
+
+ -- Guobao Shen <shengb@bnl.gov>  Tue, 15 Jan 2013 16:48:39 -0500
+
 elegant (24.0.1-2) unstable; urgency=low
 
   * Increase sdds-dev dependency for change in libgsl build

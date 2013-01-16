@@ -280,20 +280,20 @@ USR_CPPFLAGS += -DHAVE_LAPACK -DLAPACK
 ifeq ($(OS_CLASS),Linux)
 SYS_PROD_LIBS_Linux += lapack blas
 
-GFORTRAN = $(words $(notdir $(wildcard /usr/lib/libgfortran.* /usr/lib64/libgfortran.*)))
-ifeq ($(GFORTRAN), 0)
-SYS_PROD_LIBS_Linux += g2c
-else
+#GFORTRAN = $(words $(notdir $(wildcard /usr/lib/libgfortran.* /usr/lib64/libgfortran.*)))
+#ifeq ($(GFORTRAN), 0)
+#SYS_PROD_LIBS_Linux += g2c
+#else
 gcc-version = $(shell $(CC) -v 2> /dev/stdout | grep "^gcc" | awk '{print $$4}' | head -1)
 gfortran-version = $(shell gfortran -v 2> /dev/stdout | grep "^gcc" | awk '{print $$4}')
-ifeq ($(gcc-version),$(gfortran-version))
+#ifeq ($(gcc-version),$(gfortran-version))
 SYS_PROD_LIBS_Linux += gfortran
-else
-  ifneq (intrepid,$(findstring intrepid, $(HOSTNAME)))
-    SYS_PROD_LIBS_Linux += g2c
-  endif
-endif
-endif
+#else
+#  ifneq (intrepid,$(findstring intrepid, $(HOSTNAME)))
+#    SYS_PROD_LIBS_Linux += g2c
+#  endif
+#endif
+#endif
 #gcc-version = $(shell gcc -v 2> /dev/stdout | grep "^gcc" | awk '{print $$4}')
 #SYS_PROD_LIBS_Linux += $(shell if [ "$(call gcc-version)" -lt "20050722" ]; then echo "g2c" ; else echo "" ; fi;)
 #SYS_PROD_LIBS_Linux += $(shell if [ "$(call gcc-version)" -gt "20051200" ]; then echo "gfortran" ; else echo "" ; fi;)
