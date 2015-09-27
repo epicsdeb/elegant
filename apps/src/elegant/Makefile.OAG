@@ -16,6 +16,8 @@ CC := $(RATIONAL) -best-effort $(CC)
 CCC := $(RATIONAL) -best-effort $(CCC)
 endif
 
+NLPP = /usr/lib/epics/bin/${EPICS_HOST_ARCH}/nlpp
+
 # OP_SYS_CFLAGS+= -DSORT               # sort for comparing the results of two elegants
                                        # -g should be turned off for comparison
 OP_SYS_CFLAGS+= -DUSE_KAHAN            # use Kahan's algorithm for long sum

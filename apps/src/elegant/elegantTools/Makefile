@@ -21,7 +21,7 @@ include $(TOP)/configure/RULES
 sddsrandmult$(OBJ): sddsrandmult.h
 
 sddsrandmult.h: ../sddsrandmult.nl
-	nlpp ../sddsrandmult.nl sddsrandmult.h
+	$(NLPP) ../sddsrandmult.nl sddsrandmult.h
 
 clean::
 	$(RM) sddsrandmult.h 

@@ -119,6 +119,8 @@ CCC := $(RATIONAL) -best-effort $(CCC)
 endif
 endif
 
+NLPP = /usr/lib/epics/bin/${EPICS_HOST_ARCH}/nlpp
+
 PRODOAG = sddsemitmeas sddsemitproc sddsTouschekInteg \
           recurseSetup haissinski sddsmatchtwiss \
           sddsanalyzebeam sddsrandmult sddsresdiag \

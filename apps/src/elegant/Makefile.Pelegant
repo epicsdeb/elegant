@@ -109,212 +109,212 @@ sddsbrightness$(OBJ):
 alter$(OBJ): alter.h
 
 alter.h: ../alter.nl
-	nlpp ../alter.nl alter.h
+	$(NLPP) ../alter.nl alter.h
 
 amplif$(OBJ): amplif.h
 
 amplif.h: ../amplif.nl
-	nlpp ../amplif.nl amplif.h
+	$(NLPP) ../amplif.nl amplif.h
 
 analyze$(OBJ): analyze.h
 
 analyze.h: ../analyze.nl
-	nlpp ../analyze.nl analyze.h
+	$(NLPP) ../analyze.nl analyze.h
 
 aperture_search$(OBJ): aperture_search.h
 
 aperture_search.h: ../aperture_search.nl
-	nlpp ../aperture_search.nl aperture_search.h
+	$(NLPP) ../aperture_search.nl aperture_search.h
 
 bunched_beam$(OBJ): bunched_beam.h
 
 bunched_beam.h: ../bunched_beam.nl
-	nlpp ../bunched_beam.nl bunched_beam.h
+	$(NLPP) ../bunched_beam.nl bunched_beam.h
 
 chrom$(OBJ): chrom.h
 
 chrom.h: ../chrom.nl
-	nlpp ../chrom.nl chrom.h
+	$(NLPP) ../chrom.nl chrom.h
 
 closed_orbit$(OBJ): closed_orbit.h
 
 closed_orbit.h: ../closed_orbit.nl
-	nlpp ../closed_orbit.nl closed_orbit.h
+	$(NLPP) ../closed_orbit.nl closed_orbit.h
 
 correct$(OBJ): correct.h steer_elem.h
 
 correct.h: ../correct.nl
-	nlpp ../correct.nl correct.h
+	$(NLPP) ../correct.nl correct.h
 
 coupled_twiss$(OBJ): coupled_twiss.h
 
 coupled_twiss.h: ../coupled_twiss.nl
-	nlpp ../coupled_twiss.nl coupled_twiss.h
+	$(NLPP) ../coupled_twiss.nl coupled_twiss.h
 
 divideElements$(OBJ): divideElements.h
 
 divideElements.h: ../divideElements.nl
-	nlpp ../divideElements.nl divideElements.h
+	$(NLPP) ../divideElements.nl divideElements.h
 
 transmuteElements$(OBJ): transmuteElements.h
 
 transmuteElements.h: ../transmuteElements.nl
-	nlpp ../transmuteElements.nl transmuteElements.h
+	$(NLPP) ../transmuteElements.nl transmuteElements.h
 
 elegant$(OBJ): elegant.h aperture_data.h
 
 elegant.h: ../elegant.nl
-	nlpp ../elegant.nl elegant.h
+	$(NLPP) ../elegant.nl elegant.h
 
 aperture_data.h: ../aperture_data.nl
-	nlpp ../aperture_data.nl aperture_data.h
+	$(NLPP) ../aperture_data.nl aperture_data.h
 
 error$(OBJ): error.h
 
 error.h: ../error.nl
-	nlpp ../error.nl error.h
+	$(NLPP) ../error.nl error.h
 
 floor$(OBJ): floor.h
 
 floor.h: ../floor.nl
-	nlpp ../floor.nl floor.h
+	$(NLPP) ../floor.nl floor.h
 
 frequencyMap$(OBJ): frequencyMap.h
 
 frequencyMap.h: ../frequencyMap.nl
-	nlpp ../frequencyMap.nl frequencyMap.h
+	$(NLPP) ../frequencyMap.nl frequencyMap.h
 
 insertSCeffects$(OBJ): insertSCeffects.h
 
 insertSCeffects.h: ../insertSCeffects.nl
-	nlpp ../insertSCeffects.nl insertSCeffects.h
+	$(NLPP) ../insertSCeffects.nl insertSCeffects.h
 
 insert_elements$(OBJ): insert_elements.h
 
 insert_elements.h: ../insert_elements.nl
-	nlpp ../insert_elements.nl insert_elements.h
+	$(NLPP) ../insert_elements.nl insert_elements.h
 
 replace_elements$(OBJ): replace_elements.h
 
 replace_elements.h: ../replace_elements.nl
-	nlpp ../replace_elements.nl replace_elements.h
+	$(NLPP) ../replace_elements.nl replace_elements.h
 
 touschekScatter$(OBJ): touschekScatter.h
 
 touschekScatter.h: ../touschekScatter.nl
-	nlpp ../touschekScatter.nl touschekScatter.h
+	$(NLPP) ../touschekScatter.nl touschekScatter.h
 
 link_elements$(OBJ): link_elements.h
 
 link_elements.h: ../link_elements.nl
-	nlpp ../link_elements.nl link_elements.h
+	$(NLPP) ../link_elements.nl link_elements.h
 
 load_parameters$(OBJ): load_parameters.h
 
 load_parameters.h: ../load_parameters.nl
-	nlpp ../load_parameters.nl load_parameters.h
+	$(NLPP) ../load_parameters.nl load_parameters.h
 
 matrix_output$(OBJ): matrix_output.h
 
 matrix_output.h: ../matrix_output.nl
-	nlpp ../matrix_output.nl matrix_output.h
+	$(NLPP) ../matrix_output.nl matrix_output.h
 
 modulate$(OBJ): modulate.h
 
 modulate.h: ../modulate.nl
-	nlpp ../modulate.nl modulate.h
+	$(NLPP) ../modulate.nl modulate.h
 
 momentumAperture$(OBJ): momentumAperture.h
 
 momentumAperture.h: ../momentumAperture.nl
-	nlpp ../momentumAperture.nl momentumAperture.h
+	$(NLPP) ../momentumAperture.nl momentumAperture.h
 
 moments$(OBJ): moments.h
 
 moments.h: ../moments.nl
-	nlpp ../moments.nl moments.h
+	$(NLPP) ../moments.nl moments.h
 
 optim_covariable$(OBJ): optim_covariable.h
 
 optim_covariable.h: ../optim_covariable.nl
-	nlpp ../optim_covariable.nl optim_covariable.h
+	$(NLPP) ../optim_covariable.nl optim_covariable.h
 
 optimize$(OBJ): optimize.h optim_covariable.h
 
 optimize.h: ../optimize.nl
-	nlpp ../optimize.nl optimize.h
+	$(NLPP) ../optimize.nl optimize.h
 
 ramp$(OBJ): ramp.h
 
 ramp.h: ../ramp.nl
-	nlpp ../ramp.nl ramp.h
+	$(NLPP) ../ramp.nl ramp.h
 
 response$(OBJ): response.h
 
 response.h: ../response.nl
-	nlpp ../response.nl response.h
+	$(NLPP) ../response.nl response.h
 
 run_rpnexpr$(OBJ): run_rpnexpr.h
 
 run_rpnexpr.h: ../run_rpnexpr.nl
-	nlpp ../run_rpnexpr.nl run_rpnexpr.h
+	$(NLPP) ../run_rpnexpr.nl run_rpnexpr.h
 
 sasefel$(OBJ): sasefel.h
 
 sasefel.h: ../sasefel.nl
-	nlpp ../sasefel.nl sasefel.h
+	$(NLPP) ../sasefel.nl sasefel.h
 
 get_beamline$(OBJ): save_lattice.h
 
 save_lattice$(OBJ): save_lattice.h
 
 save_lattice.h: ../save_lattice.nl
-	nlpp ../save_lattice.nl save_lattice.h
+	$(NLPP) ../save_lattice.nl save_lattice.h
 
 sdds_beam$(OBJ): sdds_beam.h
 
 sdds_beam.h: ../sdds_beam.nl
-	nlpp ../sdds_beam.nl sdds_beam.h
+	$(NLPP) ../sdds_beam.nl sdds_beam.h
 
 sliceAnalysis$(OBJ): sliceAnalysis.h
 
 sliceAnalysis.h: ../sliceAnalysis.nl
-	nlpp ../sliceAnalysis.nl sliceAnalysis.h
+	$(NLPP) ../sliceAnalysis.nl sliceAnalysis.h
 
 steer_elem$(OBJ): steer_elem.h
 
 steer_elem.h: ../steer_elem.nl
-	nlpp ../steer_elem.nl steer_elem.h
+	$(NLPP) ../steer_elem.nl steer_elem.h
 
 subprocess$(OBJ): subprocess.h
 
 subprocess.h: ../subprocess.nl
-	nlpp ../subprocess.nl subprocess.h
+	$(NLPP) ../subprocess.nl subprocess.h
 
 trace$(OBJ): trace.h
 
 trace.h: ../trace.nl
-	nlpp ../trace.nl trace.h
+	$(NLPP) ../trace.nl trace.h
 
 tune$(OBJ): tune.h
 
 tune.h: ../tune.nl
-	nlpp ../tune.nl tune.h
+	$(NLPP) ../tune.nl tune.h
 
 twiss$(OBJ): twiss.h
 
 twiss.h: ../twiss.nl
-	nlpp ../twiss.nl twiss.h
+	$(NLPP) ../twiss.nl twiss.h
 
 vary$(OBJ): vary.h
 
 vary.h: ../vary.nl
-	nlpp ../vary.nl vary.h
+	$(NLPP) ../vary.nl vary.h
 
 fitTraces$(OBJ): fitTraces.h
 
 fitTraces.h: ../fitTraces.nl
-	nlpp ../fitTraces.nl fitTraces.h
+	$(NLPP) ../fitTraces.nl fitTraces.h
 
 
 
