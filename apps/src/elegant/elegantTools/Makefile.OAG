@@ -134,40 +134,10 @@ USR_CFLAGS = 	-I$(EPICS_EXTENSIONS)/src/SDDS/include -I$(EPICS_EXTENSIONS_INCLUD
 		-DIEEE_MATH -DzLib -D_ISOC99_SOURCE
 
 
-GSLLIB = 
-
-#Look for private version of GSL used here at APS
-GSL = $(words $(wildcard $(EPICS_EXTENSIONS)/src/SDDS/gsl))
-ifeq ($(GSL), 1)
-PROD_HOST += csrImpedance
-csrImpedance_CFLAGS = -I$(EPICS_EXTENSIONS)/src/SDDS/gsl -DUSE_GSL
-GSLLIB = gsl
-gsl_DIR = $(EPICS_EXTENSIONS_LIB)
-else
-
-#Look for system version of GSL
-SYSGSL = $(words $(notdir $(wildcard \
-/usr/lib/libgsl.a \
-/usr/lib/libgsl.so \
-/usr/lib64/libgsl.a \
-/usr/lib64/libgsl.so \
-/lib/libgsl.a \
-/lib/libgsl.so \
-/lib64/libgsl.a \
-/lib64/libgsl.so \
-/sw/lib/libgsl.a \
-/sw/lib/libgsl.dylib \
-/usr/sfw/lib/libgsl.a \
-/usr/sfw/lib/libgsl.so )))
-
-ifneq ($(SYSGSL), 0)
-STATIC_BUILD=NO
 PROD_HOST += csrImpedance
 csrImpedance_CFLAGS = -DUSE_GSL
-csrImpedance_LDFLAGS += -lgsl -lgslcblas
-sddsrandmult_LDFLAGS += -lgsl -lgslcblas
-endif
-endif
+csrImpedance_SYS_LIBS += gsl gslcblas
+sddsrandmult_SYS_LIBS += gsl gslcblas
 
 
 
