@@ -99,48 +99,7 @@ ifeq ($(LYNCEANTECH),1)
         USR_CFLAGS += -DLYNCEANTECH
 endif
 
-
-
-#Look for private version of GSL used here at APS
-GSL = $(words $(wildcard $(EPICS_EXTENSIONS)/src/SDDS/gsl))
-ifeq ($(GSL), 1)
-USR_CFLAGS += -I$(EPICS_EXTENSIONS)/src/SDDS/gsl -DUSE_GSL
-GSLLIB = rpnlib gsl
-SYS_GSLLIB = 
-gsl_DIR = $(EPICS_EXTENSIONS_LIB)
-else
-
-#Look for system version of GSL
-SYSGSL = $(words $(notdir $(wildcard \
-/usr/lib/libgsl.a \
-/usr/lib/libgsl.so \
-/usr/lib64/libgsl.a \
-/usr/lib64/libgsl.so \
-/lib/libgsl.a \
-/lib/libgsl.so \
-/lib64/libgsl.a \
-/lib64/libgsl.so \
-/sw/lib/libgsl.a \
-/sw/lib/libgsl.dylib \
-/opt/local/lib/libgsl.a \
-/opt/local/lib/libgsl.dylib \
-/usr/sfw/lib/libgsl.a \
-/usr/sfw/lib/libgsl.so )))
-
-ifneq ($(SYSGSL), 0)
 USR_CFLAGS += -DUSE_GSL
-GSLLIB = 
-SYS_GSLLIB = -lgsl -lgslcblas
-STATIC_BUILD=NO
-else
-
-#No GSL library found. Build without it.
-GSLLIB = 
-SYS_GSLLIB = 
-endif
-endif
-
-
 
 #Look for private version of LEVMAR used here at APS
 LEVMAR = $(words $(wildcard $(EPICS_EXTENSIONS)/src/SDDS/levmar))
@@ -426,9 +385,6 @@ kahan_CFLAGS = -O0
 endif
 
 
-madto_LIBS += $(GSLLIB)
-madto_LDFLAGS += $(SYS_GSLLIB)
-elegant_LIBS += $(GSLLIB) $(LEVMARLIB) 
-elegant_LDFLAGS += $(SYS_GSLLIB) $(SYS_LEVMARLIB)
-Pelegant_LIBS += $(GSLLIB) $(LEVMARLIB) 
-Pelegant_LDFLAGS += $(SYS_GSLLIB) $(SYS_LEVMARLIB)
+madto_SYS_LIBS += gsl gslcblas
+elegant_SYS_LIBS += gsl gslcblas
+Pelegant_SYS_LIBS += gsl gslcblas
